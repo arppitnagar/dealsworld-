@@ -31,25 +31,24 @@ export default function SellerDashboard({ navigation }) {
   const [stats, setStats] = useState({ active: 0, scheduled: 0, previous: 0 });
   const [refreshing, setRefreshing] = useState(false);
 
-  // Using lowercase "vendorid" as per your Firestore structure
+  // Using lowercase "vendorid" to match your Firestore fields
   const vendorid = "vendor_001";
 
+  // Manual Refresh Handler
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    // Real-time listener handles the data; this just provide UX feedback
     setTimeout(() => {
       setRefreshing(false);
     }, 1000);
   }, []);
 
   useEffect(() => {
-    console.log(
-      "DEBUG: Dashboard fetching for VendorID (lowercase):",
-      vendorid,
-    );
+    console.log("DEBUG: Dashboard fetching for VendorID:", vendorid);
 
     const dealsRef = collection(db, "deals");
 
-    // Updated query to use lowercase "vendorid" field
+    // Query aligned with your Firebase Index (vendorid ASC, createdAt DESC)
     const q = query(
       dealsRef,
       where("vendorid", "==", vendorid),
@@ -76,7 +75,7 @@ export default function SellerDashboard({ navigation }) {
           } else if (data.status === "completed") {
             previousCount++;
           } else {
-            // Default to scheduled if null or "scheduled"
+            // Default to scheduled if null/undefined
             scheduledCount++;
           }
         });
@@ -101,7 +100,7 @@ export default function SellerDashboard({ navigation }) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563EB" />
+        <ActivityIndicator size="large" color="#FF4D4D" />
       </View>
     );
   }
@@ -116,42 +115,48 @@ export default function SellerDashboard({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={["#2563EB"]}
-            tintColor="#2563EB"
+            colors={["#FF4D4D"]}
+            tintColor="#FF4D4D"
           />
         }
       >
+        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.welcome}>Dashboard</Text>
-            <Text style={styles.subtitle}>Welcome back, Merchant</Text>
+            <Text style={styles.subtitle}>Real-time performance</Text>
           </View>
           <TouchableOpacity style={styles.profileCircle}>
             <Ionicons name="person" size={20} color="#64748B" />
           </TouchableOpacity>
         </View>
 
+        {/* Vibrant Top Metrics */}
         <View style={styles.statsContainer}>
           <StatCard
             title="Active"
             count={stats.active}
-            color="#2563EB"
+            color="#FF4D4D"
+            bgColor="#FFF5F5"
             icon="flame"
           />
           <StatCard
             title="Scheduled"
             count={stats.scheduled}
             color="#7C3AED"
+            bgColor="#F5F3FF"
             icon="calendar"
           />
           <StatCard
             title="Previous"
             count={stats.previous}
             color="#10B981"
+            bgColor="#ECFDF5"
             icon="checkmark-circle"
           />
         </View>
 
+        {/* Action Button */}
         <TouchableOpacity
           style={styles.createBtn}
           onPress={() => navigation.navigate("CreateDeal")}
@@ -161,25 +166,31 @@ export default function SellerDashboard({ navigation }) {
               <Ionicons name="add" size={24} color="#FFF" />
             </View>
             <View>
-              <Text style={styles.createBtnTitle}>Launch New Deal</Text>
+              <Text style={styles.createBtnTitle}>Create New Deal</Text>
               <Text style={styles.createBtnSub}>Boost your sales today</Text>
             </View>
           </View>
-          <Ionicons name="arrow-forward" size={20} color="#CBD5E1" />
+          <Ionicons
+            name="arrow-forward"
+            size={20}
+            color="rgba(255,255,255,0.4)"
+          />
         </TouchableOpacity>
 
+        {/* Active Deals Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Campaigns</Text>
+            <Text style={styles.sectionTitle}>Active Deals</Text>
             <TouchableOpacity>
               <Text style={styles.seeAll}>View All</Text>
             </TouchableOpacity>
           </View>
 
           {deals.filter((d) => d.status === "active").length === 0 ? (
-            <Text style={styles.emptyText}>
-              No active campaigns currently running.
-            </Text>
+            <View style={styles.emptyContainer}>
+              <Ionicons name="rocket-outline" size={40} color="#CBD5E1" />
+              <Text style={styles.emptyText}>No active campaigns running.</Text>
+            </View>
           ) : (
             deals
               .filter((d) => d.status === "active")
@@ -191,14 +202,17 @@ export default function SellerDashboard({ navigation }) {
   );
 }
 
-/* --- COMPONENTS REMAIN SAME --- */
-function StatCard({ title, count, color, icon }) {
+/* Sub-Components */
+
+function StatCard({ title, count, color, bgColor, icon }) {
   return (
-    <View style={styles.statCard}>
-      <View style={[styles.iconCircle, { backgroundColor: color + "15" }]}>
+    <View style={[styles.statCard, { borderColor: color + "20" }]}>
+      <View style={[styles.iconCircle, { backgroundColor: bgColor }]}>
         <Ionicons name={icon} size={18} color={color} />
       </View>
-      <Text style={styles.statValue}>{count < 10 ? `0${count}` : count}</Text>
+      <Text style={[styles.statValue, { color: color }]}>
+        {count < 10 ? `0${count}` : count}
+      </Text>
       <Text style={styles.statLabel}>{title}</Text>
     </View>
   );
@@ -211,50 +225,51 @@ function DealCard({ deal }) {
 
   return (
     <TouchableOpacity style={styles.dealCard} activeOpacity={0.9}>
-      <View style={styles.dealTop}>
-        <View style={styles.imageBox}>
-          {deal.image ? (
-            <Image source={{ uri: deal.image }} style={styles.dealImage} />
-          ) : (
-            <Ionicons name="image-outline" size={24} color="#CBD5E1" />
-          )}
-        </View>
-        <View style={styles.dealMainInfo}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>{deal.category || "General"}</Text>
+      <View style={styles.accentStrip} />
+      <View style={styles.dealContent}>
+        <View style={styles.dealTopRow}>
+          <View style={styles.imagePlaceholder}>
+            {deal.image ? (
+              <Image source={{ uri: deal.image }} style={styles.dealImage} />
+            ) : (
+              <Ionicons name="pricetag" size={20} color="#FF4D4D" />
+            )}
           </View>
-          <Text style={styles.dealTitle} numberOfLines={1}>
-            {deal.title}
-          </Text>
-          <Text style={styles.dealPrice}>
-            ₹{deal.discountPrice}{" "}
-            <Text style={styles.origPrice}>₹{deal.originalPrice}</Text>
+          <View style={{ flex: 1 }}>
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>
+                {deal.category || "General"}
+              </Text>
+            </View>
+            <Text style={styles.dealTitle} numberOfLines={1}>
+              {deal.title}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.progressSection}>
+          <View style={styles.progressInfo}>
+            <Text style={styles.progressLabel}>Campaign Goal</Text>
+            <Text style={styles.progressPercent}>
+              {Math.round(progress * 100)}%
+            </Text>
+          </View>
+          <View style={styles.progressBarBg}>
+            <View
+              style={[styles.progressBarFill, { width: `${progress * 100}%` }]}
+            />
+          </View>
+          <Text style={styles.joinCount}>
+            {joins} of {target} joined
           </Text>
         </View>
-      </View>
-      <View style={styles.progressSection}>
-        <View style={styles.progressLabelRow}>
-          <Text style={styles.progressText}>Campaign Progress</Text>
-          <Text style={styles.progressPercent}>
-            {Math.round(progress * 100)}%
-          </Text>
-        </View>
-        <View style={styles.progressBarBg}>
-          <View
-            style={[styles.progressBarFill, { width: `${progress * 100}%` }]}
-          />
-        </View>
-        <Text style={styles.joinText}>
-          {joins} / {target} Buyers Joined
-        </Text>
       </View>
     </TouchableOpacity>
   );
 }
 
-/* ... Styles same as previous ... */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  container: { flex: 1, backgroundColor: "#F8FAFF" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   scrollContent: { paddingBottom: 40 },
   header: {
@@ -264,16 +279,19 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     marginBottom: 25,
   },
-  welcome: { fontSize: 28, fontWeight: "800", color: "#0F172A" },
-  subtitle: { fontSize: 14, color: "#64748B" },
+  welcome: { fontSize: 28, fontWeight: "900", color: "#0F172A" },
+  subtitle: { fontSize: 14, color: "#64748B", fontWeight: "500" },
   profileCircle: {
-    width: 45,
-    height: 45,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#FFF",
     justifyContent: "center",
     alignItems: "center",
-    elevation: 2,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
   },
   statsContainer: {
     flexDirection: "row",
@@ -285,24 +303,29 @@ const styles = StyleSheet.create({
     width: (width - 60) / 3,
     backgroundColor: "#FFF",
     borderRadius: 24,
-    padding: 15,
+    padding: 16,
     alignItems: "center",
-    elevation: 2,
+    borderWidth: 1,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 15,
   },
   iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 10,
   },
-  statValue: { fontSize: 22, fontWeight: "800", color: "#0F172A" },
+  statValue: { fontSize: 24, fontWeight: "900" },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#94A3B8",
-    fontWeight: "600",
+    fontWeight: "700",
     textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   createBtn: {
     flexDirection: "row",
@@ -310,23 +333,30 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     backgroundColor: "#0F172A",
     marginHorizontal: SPACING,
-    padding: 20,
+    padding: 18,
     borderRadius: 24,
     marginBottom: 30,
-    elevation: 4,
+    elevation: 8,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
   },
   createBtnContent: { flexDirection: "row", alignItems: "center" },
   addIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.15)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 15,
   },
-  createBtnTitle: { color: "#FFF", fontSize: 16, fontWeight: "700" },
-  createBtnSub: { color: "rgba(255,255,255,0.5)", fontSize: 12 },
+  createBtnTitle: { color: "#FFF", fontSize: 16, fontWeight: "800" },
+  createBtnSub: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 12,
+    fontWeight: "500",
+  },
   section: { paddingHorizontal: SPACING },
   sectionHeader: {
     flexDirection: "row",
@@ -334,73 +364,84 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 15,
   },
-  sectionTitle: { fontSize: 18, fontWeight: "800", color: "#0F172A" },
-  seeAll: { color: "#2563EB", fontWeight: "600" },
+  sectionTitle: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
+  seeAll: { color: "#7C3AED", fontWeight: "700", fontSize: 13 },
   dealCard: {
     backgroundColor: "#FFF",
     borderRadius: 24,
-    padding: 16,
+    flexDirection: "row",
     marginBottom: 16,
-    elevation: 2,
-  },
-  dealTop: { flexDirection: "row", marginBottom: 15 },
-  imageBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-    backgroundColor: "#F1F5F9",
     overflow: "hidden",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  accentStrip: { width: 6, backgroundColor: "#FF4D4D" },
+  dealContent: { flex: 1, padding: 16 },
+  dealTopRow: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
+  imagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: "#FFF5F5",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 15,
+    marginRight: 12,
   },
-  dealImage: { width: "100%", height: "100%" },
-  dealMainInfo: { flex: 1, justifyContent: "center" },
-  tag: {
-    backgroundColor: "#EFF6FF",
+  dealImage: { width: "100%", height: "100%", borderRadius: 15 },
+  categoryBadge: {
+    backgroundColor: "#FF4D4D15",
     alignSelf: "flex-start",
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
     marginBottom: 4,
   },
-  tagText: {
-    color: "#2563EB",
+  categoryText: {
+    color: "#FF4D4D",
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     textTransform: "uppercase",
   },
-  dealTitle: { fontSize: 16, fontWeight: "700", color: "#1E293B" },
-  dealPrice: { fontSize: 14, fontWeight: "600", color: "#10B981" },
-  origPrice: {
-    fontSize: 12,
-    color: "#94A3B8",
-    textDecorationLine: "line-through",
-  },
+  dealTitle: { fontSize: 17, fontWeight: "700", color: "#1E293B" },
   progressSection: {
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: "#F8FAFC",
     paddingTop: 12,
   },
-  progressLabelRow: {
+  progressInfo: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  progressText: { fontSize: 12, color: "#64748B" },
-  progressPercent: { fontSize: 12, color: "#0F172A", fontWeight: "700" },
+  progressLabel: { fontSize: 12, color: "#64748B", fontWeight: "600" },
+  progressPercent: { fontSize: 13, color: "#1E293B", fontWeight: "800" },
   progressBarBg: {
-    height: 6,
+    height: 8,
     backgroundColor: "#F1F5F9",
-    borderRadius: 3,
+    borderRadius: 4,
     overflow: "hidden",
     marginBottom: 8,
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#2563EB",
-    borderRadius: 3,
+    backgroundColor: "#FF4D4D",
+    borderRadius: 4,
   },
-  joinText: { fontSize: 11, color: "#94A3B8", fontWeight: "600" },
-  emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 20 },
+  joinCount: {
+    fontSize: 11,
+    color: "#94A3B8",
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  emptyContainer: { alignItems: "center", marginTop: 40 },
+  emptyText: {
+    textAlign: "center",
+    color: "#94A3B8",
+    marginTop: 10,
+    fontWeight: "600",
+  },
 });
