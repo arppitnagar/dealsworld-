@@ -10,77 +10,96 @@ import {
   ActivityIndicator,
   StyleSheet,
   Modal,
-  Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Camera, Save } from "lucide-react-native";
 import LottieView from "lottie-react-native";
+import { db } from "../config/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+
+/* ---------- CATEGORY OPTIONS ---------- */
+const CATEGORIES = [
+  { label: "Food & Beverages", icon: "🍔" },
+  { label: "Fashion", icon: "👕" },
+  { label: "Electronics", icon: "📱" },
+  { label: "Beauty & Wellness", icon: "💄" },
+  { label: "Travel", icon: "✈️" },
+  { label: "Services", icon: "🛠️" },
+  { label: "Entertainment", icon: "🎬" },
+];
+
+/* ---------- DELIVERY MODES ---------- */
+const DELIVERY_MODES = [
+  "Free Home Delivery",
+  "Paid Home Delivery",
+  "Pick from Store",
+];
 
 export default function CreateDealScreen({ navigation }) {
   const [form, setForm] = useState({
     title: "",
+    description: "",
+    category: "",
+    deliveryMode: "",
+    deliveryCharge: "", //
     originalPrice: "",
     discountPrice: "",
-    minThreshold: "",
+    minGroupSize: "2",
+    expiresAt: null,
+    location: "",
   });
 
-  const [expiresAt, setExpiresAt] = useState(null);
-  const [location, setLocation] = useState("");
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [image, setImage] = useState(null);
   const [errors, setErrors] = useState({});
+  const [priceError, setPriceError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [priceError, setPriceError] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [deliveryModalVisible, setDeliveryModalVisible] = useState(false);
 
-  /* ---------- PRICE HANDLER (DECIMAL SAFE) ---------- */
-  const handlePriceChange = (field, value) => {
-    let clean = value.replace(/[₹,]/g, "");
+  /* ---------- PRICE HELPERS ---------- */
 
-    // allow only numbers + one decimal
-    if (!/^\d*\.?\d*$/.test(clean)) return;
+  const parseNumber = (v) => v.replace(/[₹,]/g, "");
 
-    const updatedForm = {
-      ...form,
-      [field]: clean ? `₹${clean}` : "",
-    };
-
-    const original =
-      field === "originalPrice"
-        ? parseFloat(clean)
-        : parseFloat(updatedForm.originalPrice?.replace(/[₹,]/g, "") || 0);
-
-    const deal =
-      field === "discountPrice"
-        ? parseFloat(clean)
-        : parseFloat(updatedForm.discountPrice?.replace(/[₹,]/g, "") || 0);
-
-    if (original && deal && deal > original) {
-      setPriceError("Deal price cannot be greater than original price");
-    } else {
-      setPriceError("");
-    }
-
-    setForm(updatedForm);
-  };
   const formatINRWithCommas = (value) => {
     if (!value) return "";
-
-    const num = Number(value.replace(/[₹,]/g, ""));
+    const num = Number(parseNumber(value));
     if (isNaN(num)) return "";
-
     return `₹${num.toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
   };
-  const handleIntegerChange = (value, setter) => {
-    // Allow only digits
-    const clean = value.replace(/[^0-9]/g, "");
-    setter(clean);
+
+  const handlePriceChange = (field, value) => {
+    const clean = parseNumber(value);
+    if (!/^\d*\.?\d*$/.test(clean)) return;
+
+    const updated = { ...form, [field]: clean ? `₹${clean}` : "" };
+
+    const original = Number(parseNumber(updated.originalPrice));
+    const deal = Number(parseNumber(updated.discountPrice));
+
+    if (original && deal && deal > original) {
+      setPriceError("Deal price cannot exceed original price");
+    } else {
+      setPriceError("");
+    }
+
+    setForm(updated);
   };
-  /* ---------- IMAGE PICKER ---------- */
+
+  /* ---------- MIN BUYERS ---------- */
+
+  const handleMinBuyersChange = (value) => {
+    const clean = value.replace(/[^0-9]/g, "");
+    setForm((p) => ({ ...p, minGroupSize: clean }));
+  };
+
+  /* ---------- IMAGE ---------- */
+
   const pickImage = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -90,45 +109,63 @@ export default function CreateDealScreen({ navigation }) {
   };
 
   /* ---------- VALIDATION ---------- */
+
   const validate = () => {
     let e = {};
+
     if (!form.title) e.title = "Title required";
-    if (!location) e.location = "Location required";
-    if (!expiresAt) e.expiresAt = "Expiry date required";
+    if (!form.description || form.description.length < 10)
+      e.description = "Minimum 10 characters required";
+    if (!form.category) e.category = "Select a category";
+    if (!form.deliveryMode) e.deliveryMode = "Delivery mode is required";
     if (!form.discountPrice) e.discountPrice = "Deal price required";
-    if (!form.minThreshold || Number(form.minThreshold) < 2)
-      e.minThreshold = "Minimum 2 buyers";
+    if (!form.location) e.location = "Location required";
+    if (!form.expiresAt) e.expiresAt = "Expiry date required";
+    if (form.deliveryMode === "Paid Home Delivery" && !form.deliveryCharge) {
+      e.deliveryCharge = "Delivery charge is required";
+    }
+
+    const buyers = Number(form.minGroupSize);
+    if (!buyers || buyers < 2)
+      e.minGroupSize = "Minimum buyers must be at least 2";
 
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   /* ---------- SUBMIT ---------- */
+
   const handleSubmit = async () => {
-    if (!validate()) return;
+    if (!validate() || priceError) return;
 
     setLoading(true);
     try {
-      const payload = {
+      await addDoc(collection(db, "deals"), {
         ...form,
-        location,
-        expiresAt,
-        discountPrice: Number(form.discountPrice),
-        originalPrice: Number(form.originalPrice),
-        minThreshold: Number(form.minThreshold),
+        originalPrice: Number(parseNumber(form.originalPrice)),
+        discountPrice: Number(parseNumber(form.discountPrice)),
+        minGroupSize: Number(form.minGroupSize),
+        descrption: form.description,
+        deliveryMode: form.deliveryMode,
+        title: form.title,
         image,
-        createdAt: new Date().toISOString(),
-      };
-
-      console.log("PAYLOAD", payload);
-      await new Promise((r) => setTimeout(r, 1200));
+        createdAt: serverTimestamp(),
+        status: "active",
+        deliveryCharge:
+          form.deliveryMode === "Paid Home Delivery"
+            ? Number(parseNumber(form.deliveryCharge))
+            : 0,
+        minGroupSize: Number(form.minGroupSize),
+      });
       setShowSuccess(true);
     } catch {
-      Alert.alert("Error", "Something went wrong");
+      Alert.alert("Error", "Failed to publish deal");
     } finally {
       setLoading(false);
     }
   };
+
+  /* ---------- UI ---------- */
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
@@ -154,20 +191,80 @@ export default function CreateDealScreen({ navigation }) {
         />
         {errors.title && <Text style={styles.error}>{errors.title}</Text>}
 
-        {/* PRICES (2 COLUMNS) */}
+        {/* DESCRIPTION */}
+        <Text style={styles.label}>Description</Text>
+        <TextInput
+          style={[styles.input, { height: 100 }]}
+          placeholder="Describe the deal"
+          multiline
+          value={form.description}
+          onChangeText={(v) => setForm({ ...form, description: v })}
+        />
+        {errors.description && (
+          <Text style={styles.error}>{errors.description}</Text>
+        )}
+
+        {/* CATEGORY */}
+        <Text style={styles.label}>Category</Text>
+        <TouchableOpacity
+          style={styles.input}
+          onPress={() => setCategoryModalVisible(true)}
+        >
+          <Text>{form.category || "Select category"}</Text>
+        </TouchableOpacity>
+        {errors.category && <Text style={styles.error}>{errors.category}</Text>}
+
+        {/* DELIVERY MODE */}
+        <Text style={styles.label}>Delivery Mode</Text>
+        <TouchableOpacity
+          style={styles.input}
+          onPress={() => setDeliveryModalVisible(true)}
+        >
+          <Text>{form.deliveryMode || "Select delivery mode"}</Text>
+        </TouchableOpacity>
+        {errors.deliveryMode && (
+          <Text style={styles.error}>{errors.deliveryMode}</Text>
+        )}
+
+        {/* DELIVERY CHARGE (ONLY FOR PAID DELIVERY) */}
+        {form.deliveryMode === "Paid Home Delivery" && (
+          <>
+            <Text style={styles.label}>Delivery Charge</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="decimal-pad"
+              placeholder="₹0.00"
+              value={form.deliveryCharge}
+              onChangeText={(v) =>
+                setForm({ ...form, deliveryCharge: v.replace(/[₹,]/g, "") })
+              }
+              onBlur={() =>
+                setForm((p) => ({
+                  ...p,
+                  deliveryCharge: formatINRWithCommas(p.deliveryCharge),
+                }))
+              }
+            />
+            {errors.deliveryCharge && (
+              <Text style={styles.error}>{errors.deliveryCharge}</Text>
+            )}
+          </>
+        )}
+
+        {/* PRICES */}
         <View style={{ flexDirection: "row", gap: 12 }}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Original Price</Text>
             <TextInput
-              placeholder="₹0.00"
-              keyboardType="decimal-pad"
               style={styles.input}
+              keyboardType="decimal-pad"
+              placeholder="₹0.00"
               value={form.originalPrice}
               onChangeText={(v) => handlePriceChange("originalPrice", v)}
               onBlur={() =>
-                setForm((prev) => ({
-                  ...prev,
-                  originalPrice: formatINRWithCommas(prev.originalPrice),
+                setForm((p) => ({
+                  ...p,
+                  originalPrice: formatINRWithCommas(p.originalPrice),
                 }))
               }
             />
@@ -176,63 +273,56 @@ export default function CreateDealScreen({ navigation }) {
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Deal Price</Text>
             <TextInput
-              placeholder="₹0.00"
-              keyboardType="decimal-pad"
               style={styles.input}
+              keyboardType="decimal-pad"
+              placeholder="₹0.00"
               value={form.discountPrice}
               onChangeText={(v) => handlePriceChange("discountPrice", v)}
               onBlur={() =>
-                setForm((prev) => ({
-                  ...prev,
-                  discountPrice: formatINRWithCommas(prev.discountPrice),
+                setForm((p) => ({
+                  ...p,
+                  discountPrice: formatINRWithCommas(p.discountPrice),
                 }))
               }
             />
-            {errors.discountPrice && (
-              <Text style={styles.error}>{errors.discountPrice}</Text>
-            )}
-            {priceError ? <Text style={styles.error}>{priceError}</Text> : null}
+            {priceError && <Text style={styles.error}>{priceError}</Text>}
           </View>
         </View>
 
         {/* MIN BUYERS */}
         <Text style={styles.label}>Minimum Buyers</Text>
         <TextInput
-          keyboardType="numeric"
-          placeholder="e.g. 5"
           style={styles.input}
-          value={form.minThreshold}
-          onChangeText={(v) =>
-            handleIntegerChange(v, (val) =>
-              setForm({ ...form, minThreshold: val }),
-            )
-          }
+          keyboardType="numeric"
+          placeholder="Minimum 2 buyers"
+          value={form.minGroupSize}
+          onChangeText={handleMinBuyersChange}
         />
-        {errors.minThreshold && (
-          <Text style={styles.error}>{errors.minThreshold}</Text>
+        {errors.minGroupSize && (
+          <Text style={styles.error}>{errors.minGroupSize}</Text>
         )}
 
-        {/* EXPIRES AT (ANDROID SAFE) */}
+        {/* EXPIRES AT */}
         <Text style={styles.label}>Expires At</Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowDatePicker(true)}
         >
-          <Text style={{ color: expiresAt ? "#111827" : "#9ca3af" }}>
-            {expiresAt
-              ? new Date(expiresAt).toDateString()
+          <Text>
+            {form.expiresAt
+              ? new Date(form.expiresAt).toDateString()
               : "Select expiry date"}
           </Text>
         </TouchableOpacity>
 
         {showDatePicker && (
           <DateTimePicker
-            value={expiresAt ? new Date(expiresAt) : new Date()}
-            mode="date" // ← IMPORTANT
+            value={form.expiresAt || new Date()}
+            mode="date"
             display="default"
             onChange={(e, d) => {
               setShowDatePicker(false);
-              if (d) setExpiresAt(d.toISOString());
+              if (d) setForm({ ...form, expiresAt: d });
             }}
           />
         )}
@@ -240,50 +330,89 @@ export default function CreateDealScreen({ navigation }) {
         {/* LOCATION */}
         <Text style={styles.label}>Location</Text>
         <TextInput
-          placeholder="e.g. Mumbai, Andheri West"
           style={styles.input}
-          value={location}
-          onChangeText={setLocation}
+          placeholder="e.g. Mumbai, Andheri"
+          value={form.location}
+          onChangeText={(v) => setForm({ ...form, location: v })}
         />
         {errors.location && <Text style={styles.error}>{errors.location}</Text>}
 
         {/* SUBMIT */}
         <TouchableOpacity
-          onPress={handleSubmit}
-          disabled={loading || !!priceError}
           style={[
             styles.submit,
             (loading || priceError) && { backgroundColor: "#9ca3af" },
           ]}
+          disabled={loading || !!priceError}
+          onPress={handleSubmit}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Save size={18} color="#fff" />
+              <Save color="#fff" size={18} />
               <Text style={styles.submitText}>Publish Deal</Text>
             </>
           )}
         </TouchableOpacity>
       </ScrollView>
 
+      {/* CATEGORY MODAL */}
+      <Modal transparent visible={categoryModalVisible}>
+        <View style={styles.overlay}>
+          <View style={styles.card}>
+            {CATEGORIES.map((c) => (
+              <TouchableOpacity
+                key={c.label}
+                style={styles.categoryRow}
+                onPress={() => {
+                  setForm({ ...form, category: c.label });
+                  setCategoryModalVisible(false);
+                }}
+              >
+                <Text style={{ fontSize: 22 }}>{c.icon}</Text>
+                <Text style={{ marginLeft: 12 }}>{c.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* DELIVERY MODE MODAL */}
+      <Modal transparent visible={deliveryModalVisible}>
+        <View style={styles.overlay}>
+          <View style={styles.card}>
+            {DELIVERY_MODES.map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={styles.categoryRow}
+                onPress={() => {
+                  setForm({
+                    ...form,
+                    deliveryMode: mode,
+                    deliveryCharge:
+                      mode === "Paid Home Delivery" ? form.deliveryCharge : "",
+                  });
+                  setDeliveryModalVisible(false);
+                }}
+              >
+                <Text>{mode}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
       {/* SUCCESS */}
       {showSuccess && (
         <Modal transparent>
           <View style={styles.overlay}>
-            <View style={styles.card}>
-              <LottieView
-                source={require("../../assets/animations/success-check.json")}
-                autoPlay
-                loop={false}
-                style={{ width: 160, height: 160 }}
-                onAnimationFinish={() => {
-                  setShowSuccess(false);
-                  navigation.goBack();
-                }}
-              />
-              <Text style={{ fontWeight: "700" }}>Deal Published!</Text>
-            </View>
+            <LottieView
+              source={require("../../assets/animations/success-check.json")}
+              autoPlay
+              loop={false}
+              onAnimationFinish={() => navigation.goBack()}
+            />
           </View>
         </Modal>
       )}
@@ -294,7 +423,7 @@ export default function CreateDealScreen({ navigation }) {
 /* ---------- STYLES ---------- */
 const styles = StyleSheet.create({
   heading: { fontSize: 22, fontWeight: "700", marginBottom: 12 },
-  label: { marginTop: 12, color: "#6b7280", fontSize: 12 },
+  label: { marginTop: 12, fontSize: 12, color: "#6b7280" },
   input: {
     borderWidth: 1,
     borderColor: "#e5e7eb",
@@ -309,7 +438,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
   },
   image: { width: "100%", height: "100%" },
   submit: {
@@ -330,8 +458,13 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#fff",
-    padding: 40,
-    borderRadius: 24,
+    padding: 24,
+    borderRadius: 20,
+    width: "80%",
+  },
+  categoryRow: {
+    flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 12,
   },
 });
