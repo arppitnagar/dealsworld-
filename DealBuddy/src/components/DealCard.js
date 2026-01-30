@@ -6,5 +6,5 @@ import CountdownTimer from "./CountdownTimer";
     expiryTime={deal.expiryTime}
     onExpire={() => console.log("Refresh list")}
   />
-  <Text className="text-gray-400 text-xs">Min: {deal.minThreshold} users</Text>
+  <Text className="text-gray-400 text-xs">Min: {deal.minGroupSize} users</Text>
 </View>;

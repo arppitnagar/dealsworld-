@@ -243,8 +243,8 @@ function StatCard({ title, count, color, bgColor, icon, onPress, isSelected }) {
 
 // FIXED: Added 'onPress' to the arguments here
 function DealCard({ deal, onPress }) {
-  const joins = deal.currentJoins || 0;
-  const target = deal.minThreshold || 1;
+  const joins = deal.joinedUsers || 0;
+  const target = deal.minGroupSize || 1;
   const progress = Math.min(joins / target, 1);
   const accentColor =
     deal.status === "active"

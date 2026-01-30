@@ -31,7 +31,7 @@ const checkExpiredDeals = async () => {
 
   expiredDeals.forEach(async (doc) => {
     const deal = doc.data();
-    if (deal.currentJoins < deal.minThreshold) {
+    if (deal.joinedUsers < deal.minGroupSize) {
       await doc.ref.update({ status: "expired" });
       // Logic to trigger refunds via UPI would go here
     }

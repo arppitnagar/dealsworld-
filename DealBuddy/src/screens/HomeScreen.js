@@ -17,7 +17,7 @@ const CATEGORIES = ["All", "Food", "Fashion", "Electronics", "Home", "Fitness"];
 
 const DealCard = ({ deal, navigation }) => {
   // Calculate progress percentage for the progress bar
-  const progress = Math.min((deal.currentJoins / deal.minThreshold) * 100, 100);
+  const progress = Math.min((deal.joinedUsers / deal.minGroupSize) * 100, 100);
 
   return (
     <TouchableOpacity
@@ -48,7 +48,7 @@ const DealCard = ({ deal, navigation }) => {
           <View className="flex-row items-center">
             <Flame size={14} color="#f97316" />
             <Text className="text-orange-600 text-xs ml-1 font-bold">
-              {deal.currentJoins} joined
+              {deal.joinedUsers} joined
             </Text>
           </View>
         </View>
@@ -91,8 +91,8 @@ const DealCard = ({ deal, navigation }) => {
 
         <View className="flex-row justify-between items-center">
           <Text className="text-[10px] text-gray-500 font-medium">
-            {deal.minThreshold - deal.currentJoins > 0
-              ? `${deal.minThreshold - deal.currentJoins} more users needed`
+            {deal.minGroupSize - deal.joinedUsers > 0
+              ? `${deal.minGroupSize - deal.joinedUsers} more users needed`
               : "Deal Unlocked!"}
           </Text>
 

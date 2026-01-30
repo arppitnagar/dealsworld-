@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,16 +11,18 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { db } from "../config/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, onSnapshot } from "firebase/firestore";
 
 const { width } = Dimensions.get("window");
 
 export default function DealDetails({ route, navigation }) {
-  const { deal } = route.params;
+  const { deal: initialDeal } = route.params;
+  const [deal, setDeal] = useState(initialDeal); // Use state to hold the live deal
   const [loading, setLoading] = useState(false);
 
-  const joins = deal.currentJoins || 0;
-  const target = deal.minThreshold || 1;
+  // Use the local 'deal' state for all calculations
+  const joins = deal.joinedUsers || 0;
+  const target = deal.minGroupSize || 1; // Updated to match your CreateDeal field name
   const progress = Math.min(joins / target, 1);
   const isActive = deal.status === "active";
   const isCompleted = deal.status === "completed";
@@ -51,6 +53,25 @@ export default function DealDetails({ route, navigation }) {
     );
   };
 
+  useEffect(() => {
+    // Use route.params.deal.id directly to ensure the listener starts correctly
+    const dealRef = doc(db, "deals", route.params.deal.id);
+
+    const unsubscribe = onSnapshot(
+      dealRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setDeal({ id: docSnap.id, ...docSnap.data() });
+        }
+      },
+      (error) => {
+        console.error("Snapshot error: ", error);
+      },
+    );
+
+    return () => unsubscribe();
+  }, [route.params.deal.id]);
+
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -79,7 +100,7 @@ export default function DealDetails({ route, navigation }) {
 
             <TouchableOpacity
               style={styles.editBtn}
-              onPress={() => navigation.navigate("EditDeal", { deal })}
+              onPress={() => navigation.navigate("CreateDeal", { deal })} // Passing the deal object here
             >
               <Ionicons
                 name={isCompleted ? "eye-outline" : "create-outline"}

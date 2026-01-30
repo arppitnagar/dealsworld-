@@ -17,7 +17,7 @@ import { Camera, Save } from "lucide-react-native";
 import LottieView from "lottie-react-native";
 import { db } from "../config/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-
+import * as Yup from "yup";
 /* ---------- CATEGORY OPTIONS ---------- */
 const CATEGORIES = [
   { label: "Food & Beverages", icon: "🍔" },
@@ -36,19 +36,65 @@ const DELIVERY_MODES = [
   "Pick from Store",
 ];
 
-export default function CreateDealScreen({ navigation }) {
+const dealSchema = Yup.object().shape({
+  title: Yup.string()
+    .required("Deal title is required")
+    .min(5, "Title must be at least 5 characters"),
+  description: Yup.string()
+    .required("Description is required")
+    .min(10, "Description must be at least 10 characters"),
+  category: Yup.string().required("Please select a category"),
+  originalPrice: Yup.number()
+    .typeError("Original price must be a number")
+    .positive("Price must be greater than zero"),
+  discountPrice: Yup.number()
+    .typeError("Deal price must be a number")
+    .required("Deal price is required")
+    .positive("Price must be greater than zero")
+    .lessThan(
+      Yup.ref("originalPrice"),
+      "Deal price must be lower than original price",
+    ),
+  minGroupSize: Yup.number()
+    .required("Minimum buyers count is required")
+    .min(2, "Minimum buyers must be at least 2"),
+  expiresAt: Yup.date()
+    .required("Expiry date is required")
+    .min(new Date(), "Expiry date cannot be in the past"),
+  location: Yup.string().required("Location is required"),
+  deliveryMode: Yup.string().required("Delivery mode is required"),
+  deliveryCharge: Yup.number().when("deliveryMode", {
+    is: "Paid Home Delivery",
+    then: (schema) =>
+      schema
+        .required("Delivery charge is required")
+        .min(1, "Charge must be at least ₹1"),
+    otherwise: (schema) => schema.nullable(),
+  }),
+});
+export default function CreateDealScreen({ route, navigation }) {
+  // 1. Detect if we are in Edit/View mode
+  const deal = route.params?.deal;
+  const isEditMode = !!deal;
+  const isReadOnly = deal?.status === "completed";
+
+  // 2. Initialize state with deal data if it exists
   const [form, setForm] = useState({
-    title: "",
-    description: "",
-    category: "",
-    deliveryMode: "",
-    deliveryCharge: "", //
-    originalPrice: "",
-    discountPrice: "",
-    minGroupSize: "2",
-    expiresAt: null,
-    location: "",
-    vendorid: "vendor_001",
+    title: deal?.title || "",
+    description: deal?.description || "",
+    category: deal?.category || "",
+    deliveryMode: deal?.deliveryMode || "",
+    deliveryCharge: deal?.deliveryCharge?.toString() || "",
+    originalPrice: deal?.originalPrice?.toString() || "",
+    discountPrice: deal?.discountPrice?.toString() || "",
+    minGroupSize: deal?.minGroupSize?.toString() || "2",
+    expiresAt: deal?.expiresAt?.toDate
+      ? deal.expiresAt.toDate() // Firestore helper to get JS Date
+      : deal?.expiresAt
+        ? new Date(deal.expiresAt)
+        : null,
+    location: deal?.location || "",
+    vendorid: deal?.vendorid || "vendor_001",
   });
 
   const [image, setImage] = useState(null);
@@ -111,33 +157,37 @@ export default function CreateDealScreen({ navigation }) {
 
   /* ---------- VALIDATION ---------- */
 
-  const validate = () => {
-    let e = {};
+  const validate = async () => {
+    try {
+      // Clean data before validation (removing currency symbols)
+      const cleanData = {
+        ...form,
+        originalPrice: Number(parseNumber(form.originalPrice)),
+        discountPrice: Number(parseNumber(form.discountPrice)),
+        deliveryCharge: form.deliveryCharge
+          ? Number(parseNumber(form.deliveryCharge))
+          : 0,
+        minGroupSize: Number(form.minGroupSize),
+      };
 
-    if (!form.title) e.title = "Deal title required";
-    if (!form.description || form.description.length < 10)
-      e.description = "Minimum 10 characters required";
-    if (!form.category) e.category = "Select a category";
-    if (!form.deliveryMode) e.deliveryMode = "Delivery mode is required";
-    if (!form.discountPrice) e.discountPrice = "Deal price required";
-    if (!form.location) e.location = "Location required";
-    if (!form.expiresAt) e.expiresAt = "Expiry date required";
-    if (form.deliveryMode === "Paid Home Delivery" && !form.deliveryCharge) {
-      e.deliveryCharge = "Delivery charge is required";
+      await dealSchema.validate(cleanData, { abortEarly: false });
+      setErrors({});
+      return true;
+    } catch (err) {
+      const newErrors = {};
+      err.inner.forEach((error) => {
+        newErrors[error.path] = error.message;
+      });
+      setErrors(newErrors);
+      return false;
     }
-
-    const buyers = Number(form.minGroupSize);
-    if (!buyers || buyers < 2)
-      e.minGroupSize = "Minimum buyers must be at least 2";
-
-    setErrors(e);
-    return Object.keys(e).length === 0;
   };
 
   /* ---------- SUBMIT ---------- */
 
   const handleSubmit = async () => {
-    if (!validate() || priceError) return;
+    const isValid = await validate();
+    if (!isValid) return;
 
     setLoading(true);
     try {
@@ -158,6 +208,15 @@ export default function CreateDealScreen({ navigation }) {
             : 0,
         minGroupSize: Number(form.minGroupSize),
       });
+      if (isEditMode) {
+        await updateDoc(doc(db, "deals", deal.id), data);
+      } else {
+        await addDoc(collection(db, "deals"), {
+          ...data,
+          createdAt: serverTimestamp(),
+          status: "active",
+        });
+      }
       setShowSuccess(true);
     } catch {
       Alert.alert("Error", "Failed to publish deal");
@@ -171,10 +230,24 @@ export default function CreateDealScreen({ navigation }) {
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <Text style={styles.heading}>Create New Deal</Text>
-
-        {/* IMAGE */}
-        <TouchableOpacity style={styles.imageBox} onPress={pickImage}>
+        <Text style={styles.heading}>
+          {isReadOnly
+            ? "View Deal"
+            : isEditMode
+              ? "Edit Deal"
+              : "Create New Deal"}
+        </Text>
+        {/* IMAGE PICKER SECTION */}
+        <TouchableOpacity
+          style={[
+            styles.imageBox,
+            isReadOnly && { borderStyle: "solid", opacity: 0.8 },
+          ]}
+          onPress={pickImage}
+          // This prevents the function from firing
+          disabled={isReadOnly}
+          activeOpacity={isReadOnly ? 1 : 0.7}
+        >
           {image ? (
             <Image source={{ uri: image }} style={styles.image} />
           ) : (
@@ -187,9 +260,15 @@ export default function CreateDealScreen({ navigation }) {
           Deal Title
         </Text>
         <TextInput
-          style={[styles.input, errors.title && styles.inputError]}
+          style={[
+            styles.input,
+            errors.title && styles.inputError,
+            isReadOnly && styles.readOnlyInput,
+          ]}
           placeholder="e.g. iPhone 15 Pro Max"
           value={form.title}
+          // This is the core logic change
+          editable={!isReadOnly}
           onChangeText={(v) => setForm({ ...form, title: v })}
         />
         {errors.title && <Text style={styles.error}>{errors.title}</Text>}
@@ -203,10 +282,14 @@ export default function CreateDealScreen({ navigation }) {
             styles.input,
             { height: 100 },
             errors.description && styles.inputError,
+            // Add a grey background style if read-only
+            isReadOnly && styles.readOnlyInput,
           ]}
           placeholder="Describe the deal"
           multiline
           value={form.description}
+          // This is the core logic change
+          editable={!isReadOnly}
           onChangeText={(v) => setForm({ ...form, description: v })}
         />
         {errors.description && (
@@ -216,12 +299,22 @@ export default function CreateDealScreen({ navigation }) {
         {/* PRICES */}
         <View style={{ flexDirection: "row", gap: 12 }}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Original Price</Text>
+            <Text
+              style={[
+                styles.label,
+                // Add a grey background style if read-only
+                isReadOnly && styles.readOnlyInput,
+              ]}
+            >
+              Original Price
+            </Text>
             <TextInput
               style={styles.input}
               keyboardType="decimal-pad"
               placeholder="₹0.00"
               value={form.originalPrice}
+              // This is the core logic change
+              editable={!isReadOnly}
               onChangeText={(v) => handlePriceChange("originalPrice", v)}
               onBlur={() =>
                 setForm((p) => ({
@@ -239,10 +332,18 @@ export default function CreateDealScreen({ navigation }) {
               Deal Price
             </Text>
             <TextInput
-              style={[styles.input, errors.discountPrice && styles.inputError]}
+              style={[
+                styles.input,
+                errors.discountPrice && styles.inputError,
+                ,
+                // Add a grey background style if read-only
+                isReadOnly && styles.readOnlyInput,
+              ]}
               keyboardType="decimal-pad"
               placeholder="₹0.00"
               value={form.discountPrice}
+              // This is the core logic change
+              editable={!isReadOnly}
               onChangeText={(v) => handlePriceChange("discountPrice", v)}
               onBlur={() =>
                 setForm((p) => ({
@@ -260,10 +361,17 @@ export default function CreateDealScreen({ navigation }) {
           Minimum Buyers
         </Text>
         <TextInput
-          style={[styles.input, errors.minGroupSize && styles.inputError]}
+          style={[
+            styles.input,
+            errors.minGroupSize && styles.inputError,
+            // Add a grey background style if read-only
+            isReadOnly && styles.readOnlyInput,
+          ]}
           keyboardType="numeric"
           placeholder="Minimum 2 buyers"
           value={form.minGroupSize}
+          // This is the core logic change
+          editable={!isReadOnly}
           onChangeText={handleMinBuyersChange}
         />
         {errors.minGroupSize && (
@@ -274,32 +382,56 @@ export default function CreateDealScreen({ navigation }) {
         <Text style={[styles.label, errors.category && styles.labelError]}>
           Category
         </Text>
-        <TouchableOpacity
-          style={[styles.input, errors.category && styles.inputError]}
-          onPress={() => setCategoryModalVisible(true)}
-        >
-          <Text>{form.category || "Select category"}</Text>
-        </TouchableOpacity>
+
+        {/* Wrap the TouchableOpacity inside this View */}
+        <View pointerEvents={isReadOnly ? "none" : "auto"}>
+          <TouchableOpacity
+            style={[
+              styles.input,
+              errors.category && styles.inputError,
+              isReadOnly && styles.readOnlyInput,
+            ]}
+            // Use 'disabled' for TouchableOpacity, not 'editable'
+            disabled={isReadOnly}
+            onPress={() => setCategoryModalVisible(true)}
+          >
+            <Text style={isReadOnly ? { color: "#64748b" } : { color: "#000" }}>
+              {form.category || "Select category"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {errors.category && <Text style={styles.error}>{errors.category}</Text>}
         {errors.category && <Text style={styles.error}>{errors.category}</Text>}
 
+        {/* EXPIRES AT */}
         {/* EXPIRES AT */}
         <Text style={[styles.label, errors.expiresAt && styles.labelError]}>
           Expires At
         </Text>
-        <TouchableOpacity
-          style={[styles.input, errors.expiresAt && styles.inputError]}
-          onPress={() => setShowDatePicker(true)}
-        >
-          <Text>
-            {form.expiresAt
-              ? new Date(form.expiresAt).toDateString()
-              : "Select expiry date"}
-          </Text>
-        </TouchableOpacity>
 
-        {showDatePicker && (
+        <View pointerEvents={isReadOnly ? "none" : "auto"}>
+          <TouchableOpacity
+            style={[
+              styles.input,
+              errors.expiresAt && styles.inputError,
+              isReadOnly && styles.readOnlyInput, // Apply grey background here
+            ]}
+            // TouchableOpacity uses 'disabled', not 'editable'
+            disabled={isReadOnly}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Text style={isReadOnly ? { color: "#64748b" } : { color: "#000" }}>
+              {form.expiresAt
+                ? new Date(form.expiresAt).toDateString()
+                : "Select expiry date"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {showDatePicker && !isReadOnly && (
           <DateTimePicker
-            value={form.expiresAt || new Date()}
+            value={form.expiresAt instanceof Date ? form.expiresAt : new Date()}
             mode="date"
             display="default"
             onChange={(e, d) => {
@@ -314,22 +446,41 @@ export default function CreateDealScreen({ navigation }) {
           Location
         </Text>
         <TextInput
-          style={[styles.input, errors.location && styles.inputError]}
+          style={[
+            styles.input,
+            errors.location && styles.inputError, // Add a grey background style if read-only
+            isReadOnly && styles.readOnlyInput,
+          ]}
           placeholder="e.g. Mumbai, Andheri"
           value={form.location}
+          // This is the core logic change
+          editable={!isReadOnly}
           onChangeText={(v) => setForm({ ...form, location: v })}
         />
         {errors.location && <Text style={styles.error}>{errors.location}</Text>}
+
         {/* DELIVERY MODE */}
         <Text style={[styles.label, errors.deliveryMode && styles.labelError]}>
           Delivery Mode
         </Text>
-        <TouchableOpacity
-          style={[styles.input, errors.deliveryMode && styles.inputError]}
-          onPress={() => setDeliveryModalVisible(true)}
-        >
-          <Text>{form.deliveryMode || "Select delivery mode"}</Text>
-        </TouchableOpacity>
+
+        <View pointerEvents={isReadOnly ? "none" : "auto"}>
+          <TouchableOpacity
+            style={[
+              styles.input,
+              errors.deliveryMode && styles.inputError,
+              isReadOnly && styles.readOnlyInput, // Grey background for the box
+            ]}
+            // TouchableOpacity uses 'disabled' instead of 'editable'
+            disabled={isReadOnly}
+            onPress={() => setDeliveryModalVisible(true)}
+          >
+            <Text style={isReadOnly ? { color: "#64748b" } : { color: "#000" }}>
+              {form.deliveryMode || "Select delivery mode"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {errors.deliveryMode && (
           <Text style={styles.error}>{errors.deliveryMode}</Text>
         )}
@@ -339,10 +490,15 @@ export default function CreateDealScreen({ navigation }) {
           <>
             <Text style={styles.label}>Delivery Charge</Text>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input, // Add a grey background style if read-only
+                isReadOnly && styles.readOnlyInput,
+              ]}
               keyboardType="decimal-pad"
               placeholder="₹0.00"
               value={form.deliveryCharge}
+              // This is the core logic change
+              editable={!isReadOnly}
               onChangeText={(v) =>
                 setForm({ ...form, deliveryCharge: v.replace(/[₹,]/g, "") })
               }
@@ -360,23 +516,26 @@ export default function CreateDealScreen({ navigation }) {
         )}
 
         {/* SUBMIT */}
-        <TouchableOpacity
-          style={[
-            styles.submit,
-            (loading || priceError) && { backgroundColor: "#9ca3af" },
-          ]}
-          disabled={loading || !!priceError}
-          onPress={handleSubmit}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Save color="#fff" size={18} />
-              <Text style={styles.submitText}>Publish Deal</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Only show the button if NOT in Read Only mode */}
+        {!isReadOnly && (
+          <TouchableOpacity
+            style={[
+              styles.submit,
+              (loading || priceError) && { backgroundColor: "#9ca3af" },
+            ]}
+            disabled={loading || !!priceError}
+            onPress={handleSubmit}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Save color="#fff" size={18} />
+                <Text style={styles.submitText}>Publish Deal</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* CATEGORY MODAL */}
@@ -495,5 +654,10 @@ const styles = StyleSheet.create({
 
   labelError: {
     color: "#ef4444",
+  },
+  readOnlyInput: {
+    backgroundColor: "#f3f4f6", // Light grey
+    color: "#6b7280", // Muted text color
+    borderColor: "#d1d5db", // Subtle border
   },
 });
