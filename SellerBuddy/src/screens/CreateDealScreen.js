@@ -113,7 +113,7 @@ export default function CreateDealScreen({ navigation }) {
   const validate = () => {
     let e = {};
 
-    if (!form.title) e.title = "Title required";
+    if (!form.title) e.title = "Deal title required";
     if (!form.description || form.description.length < 10)
       e.description = "Minimum 10 characters required";
     if (!form.category) e.category = "Select a category";
@@ -182,9 +182,11 @@ export default function CreateDealScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* TITLE */}
-        <Text style={styles.label}>Product Title</Text>
+        <Text style={[styles.label, errors.title && styles.labelError]}>
+          Deal Title
+        </Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.title && styles.inputError]}
           placeholder="e.g. iPhone 15 Pro Max"
           value={form.title}
           onChangeText={(v) => setForm({ ...form, title: v })}
@@ -192,9 +194,15 @@ export default function CreateDealScreen({ navigation }) {
         {errors.title && <Text style={styles.error}>{errors.title}</Text>}
 
         {/* DESCRIPTION */}
-        <Text style={styles.label}>Description</Text>
+        <Text style={[styles.label, errors.description && styles.labelError]}>
+          Description
+        </Text>
         <TextInput
-          style={[styles.input, { height: 100 }]}
+          style={[
+            styles.input,
+            { height: 100 },
+            errors.description && styles.inputError,
+          ]}
           placeholder="Describe the deal"
           multiline
           value={form.description}
@@ -204,20 +212,119 @@ export default function CreateDealScreen({ navigation }) {
           <Text style={styles.error}>{errors.description}</Text>
         )}
 
+        {/* PRICES */}
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Original Price</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="decimal-pad"
+              placeholder="₹0.00"
+              value={form.originalPrice}
+              onChangeText={(v) => handlePriceChange("originalPrice", v)}
+              onBlur={() =>
+                setForm((p) => ({
+                  ...p,
+                  originalPrice: formatINRWithCommas(p.originalPrice),
+                }))
+              }
+            />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[styles.label, errors.discountPrice && styles.labelError]}
+            >
+              Deal Price
+            </Text>
+            <TextInput
+              style={[styles.input, errors.discountPrice && styles.inputError]}
+              keyboardType="decimal-pad"
+              placeholder="₹0.00"
+              value={form.discountPrice}
+              onChangeText={(v) => handlePriceChange("discountPrice", v)}
+              onBlur={() =>
+                setForm((p) => ({
+                  ...p,
+                  discountPrice: formatINRWithCommas(p.discountPrice),
+                }))
+              }
+            />
+            {priceError && <Text style={styles.error}>{priceError}</Text>}
+          </View>
+        </View>
+
+        {/* MIN BUYERS */}
+        <Text style={[styles.label, errors.minGroupSize && styles.labelError]}>
+          Minimum Buyers
+        </Text>
+        <TextInput
+          style={[styles.input, errors.minGroupSize && styles.inputError]}
+          keyboardType="numeric"
+          placeholder="Minimum 2 buyers"
+          value={form.minGroupSize}
+          onChangeText={handleMinBuyersChange}
+        />
+        {errors.minGroupSize && (
+          <Text style={styles.error}>{errors.minGroupSize}</Text>
+        )}
+
         {/* CATEGORY */}
-        <Text style={styles.label}>Category</Text>
+        <Text style={[styles.label, errors.category && styles.labelError]}>
+          Category
+        </Text>
         <TouchableOpacity
-          style={styles.input}
+          style={[styles.input, errors.category && styles.inputError]}
           onPress={() => setCategoryModalVisible(true)}
         >
           <Text>{form.category || "Select category"}</Text>
         </TouchableOpacity>
         {errors.category && <Text style={styles.error}>{errors.category}</Text>}
 
-        {/* DELIVERY MODE */}
-        <Text style={styles.label}>Delivery Mode</Text>
+        {/* EXPIRES AT */}
+        <Text style={[styles.label, errors.expiresAt && styles.labelError]}>
+          Expires At
+        </Text>
         <TouchableOpacity
-          style={styles.input}
+          style={[styles.input, errors.expiresAt && styles.inputError]}
+          onPress={() => setShowDatePicker(true)}
+        >
+          <Text>
+            {form.expiresAt
+              ? new Date(form.expiresAt).toDateString()
+              : "Select expiry date"}
+          </Text>
+        </TouchableOpacity>
+
+        {showDatePicker && (
+          <DateTimePicker
+            value={form.expiresAt || new Date()}
+            mode="date"
+            display="default"
+            onChange={(e, d) => {
+              setShowDatePicker(false);
+              if (d) setForm({ ...form, expiresAt: d });
+            }}
+          />
+        )}
+
+        {/* LOCATION */}
+        <Text style={[styles.label, errors.location && styles.labelError]}>
+          Location
+        </Text>
+        <TextInput
+          style={[styles.input, errors.location && styles.inputError]}
+          placeholder="e.g. Mumbai, Andheri"
+          value={form.location}
+          onChangeText={(v) => setForm({ ...form, location: v })}
+        />
+        {errors.location && <Text style={styles.error}>{errors.location}</Text>}
+        {/* DELIVERY MODE */}
+        <Text style={[styles.label, errors.deliveryMode && styles.labelError]}>
+          Delivery Mode
+        </Text>
+        <TouchableOpacity
+          style={[styles.input, errors.deliveryMode && styles.inputError]}
           onPress={() => setDeliveryModalVisible(true)}
         >
           <Text>{form.deliveryMode || "Select delivery mode"}</Text>
@@ -250,92 +357,6 @@ export default function CreateDealScreen({ navigation }) {
             )}
           </>
         )}
-
-        {/* PRICES */}
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Original Price</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="decimal-pad"
-              placeholder="₹0.00"
-              value={form.originalPrice}
-              onChangeText={(v) => handlePriceChange("originalPrice", v)}
-              onBlur={() =>
-                setForm((p) => ({
-                  ...p,
-                  originalPrice: formatINRWithCommas(p.originalPrice),
-                }))
-              }
-            />
-          </View>
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Deal Price</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="decimal-pad"
-              placeholder="₹0.00"
-              value={form.discountPrice}
-              onChangeText={(v) => handlePriceChange("discountPrice", v)}
-              onBlur={() =>
-                setForm((p) => ({
-                  ...p,
-                  discountPrice: formatINRWithCommas(p.discountPrice),
-                }))
-              }
-            />
-            {priceError && <Text style={styles.error}>{priceError}</Text>}
-          </View>
-        </View>
-
-        {/* MIN BUYERS */}
-        <Text style={styles.label}>Minimum Buyers</Text>
-        <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          placeholder="Minimum 2 buyers"
-          value={form.minGroupSize}
-          onChangeText={handleMinBuyersChange}
-        />
-        {errors.minGroupSize && (
-          <Text style={styles.error}>{errors.minGroupSize}</Text>
-        )}
-
-        {/* EXPIRES AT */}
-        <Text style={styles.label}>Expires At</Text>
-        <TouchableOpacity
-          style={styles.input}
-          onPress={() => setShowDatePicker(true)}
-        >
-          <Text>
-            {form.expiresAt
-              ? new Date(form.expiresAt).toDateString()
-              : "Select expiry date"}
-          </Text>
-        </TouchableOpacity>
-
-        {showDatePicker && (
-          <DateTimePicker
-            value={form.expiresAt || new Date()}
-            mode="date"
-            display="default"
-            onChange={(e, d) => {
-              setShowDatePicker(false);
-              if (d) setForm({ ...form, expiresAt: d });
-            }}
-          />
-        )}
-
-        {/* LOCATION */}
-        <Text style={styles.label}>Location</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. Mumbai, Andheri"
-          value={form.location}
-          onChangeText={(v) => setForm({ ...form, location: v })}
-        />
-        {errors.location && <Text style={styles.error}>{errors.location}</Text>}
 
         {/* SUBMIT */}
         <TouchableOpacity
@@ -466,5 +487,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
+  },
+  inputError: {
+    borderColor: "#ef4444",
+  },
+
+  labelError: {
+    color: "#ef4444",
   },
 });
