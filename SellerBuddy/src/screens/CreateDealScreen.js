@@ -48,6 +48,7 @@ export default function CreateDealScreen({ navigation }) {
     minGroupSize: "2",
     expiresAt: null,
     location: "",
+    vendorid: "vendor_001",
   });
 
   const [image, setImage] = useState(null);
