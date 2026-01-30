@@ -183,7 +183,7 @@ export default function CreateDealScreen({ navigation }) {
           <View className="flex-1">
             <Text style={styles.label}>Original Price</Text>
             <TextInput
-              placeholder="₹0"
+              placeholder="₹01"
               keyboardType="numeric"
               className="bg-gray-50 p-4 rounded-xl border border-gray-200"
               value={form.originalPrice}
