@@ -10,184 +10,166 @@ import {
   ActivityIndicator,
   StyleSheet,
   Modal,
+  Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { Camera, Save } from "lucide-react-native";
 import LottieView from "lottie-react-native";
 
 export default function CreateDealScreen({ navigation }) {
   const [form, setForm] = useState({
     title: "",
-    description: "",
-    category: "Electronics",
-    discountPrice: "",
     originalPrice: "",
+    discountPrice: "",
     minThreshold: "",
   });
 
+  const [expiresAt, setExpiresAt] = useState(null);
+  const [location, setLocation] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [image, setImage] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [image, setImage] = useState(null);
+  const [priceError, setPriceError] = useState("");
 
-  /* ---------------- Currency (INR) ---------------- */
-  // 1. Improved INR Formatter
-  const formatINR = (value) => {
-    // Remove everything that isn't a digit
-    const cleanValue = value.replace(/\D/g, "");
-
-    if (!cleanValue) return "";
-
-    // Convert to number
-    const numberValue = parseFloat(cleanValue);
-
-    // Use Indian Locale for formatting (e.g., 1,00,000 instead of 100,000)
-    const formatted = new Intl.NumberFormat("en-IN").format(numberValue);
-
-    return `₹${formatted}`;
-  };
-
-  const formatCurrency = (value) => {
-    const cleanValue = value.replace(/\D/g, "");
-    if (!cleanValue) return "";
-
-    // To make "3" = "$3.00", we treat the cleanValue as the total cents
-    // If you want "3" to stay "3", we remove the division by 100
-    const amount = parseFloat(cleanValue).toFixed(2);
-    return `$${amount.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
-  };
-
+  /* ---------- PRICE HANDLER (DECIMAL SAFE) ---------- */
   const handlePriceChange = (field, value) => {
-    // If the user deletes everything, reset to empty string immediately
-    if (value === "" || value === "₹") {
-      setForm({ ...form, [field]: "" });
-      return;
+    let clean = value.replace(/[₹,]/g, "");
+
+    // allow only numbers + one decimal
+    if (!/^\d*\.?\d*$/.test(clean)) return;
+
+    const updatedForm = {
+      ...form,
+      [field]: clean ? `₹${clean}` : "",
+    };
+
+    const original =
+      field === "originalPrice"
+        ? parseFloat(clean)
+        : parseFloat(updatedForm.originalPrice?.replace(/[₹,]/g, "") || 0);
+
+    const deal =
+      field === "discountPrice"
+        ? parseFloat(clean)
+        : parseFloat(updatedForm.discountPrice?.replace(/[₹,]/g, "") || 0);
+
+    if (original && deal && deal > original) {
+      setPriceError("Deal price cannot be greater than original price");
+    } else {
+      setPriceError("");
     }
 
-    const formatted = formatINR(value);
-    setForm({ ...form, [field]: formatted });
+    setForm(updatedForm);
   };
+  const formatINRWithCommas = (value) => {
+    if (!value) return "";
 
-  /* ---------------- Validation ---------------- */
+    const num = Number(value.replace(/[₹,]/g, ""));
+    if (isNaN(num)) return "";
 
-  const validateForm = () => {
-    let newErrors = {};
-
-    if (!form.title.trim()) {
-      newErrors.title = "Product title is required";
-    }
-
-    const dealPrice = parseFloat(form.discountPrice.replace(/[₹,]/g, ""));
-    const originalPrice = parseFloat(form.originalPrice.replace(/[₹,]/g, ""));
-
-    if (isNaN(dealPrice) || dealPrice <= 0) {
-      newErrors.discountPrice = "Enter a valid deal price";
-    }
-
-    if (!isNaN(originalPrice) && dealPrice >= originalPrice) {
-      newErrors.discountPrice = "Deal price must be less than original price";
-    }
-
-    if (!form.minThreshold || parseInt(form.minThreshold) < 2) {
-      newErrors.minThreshold = "Minimum 2 buyers required";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return `₹${num.toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   };
-
-  /* ---------------- Image Picker (Optional) ---------------- */
-
+  const handleIntegerChange = (value, setter) => {
+    // Allow only digits
+    const clean = value.replace(/[^0-9]/g, "");
+    setter(clean);
+  };
+  /* ---------- IMAGE PICKER ---------- */
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
+    const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
       quality: 0.6,
-      base64: true,
     });
-
-    if (!result.canceled) {
-      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      setImage(base64Image);
-    }
+    if (!res.canceled) setImage(res.assets[0].uri);
   };
 
-  /* ---------------- Submit ---------------- */
+  /* ---------- VALIDATION ---------- */
+  const validate = () => {
+    let e = {};
+    if (!form.title) e.title = "Title required";
+    if (!location) e.location = "Location required";
+    if (!expiresAt) e.expiresAt = "Expiry date required";
+    if (!form.discountPrice) e.discountPrice = "Deal price required";
+    if (!form.minThreshold || Number(form.minThreshold) < 2)
+      e.minThreshold = "Minimum 2 buyers";
 
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  /* ---------- SUBMIT ---------- */
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    if (!validate()) return;
 
     setLoading(true);
     try {
       const payload = {
         ...form,
-        discountPrice: parseFloat(form.discountPrice.replace(/[₹,]/g, "")),
-        originalPrice: parseFloat(form.originalPrice.replace(/[₹,]/g, "")),
-        minThreshold: parseInt(form.minThreshold),
-        imageUrl: image || null, // OPTIONAL
+        location,
+        expiresAt,
+        discountPrice: Number(form.discountPrice),
+        originalPrice: Number(form.originalPrice),
+        minThreshold: Number(form.minThreshold),
+        image,
         createdAt: new Date().toISOString(),
       };
 
-      // 🔥 Replace with API / Firebase call
-      await new Promise((r) => setTimeout(r, 1500));
-
+      console.log("PAYLOAD", payload);
+      await new Promise((r) => setTimeout(r, 1200));
       setShowSuccess(true);
-    } catch (e) {
-      Alert.alert("Error", e.message || "Something went wrong");
+    } catch {
+      Alert.alert("Error", "Something went wrong");
     } finally {
       setLoading(false);
     }
   };
-
-  const ErrorMessage = ({ message }) =>
-    message ? <Text style={styles.errorText}>{message}</Text> : null;
-
-  /* ---------------- UI ---------------- */
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         <Text style={styles.heading}>Create New Deal</Text>
 
-        {/* Image Upload (Optional) */}
-        <TouchableOpacity
-          onPress={pickImage}
-          style={styles.imageBox}
-          activeOpacity={0.8}
-        >
+        {/* IMAGE */}
+        <TouchableOpacity style={styles.imageBox} onPress={pickImage}>
           {image ? (
             <Image source={{ uri: image }} style={styles.image} />
           ) : (
-            <View style={{ alignItems: "center" }}>
-              <Camera size={40} color="#9ca3af" />
-              <Text style={{ color: "#9ca3af", marginTop: 6 }}>
-                Upload Product Image (Optional)
-              </Text>
-            </View>
+            <Camera size={40} color="#9ca3af" />
           )}
         </TouchableOpacity>
 
-        {/* Title */}
+        {/* TITLE */}
         <Text style={styles.label}>Product Title</Text>
         <TextInput
+          style={styles.input}
           placeholder="e.g. iPhone 15 Pro Max"
-          style={[styles.input, errors.title && styles.inputError]}
           value={form.title}
-          onChangeText={(val) => setForm({ ...form, title: val })}
+          onChangeText={(v) => setForm({ ...form, title: v })}
         />
-        <ErrorMessage message={errors.title} />
+        {errors.title && <Text style={styles.error}>{errors.title}</Text>}
 
-        {/* Original Price */}
+        {/* PRICES (2 COLUMNS) */}
         <View style={{ flexDirection: "row", gap: 12 }}>
-          <View className="flex-1">
+          <View style={{ flex: 1 }}>
             <Text style={styles.label}>Original Price</Text>
             <TextInput
-              placeholder="₹01"
-              keyboardType="numeric"
-              className="bg-gray-50 p-4 rounded-xl border border-gray-200"
+              placeholder="₹0.00"
+              keyboardType="decimal-pad"
+              style={styles.input}
               value={form.originalPrice}
-              onChangeText={(val) => handlePriceChange("originalPrice", val)}
+              onChangeText={(v) => handlePriceChange("originalPrice", v)}
+              onBlur={() =>
+                setForm((prev) => ({
+                  ...prev,
+                  originalPrice: formatINRWithCommas(prev.originalPrice),
+                }))
+              }
             />
           </View>
 
@@ -195,59 +177,112 @@ export default function CreateDealScreen({ navigation }) {
             <Text style={styles.label}>Deal Price</Text>
             <TextInput
               placeholder="₹0.00"
-              keyboardType="numeric"
-              style={[styles.input, errors.discountPrice && styles.inputError]}
+              keyboardType="decimal-pad"
+              style={styles.input}
               value={form.discountPrice}
-              onChangeText={(val) => handlePriceChange("discountPrice", val)}
+              onChangeText={(v) => handlePriceChange("discountPrice", v)}
+              onBlur={() =>
+                setForm((prev) => ({
+                  ...prev,
+                  discountPrice: formatINRWithCommas(prev.discountPrice),
+                }))
+              }
             />
-            <ErrorMessage message={errors.discountPrice} />
+            {errors.discountPrice && (
+              <Text style={styles.error}>{errors.discountPrice}</Text>
+            )}
+            {priceError ? <Text style={styles.error}>{priceError}</Text> : null}
           </View>
         </View>
 
-        {/* Min Buyers */}
-        <Text style={styles.label}>Minimum Group Size</Text>
+        {/* MIN BUYERS */}
+        <Text style={styles.label}>Minimum Buyers</Text>
         <TextInput
-          placeholder="Minimum buyers required"
           keyboardType="numeric"
-          style={[styles.input, errors.minThreshold && styles.inputError]}
+          placeholder="e.g. 5"
+          style={styles.input}
           value={form.minThreshold}
-          onChangeText={(val) => setForm({ ...form, minThreshold: val })}
+          onChangeText={(v) =>
+            handleIntegerChange(v, (val) =>
+              setForm({ ...form, minThreshold: val }),
+            )
+          }
         />
-        <ErrorMessage message={errors.minThreshold} />
+        {errors.minThreshold && (
+          <Text style={styles.error}>{errors.minThreshold}</Text>
+        )}
 
-        {/* Submit */}
+        {/* EXPIRES AT (ANDROID SAFE) */}
+        <Text style={styles.label}>Expires At</Text>
+        <TouchableOpacity
+          style={styles.input}
+          onPress={() => setShowDatePicker(true)}
+        >
+          <Text style={{ color: expiresAt ? "#111827" : "#9ca3af" }}>
+            {expiresAt
+              ? new Date(expiresAt).toDateString()
+              : "Select expiry date"}
+          </Text>
+        </TouchableOpacity>
+
+        {showDatePicker && (
+          <DateTimePicker
+            value={expiresAt ? new Date(expiresAt) : new Date()}
+            mode="date" // ← IMPORTANT
+            display="default"
+            onChange={(e, d) => {
+              setShowDatePicker(false);
+              if (d) setExpiresAt(d.toISOString());
+            }}
+          />
+        )}
+
+        {/* LOCATION */}
+        <Text style={styles.label}>Location</Text>
+        <TextInput
+          placeholder="e.g. Mumbai, Andheri West"
+          style={styles.input}
+          value={location}
+          onChangeText={setLocation}
+        />
+        {errors.location && <Text style={styles.error}>{errors.location}</Text>}
+
+        {/* SUBMIT */}
         <TouchableOpacity
           onPress={handleSubmit}
-          disabled={loading}
-          style={[styles.submitBtn, loading && { backgroundColor: "#9ca3af" }]}
+          disabled={loading || !!priceError}
+          style={[
+            styles.submit,
+            (loading || priceError) && { backgroundColor: "#9ca3af" },
+          ]}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Save size={20} color="#fff" />
+              <Save size={18} color="#fff" />
               <Text style={styles.submitText}>Publish Deal</Text>
             </>
           )}
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Success Modal */}
+      {/* SUCCESS */}
       {showSuccess && (
-        <Modal transparent animationType="fade">
+        <Modal transparent>
           <View style={styles.overlay}>
-            <View style={styles.successCard}>
+            <View style={styles.card}>
               <LottieView
                 source={require("../../assets/animations/success-check.json")}
                 autoPlay
                 loop={false}
-                style={{ width: 180, height: 180 }}
+                style={{ width: 160, height: 160 }}
                 onAnimationFinish={() => {
                   setShowSuccess(false);
                   navigation.goBack();
                 }}
               />
-              <Text style={styles.successText}>Deal Published!</Text>
+              <Text style={{ fontWeight: "700" }}>Deal Published!</Text>
             </View>
           </View>
         </Modal>
@@ -256,84 +291,47 @@ export default function CreateDealScreen({ navigation }) {
   );
 }
 
-/* ---------------- Styles ---------------- */
-
+/* ---------- STYLES ---------- */
 const styles = StyleSheet.create({
-  heading: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginBottom: 20,
-    color: "#111827",
-  },
-  label: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginBottom: 4,
-    marginTop: 12,
-  },
+  heading: { fontSize: 22, fontWeight: "700", marginBottom: 12 },
+  label: { marginTop: 12, color: "#6b7280", fontSize: 12 },
   input: {
-    backgroundColor: "#f9fafb",
-    padding: 14,
-    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#e5e7eb",
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#f9fafb",
   },
-  inputError: {
-    borderColor: "#ef4444",
-  },
-  errorText: {
-    color: "#ef4444",
-    fontSize: 12,
-    marginTop: 4,
-  },
+  error: { color: "#ef4444", fontSize: 12, marginTop: 4 },
   imageBox: {
-    height: 180,
+    height: 160,
     backgroundColor: "#f3f4f6",
     borderRadius: 18,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: "#d1d5db",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 10,
-    overflow: "hidden",
   },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
-  submitBtn: {
-    flexDirection: "row",
-    gap: 8,
+  image: { width: "100%", height: "100%" },
+  submit: {
     backgroundColor: "#2563eb",
     marginTop: 30,
-    paddingVertical: 16,
+    padding: 16,
     borderRadius: 18,
+    flexDirection: "row",
     justifyContent: "center",
-    alignItems: "center",
+    gap: 8,
   },
-  submitText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  submitText: { color: "#fff", fontWeight: "700" },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
   },
-  successCard: {
+  card: {
     backgroundColor: "#fff",
     padding: 40,
-    borderRadius: 30,
+    borderRadius: 24,
     alignItems: "center",
-    width: "80%",
-  },
-  successText: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginTop: 10,
-    color: "#111827",
   },
 });
