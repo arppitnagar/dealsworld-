@@ -549,11 +549,6 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 4,
   },
-  expiryText: {
-    fontSize: 12,
-    color: "#64748B",
-    fontWeight: "600",
-  },
   emptyContainer: { alignItems: "center", marginTop: 40 },
   emptyText: {
     textAlign: "center",
