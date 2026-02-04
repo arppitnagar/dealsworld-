@@ -19,6 +19,7 @@ export default function DealDetails({ route, navigation }) {
   const { deal: initialDeal } = route.params;
   const [deal, setDeal] = useState(initialDeal); // Use state to hold the live deal
   const [loading, setLoading] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
   // Use the local 'deal' state for all calculations
   const joins = deal.joinedUsers || 0;
@@ -26,6 +27,20 @@ export default function DealDetails({ route, navigation }) {
   const progress = Math.min(joins / target, 1);
   const isActive = deal.status === "active";
   const isCompleted = deal.status === "completed";
+  const accentColor = isActive
+    ? "#FF4D4D"
+    : isCompleted
+      ? "#10B981"
+      : "#7C3AED";
+
+  const expiryDate = getExpiryDate(deal.expiresAt);
+  const countdown =
+    isActive && expiryDate ? formatCountdown(expiryDate.getTime() - now) : null;
+  const expiryLabel = expiryDate
+    ? expiryDate.getTime() <= now
+      ? `Expired on ${formatDate(expiryDate)}`
+      : `Expires on ${formatDate(expiryDate)}`
+    : null;
 
   const handleEndCampaign = () => {
     Alert.alert(
@@ -71,6 +86,13 @@ export default function DealDetails({ route, navigation }) {
 
     return () => unsubscribe();
   }, [route.params.deal.id]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -139,6 +161,30 @@ export default function DealDetails({ route, navigation }) {
                 ]}
               />
             </View>
+            {countdown && (
+              <View style={styles.countdownRow}>
+                <Ionicons
+                  name="time-outline"
+                  size={14}
+                  color={accentColor}
+                />
+                <Text style={[styles.countdownText, { color: accentColor }]}>
+                  {countdown}
+                </Text>
+              </View>
+            )}
+            {expiryLabel && (
+              <View style={styles.expiryRow}>
+                <Ionicons
+                  name="calendar-outline"
+                  size={14}
+                  color={accentColor}
+                />
+                <Text style={[styles.countdownText, { color: accentColor }]}>
+                  {expiryLabel}
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.descriptionSection}>
@@ -272,4 +318,54 @@ const styles = StyleSheet.create({
     borderColor: "#FECDD3",
   },
   endBtnText: { color: "#E11D48", fontWeight: "800", fontSize: 16 },
+  countdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+  },
+  expiryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+  },
+  countdownText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
 });
+
+function getExpiryDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value?.toDate === "function") return value.toDate();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return "Expired";
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) {
+    return `Ends in ${days}d ${String(hours).padStart(2, "0")}h ${String(
+      minutes,
+    ).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+  }
+  return `Ends in ${String(hours).padStart(2, "0")}:${String(
+    minutes,
+  ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatDate(date) {
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
