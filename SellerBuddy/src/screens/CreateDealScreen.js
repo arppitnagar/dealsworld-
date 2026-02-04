@@ -18,6 +18,7 @@ import LottieView from "lottie-react-native";
 import { db } from "../config/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import * as Yup from "yup";
+import { Ionicons } from "@expo/vector-icons";
 /* ---------- CATEGORY OPTIONS ---------- */
 const CATEGORIES = [
   { label: "Food & Beverages", icon: "🍔" },
@@ -36,6 +37,10 @@ const DELIVERY_MODES = [
   "Pick from Store",
 ];
 
+/* The above code is defining a schema using Yup for validating a deal object. It specifies the
+validation rules for various properties of a deal such as title, description, category, original
+price, discount price, minimum group size, expiry date, location, delivery mode, and delivery
+charge. */
 const dealSchema = Yup.object().shape({
   title: Yup.string()
     .required("Deal title is required")
@@ -45,15 +50,32 @@ const dealSchema = Yup.object().shape({
     .min(10, "Description must be at least 10 characters"),
   category: Yup.string().required("Please select a category"),
   originalPrice: Yup.number()
+    .transform((value, originalValue) =>
+      originalValue === "" ? undefined : value,
+    )
     .typeError("Original price must be a number")
-    .positive("Price must be greater than zero"),
+    .positive("Price must be greater than zero")
+    .nullable(), // Allows the field to be empty
   discountPrice: Yup.number()
+    .transform((value, originalValue) =>
+      originalValue === "" ? undefined : value,
+    )
     .typeError("Deal price must be a number")
     .required("Deal price is required")
     .positive("Price must be greater than zero")
-    .lessThan(
-      Yup.ref("originalPrice"),
+    .test(
+      "is-lower",
       "Deal price must be lower than original price",
+      function (value) {
+        const { originalPrice } = this.parent;
+        // If originalPrice is not provided (null/undefined), the test passes.
+        // If it IS provided, value must be less than originalPrice.
+        return (
+          originalPrice === undefined ||
+          originalPrice === null ||
+          value < originalPrice
+        );
+      },
     ),
   minGroupSize: Yup.number()
     .required("Minimum buyers count is required")
@@ -72,6 +94,16 @@ const dealSchema = Yup.object().shape({
     otherwise: (schema) => schema.nullable(),
   }),
 });
+
+/**
+ * The `CreateDealScreen` function in React Native allows users to create, edit, or view deals with
+ * input validation, image selection, and modal selection for categories and delivery modes.
+ * @returns The `CreateDealScreen` component is being returned. This component contains a form for
+ * creating or editing deals, including fields for deal title, description, prices, minimum buyers,
+ * category, expiry date, location, delivery mode, and delivery charge. It also includes functionality
+ * for image selection, validation, submission, and modals for selecting category and delivery mode.
+ * Additionally, there are styles defined for the component
+ */
 export default function CreateDealScreen({ route, navigation }) {
   // 1. Detect if we are in Edit/View mode
   const deal = route.params?.deal;
@@ -99,7 +131,6 @@ export default function CreateDealScreen({ route, navigation }) {
 
   const [image, setImage] = useState(null);
   const [errors, setErrors] = useState({});
-  const [priceError, setPriceError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -120,6 +151,18 @@ export default function CreateDealScreen({ route, navigation }) {
     })}`;
   };
 
+  /**
+   * The function `handlePriceChange` takes a field and value as input, parses the value to a number,
+   * updates the form with the cleaned value formatted as Indian Rupee, and calculates the original and
+   * discounted prices.
+   * @param field - Field is a string representing the name of the field or property in the form object
+   * that is being updated with the new price value.
+   * @param value - The `value` parameter in the `handlePriceChange` function represents the new value
+   * that is being input for a specific field, such as the original price or discount price. This value
+   * will be cleaned and validated before updating the form with the new price information.
+   * @returns If the value passed to the `handlePriceChange` function is not a valid number, nothing
+   * will be returned. The function will exit early without making any changes to the form state.
+   */
   const handlePriceChange = (field, value) => {
     const clean = parseNumber(value);
     if (!/^\d*\.?\d*$/.test(clean)) return;
@@ -129,17 +172,19 @@ export default function CreateDealScreen({ route, navigation }) {
     const original = Number(parseNumber(updated.originalPrice));
     const deal = Number(parseNumber(updated.discountPrice));
 
-    if (original && deal && deal > original) {
-      setPriceError("Deal price cannot exceed original price");
-    } else {
-      setPriceError("");
-    }
-
     setForm(updated);
   };
 
   /* ---------- MIN BUYERS ---------- */
 
+  /**
+   * The handleMinBuyersChange function removes non-numeric characters from the input value and updates
+   * the minGroupSize property in the form state.
+   * @param value - The `value` parameter in the `handleMinBuyersChange` function likely represents the
+   * input value that is being passed when the function is called. In this case, it seems to be a string
+   * that may contain non-numeric characters. The function uses a regular expression to remove any
+   * non-numeric
+   */
   const handleMinBuyersChange = (value) => {
     const clean = value.replace(/[^0-9]/g, "");
     setForm((p) => ({ ...p, minGroupSize: clean }));
@@ -147,6 +192,10 @@ export default function CreateDealScreen({ route, navigation }) {
 
   /* ---------- IMAGE ---------- */
 
+  /**
+   * The function `pickImage` uses ImagePicker to launch the image library asynchronously and sets the
+   * image URI if an image is selected.
+   */
   const pickImage = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -157,12 +206,20 @@ export default function CreateDealScreen({ route, navigation }) {
 
   /* ---------- VALIDATION ---------- */
 
+  /**
+   * The function `validate` in JavaScript cleans and validates form data, handling errors and returning
+   * a boolean based on validation success.
+   * @returns The `validate` function is returning a boolean value - `true` if the data passes validation
+   * and `false` if there are validation errors.
+   */
   const validate = async () => {
     try {
       // Clean data before validation (removing currency symbols)
       const cleanData = {
         ...form,
-        originalPrice: Number(parseNumber(form.originalPrice)),
+        originalPrice: form.originalPrice
+          ? Number(parseNumber(form.originalPrice))
+          : null,
         discountPrice: Number(parseNumber(form.discountPrice)),
         deliveryCharge: form.deliveryCharge
           ? Number(parseNumber(form.deliveryCharge))
@@ -183,43 +240,55 @@ export default function CreateDealScreen({ route, navigation }) {
     }
   };
 
-  /* ---------- SUBMIT ---------- */
-
+  /**
+   * The function `handleSubmit` handles form submission by validating input, preparing data, and either
+   * updating or adding a deal in a Firestore database.
+   * @returns The `handleSubmit` function is returning a Promise because it is an asynchronous function
+   * declared with the `async` keyword. The function will return a Promise that resolves to `undefined`
+   * unless there is an explicit `return` statement within the function that returns a different value.
+   */
   const handleSubmit = async () => {
     const isValid = await validate();
     if (!isValid) return;
 
     setLoading(true);
     try {
-      await addDoc(collection(db, "deals"), {
+      // 1. Prepare the data object ONCE
+      const dealData = {
         ...form,
-        originalPrice: Number(parseNumber(form.originalPrice)),
-        discountPrice: Number(parseNumber(form.discountPrice)),
-        minGroupSize: Number(form.minGroupSize),
-        descrption: form.description,
+        originalPrice: Number(parseNumber(form.originalPrice)) || 0,
+        discountPrice: Number(parseNumber(form.discountPrice)) || 0,
+        minGroupSize: Number(form.minGroupSize) || 1,
+        description: form.description || "", // Fixed typo from 'descrption'
         deliveryMode: form.deliveryMode,
         title: form.title,
-        image,
-        createdAt: serverTimestamp(),
-        status: "active",
+        image: image || null,
         deliveryCharge:
           form.deliveryMode === "Paid Home Delivery"
-            ? Number(parseNumber(form.deliveryCharge))
+            ? Number(parseNumber(form.deliveryCharge)) || 0
             : 0,
-        minGroupSize: Number(form.minGroupSize),
-      });
+        updatedAt: serverTimestamp(),
+      };
+
+      // 2. Choose whether to UPDATE or ADD
       if (isEditMode) {
-        await updateDoc(doc(db, "deals", deal.id), data);
+        // Use the existing deal ID passed from navigation
+        const dealRef = doc(db, "deals", deal.id);
+        await updateDoc(dealRef, dealData);
       } else {
+        // Add new fields required for a fresh deal
         await addDoc(collection(db, "deals"), {
-          ...data,
+          ...dealData,
           createdAt: serverTimestamp(),
+          currentJoins: 0,
           status: "active",
         });
       }
+
       setShowSuccess(true);
-    } catch {
-      Alert.alert("Error", "Failed to publish deal");
+    } catch (error) {
+      console.error("Detailed Error:", error);
+      Alert.alert("Publish Failed", error.message);
     } finally {
       setLoading(false);
     }
@@ -229,6 +298,26 @@ export default function CreateDealScreen({ route, navigation }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
+      {/* READ-ONLY BANNER */}
+      {/* READ-ONLY BANNER */}
+      {isReadOnly && (
+        <View style={styles.readOnlyBanner}>
+          <View style={styles.bannerLeft}>
+            <Ionicons name="lock-closed" size={16} color="#92400e" />
+            <Text style={styles.readOnlyBannerText}>
+              Completed Deal (Read Only)
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.bannerLink}
+            onPress={() => navigation.navigate("SellerDashboard")}
+          >
+            <Text style={styles.bannerLinkText}>Back to Dashboard</Text>
+            <Ionicons name="arrow-forward" size={14} color="#b45309" />
+          </TouchableOpacity>
+        </View>
+      )}
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         <Text style={styles.heading}>
           {isReadOnly
@@ -334,15 +423,13 @@ export default function CreateDealScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
+                // Only use the error from the Yup validation
                 errors.discountPrice && styles.inputError,
-                ,
-                // Add a grey background style if read-only
                 isReadOnly && styles.readOnlyInput,
               ]}
               keyboardType="decimal-pad"
               placeholder="₹0.00"
               value={form.discountPrice}
-              // This is the core logic change
               editable={!isReadOnly}
               onChangeText={(v) => handlePriceChange("discountPrice", v)}
               onBlur={() =>
@@ -352,7 +439,9 @@ export default function CreateDealScreen({ route, navigation }) {
                 }))
               }
             />
-            {priceError && <Text style={styles.error}>{priceError}</Text>}
+            {errors.discountPrice && (
+              <Text style={styles.error}>{errors.discountPrice}</Text>
+            )}
           </View>
         </View>
 
@@ -404,7 +493,6 @@ export default function CreateDealScreen({ route, navigation }) {
         {errors.category && <Text style={styles.error}>{errors.category}</Text>}
         {errors.category && <Text style={styles.error}>{errors.category}</Text>}
 
-        {/* EXPIRES AT */}
         {/* EXPIRES AT */}
         <Text style={[styles.label, errors.expiresAt && styles.labelError]}>
           Expires At
@@ -521,9 +609,11 @@ export default function CreateDealScreen({ route, navigation }) {
           <TouchableOpacity
             style={[
               styles.submit,
-              (loading || priceError) && { backgroundColor: "#9ca3af" },
+              (loading || errors.discountPrice) && {
+                backgroundColor: "#9ca3af",
+              },
             ]}
-            disabled={loading || !!priceError}
+            disabled={loading || !!errors.discountPrice}
             onPress={handleSubmit}
           >
             {loading ? (
@@ -586,14 +676,22 @@ export default function CreateDealScreen({ route, navigation }) {
 
       {/* SUCCESS */}
       {showSuccess && (
-        <Modal transparent>
+        <Modal transparent animationType="fade">
           <View style={styles.overlay}>
-            <LottieView
-              source={require("../../assets/animations/success-check.json")}
-              autoPlay
-              loop={false}
-              onAnimationFinish={() => navigation.goBack()}
-            />
+            <View style={styles.animationContainer}>
+              <LottieView
+                source={require("../../assets/animations/success-check.json")}
+                autoPlay
+                loop={false}
+                // Set explicit dimensions here
+                style={{ width: 200, height: 200 }}
+                onAnimationFinish={() => {
+                  setShowSuccess(false); // Close modal state
+                  navigation.goBack();
+                }}
+              />
+              <Text style={styles.successText}>Deal Published!</Text>
+            </View>
           </View>
         </Modal>
       )}
@@ -659,5 +757,40 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6", // Light grey
     color: "#6b7280", // Muted text color
     borderColor: "#d1d5db", // Subtle border
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)", // Dim the background
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  animationContainer: {
+    backgroundColor: "#FFF",
+    padding: 30,
+    borderRadius: 20,
+    alignItems: "center",
+    elevation: 5,
+  },
+  successText: {
+    marginTop: 10,
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#0F172A",
+  },
+  readOnlyBanner: {
+    backgroundColor: "#fef3c7", // Light amber/yellow
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f59e0b",
+  },
+  readOnlyBannerText: {
+    color: "#92400e", // Dark amber text
+    fontWeight: "600",
+    fontSize: 14,
+    marginLeft: 8,
   },
 });

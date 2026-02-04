@@ -196,7 +196,7 @@ export default function SellerDashboard({ navigation }) {
           <Text style={styles.sectionTitle}>
             {selectedFilter
               ? `${selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} Deals`
-              : "Recent Campaigns"}
+              : "Live Deals"}
           </Text>
 
           {filteredDeals.length === 0 ? (
