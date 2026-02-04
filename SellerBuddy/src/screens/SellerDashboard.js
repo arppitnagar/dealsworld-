@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Image,
   RefreshControl,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,6 +35,7 @@ export default function SellerDashboard({ navigation }) {
   const [stats, setStats] = useState({ active: 0, scheduled: 0, previous: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Track selected filter: null (all), 'active', 'pending', or 'completed'
   const [selectedFilter, setSelectedFilter] = useState(null);
@@ -116,14 +118,28 @@ export default function SellerDashboard({ navigation }) {
   }, []);
 
   // Filter Logic
-  const filteredDeals = selectedFilter
-    ? deals.filter((d) => {
-        if (selectedFilter === "pending") {
-          return d.status !== "active" && d.status !== "completed";
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const queryTokens = normalizedQuery ? normalizedQuery.split(/\s+/) : [];
+
+  const filteredDeals = deals.filter((deal) => {
+    if (selectedFilter) {
+      if (selectedFilter === "pending") {
+        if (deal.status === "active" || deal.status === "completed") {
+          return false;
         }
-        return d.status === selectedFilter;
-      })
-    : deals;
+      } else if (deal.status !== selectedFilter) {
+        return false;
+      }
+    }
+
+    if (!queryTokens.length) return true;
+
+    const haystack = buildSearchText(deal);
+    const haystackWords = haystack.split(/\s+/);
+    return queryTokens.every((token) =>
+      fuzzyMatchToken(token, haystack, haystackWords),
+    );
+  });
 
   const handleFilterPress = (status) => {
     setSelectedFilter((prev) => (prev === status ? null : status));
@@ -163,6 +179,23 @@ export default function SellerDashboard({ navigation }) {
           {selectedFilter && (
             <TouchableOpacity onPress={() => setSelectedFilter(null)}>
               <Text style={styles.clearText}>Show All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={18} color="#94A3B8" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Smart search by any field..."
+            placeholderTextColor="#94A3B8"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <Ionicons name="close-circle" size={18} color="#94A3B8" />
             </TouchableOpacity>
           )}
         </View>
@@ -401,6 +434,108 @@ function formatDate(date) {
   });
 }
 
+function fuzzyMatchToken(token, haystack, words) {
+  if (!token) return true;
+  if (haystack.includes(token)) return true;
+  if (token.length <= 2) return false;
+
+  const maxDist = token.length >= 8 ? 2 : 1;
+  return words.some((word) => {
+    if (!word) return false;
+    if (word.includes(token)) return true;
+    if (token.length >= 4 && word.length >= token.length) {
+      if (isSubsequence(token, word)) return true;
+    }
+    const lengthDiff = Math.abs(word.length - token.length);
+    if (lengthDiff > maxDist) return false;
+    return limitedEditDistance(token, word, maxDist) <= maxDist;
+  });
+}
+
+function isSubsequence(needle, hay) {
+  let i = 0;
+  let j = 0;
+  while (i < needle.length && j < hay.length) {
+    if (needle[i] === hay[j]) {
+      i += 1;
+    }
+    j += 1;
+  }
+  return i === needle.length;
+}
+
+function limitedEditDistance(a, b, maxDist) {
+  if (a === b) return 0;
+  const aLen = a.length;
+  const bLen = b.length;
+  if (Math.abs(aLen - bLen) > maxDist) return maxDist + 1;
+
+  const prev = new Array(bLen + 1);
+  const curr = new Array(bLen + 1);
+  for (let j = 0; j <= bLen; j += 1) prev[j] = j;
+
+  for (let i = 1; i <= aLen; i += 1) {
+    curr[0] = i;
+    let rowMin = curr[0];
+    const aChar = a[i - 1];
+
+    for (let j = 1; j <= bLen; j += 1) {
+      const cost = aChar === b[j - 1] ? 0 : 1;
+      const del = prev[j] + 1;
+      const ins = curr[j - 1] + 1;
+      const sub = prev[j - 1] + cost;
+      const val = Math.min(del, ins, sub);
+      curr[j] = val;
+      if (val < rowMin) rowMin = val;
+    }
+
+    if (rowMin > maxDist) return maxDist + 1;
+
+    for (let j = 0; j <= bLen; j += 1) {
+      prev[j] = curr[j];
+    }
+  }
+
+  return prev[bLen];
+}
+
+function buildSearchText(deal) {
+  const expiryDate = getExpiryDate(deal.expiresAt);
+  const createdDate = getExpiryDate(deal.createdAt);
+  const updatedDate = getExpiryDate(deal.updatedAt);
+
+  const parts = [
+    deal.id,
+    deal.title,
+    deal.description,
+    deal.category,
+    deal.location,
+    deal.deliveryMode,
+    deal.status,
+    deal.vendorid,
+    deal.originalPrice,
+    deal.discountPrice,
+    deal.minGroupSize,
+    deal.deliveryCharge,
+    expiryDate ? formatDate(expiryDate) : "",
+    createdDate ? formatDate(createdDate) : "",
+    updatedDate ? formatDate(updatedDate) : "",
+  ];
+
+  return parts
+    .map((value) => {
+      if (value === null || value === undefined) return "";
+      if (typeof value === "string") return value;
+      if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+      }
+      if (value instanceof Date) return value.toISOString();
+      return String(value);
+    })
+    .join(" ")
+    .toLowerCase();
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFF" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -421,6 +556,25 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: SPACING,
     marginBottom: 25,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: SPACING,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 20,
+    elevation: 3,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#0F172A",
+    paddingVertical: 0,
   },
   statCard: {
     width: (width - 60) / 3,
