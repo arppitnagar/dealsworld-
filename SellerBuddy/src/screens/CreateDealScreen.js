@@ -18,7 +18,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Camera, Save } from "lucide-react-native";
 import LottieView from "lottie-react-native";
 import { db } from "../config/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import * as Yup from "yup";
 import { Ionicons } from "@expo/vector-icons";
 /* ---------- CATEGORY OPTIONS ---------- */
