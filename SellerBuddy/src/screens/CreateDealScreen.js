@@ -30,7 +30,9 @@ const CATEGORIES = [
   { label: "Travel", icon: "✈️" },
   { label: "Services", icon: "🛠️" },
   { label: "Entertainment", icon: "🎬" },
+  { label: "Other", icon: "🧩" },
 ];
+const CATEGORY_LABELS = CATEGORIES.map((c) => c.label);
 
 /* ---------- DELIVERY MODES ---------- */
 const DELIVERY_MODES = [
@@ -51,6 +53,14 @@ const dealSchema = Yup.object().shape({
     .required("Description is required")
     .min(10, "Description must be at least 10 characters"),
   category: Yup.string().required("Please select a category"),
+  categoryOther: Yup.string().when("category", {
+    is: "Other",
+    then: (schema) =>
+      schema
+        .required("Please specify the category")
+        .min(2, "Category must be at least 2 characters"),
+    otherwise: (schema) => schema.nullable(),
+  }),
   originalPrice: Yup.number()
     .transform((value, originalValue) =>
       originalValue === "" ? undefined : value,
@@ -116,10 +126,14 @@ export default function CreateDealScreen({ route, navigation }) {
   const isExpiryLocked = isReadOnly;
 
   // 2. Initialize state with deal data if it exists
+  const initialCategory = deal?.category || "";
+  const isCustomCategory =
+    initialCategory && !CATEGORY_LABELS.includes(initialCategory);
   const [form, setForm] = useState({
     title: deal?.title || "",
     description: deal?.description || "",
-    category: deal?.category || "",
+    category: isCustomCategory ? "Other" : initialCategory,
+    categoryOther: isCustomCategory ? initialCategory : "",
     deliveryMode: deal?.deliveryMode || "",
     deliveryCharge: deal?.deliveryCharge?.toString() || "",
     originalPrice: deal?.originalPrice?.toString() || "",
@@ -259,11 +273,16 @@ export default function CreateDealScreen({ route, navigation }) {
     setLoading(true);
     try {
       // 1. Prepare the data object ONCE
-      const dealData = {
-        ...form,
-        originalPrice: Number(parseNumber(form.originalPrice)) || 0,
-        discountPrice: Number(parseNumber(form.discountPrice)) || 0,
-        minGroupSize: Number(form.minGroupSize) || 1,
+    const resolvedCategory =
+      form.category === "Other"
+        ? form.categoryOther?.trim() || "Other"
+        : form.category;
+    const dealData = {
+      ...form,
+      category: resolvedCategory,
+      originalPrice: Number(parseNumber(form.originalPrice)) || 0,
+      discountPrice: Number(parseNumber(form.discountPrice)) || 0,
+      minGroupSize: Number(form.minGroupSize) || 1,
         description: form.description || "", // Fixed typo from 'descrption'
         deliveryMode: form.deliveryMode,
         title: form.title,
@@ -589,6 +608,35 @@ export default function CreateDealScreen({ route, navigation }) {
         {errors.category && <Text style={styles.error}>{errors.category}</Text>}
         {errors.category && <Text style={styles.error}>{errors.category}</Text>}
 
+        {form.category === "Other" && (
+          <>
+            <Text
+              style={[
+                styles.label,
+                errors.categoryOther && styles.labelError,
+              ]}
+            >
+              Other Category
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                errors.categoryOther && styles.inputError,
+                isReadOnly && styles.readOnlyInput,
+              ]}
+              placeholder="e.g. Home Appliances"
+              value={form.categoryOther}
+              editable={!isReadOnly}
+              onChangeText={(v) =>
+                setForm((p) => ({ ...p, categoryOther: v }))
+              }
+            />
+            {errors.categoryOther && (
+              <Text style={styles.error}>{errors.categoryOther}</Text>
+            )}
+          </>
+        )}
+
         {/* EXPIRES AT */}
         <Text style={[styles.label, errors.expiresAt && styles.labelError]}>
           Expires At
@@ -738,7 +786,11 @@ export default function CreateDealScreen({ route, navigation }) {
                 key={c.label}
                 style={styles.categoryRow}
                 onPress={() => {
-                  setForm({ ...form, category: c.label });
+                  setForm((p) => ({
+                    ...p,
+                    category: c.label,
+                    categoryOther: c.label === "Other" ? p.categoryOther : "",
+                  }));
                   setCategoryModalVisible(false);
                 }}
               >
@@ -807,10 +859,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 44,
     paddingBottom: Platform.OS === "android" ? 96 : 40,
   },
-  heading: { fontSize: 22, fontWeight: "700", marginBottom: 12 },
+  heading: {
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 18,
+    letterSpacing: 0.3,
+    color: "#0F172A",
+  },
   label: { marginTop: 12, fontSize: 12, color: "#6b7280" },
   input: {
     borderWidth: 1,
