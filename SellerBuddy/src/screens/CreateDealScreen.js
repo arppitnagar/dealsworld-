@@ -2,12 +2,10 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Image,
   ScrollView,
   Alert,
-  ActivityIndicator,
   StyleSheet,
   Modal,
   SafeAreaView,
@@ -18,9 +16,18 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Camera, Save } from "lucide-react-native";
 import LottieView from "lottie-react-native";
 import { db } from "../config/firebase";
-import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
 import * as Yup from "yup";
 import { Ionicons } from "@expo/vector-icons";
+import { AppInput } from "../components/ui/AppInput";
+import { AppButton } from "../components/ui/AppButton";
+import { theme } from "../theme/theme";
 /* ---------- CATEGORY OPTIONS ---------- */
 const CATEGORIES = [
   { label: "Food & Beverages", icon: "🍔" },
@@ -273,16 +280,16 @@ export default function CreateDealScreen({ route, navigation }) {
     setLoading(true);
     try {
       // 1. Prepare the data object ONCE
-    const resolvedCategory =
-      form.category === "Other"
-        ? form.categoryOther?.trim() || "Other"
-        : form.category;
-    const dealData = {
-      ...form,
-      category: resolvedCategory,
-      originalPrice: Number(parseNumber(form.originalPrice)) || 0,
-      discountPrice: Number(parseNumber(form.discountPrice)) || 0,
-      minGroupSize: Number(form.minGroupSize) || 1,
+      const resolvedCategory =
+        form.category === "Other"
+          ? form.categoryOther?.trim() || "Other"
+          : form.category;
+      const dealData = {
+        ...form,
+        category: resolvedCategory,
+        originalPrice: Number(parseNumber(form.originalPrice)) || 0,
+        discountPrice: Number(parseNumber(form.discountPrice)) || 0,
+        minGroupSize: Number(form.minGroupSize) || 1,
         description: form.description || "", // Fixed typo from 'descrption'
         deliveryMode: form.deliveryMode,
         title: form.title,
@@ -305,7 +312,14 @@ export default function CreateDealScreen({ route, navigation }) {
           ...dealData,
           createdAt: serverTimestamp(),
           currentJoins: 0,
+          joinedUsers: 0,
           status: "active",
+          viewsCount: 0,
+          leftCount: 0,
+          joinEventsCount: 0,
+          avgJoinTimeSeconds: null,
+          thresholdReachedAt: null,
+          lastViewedAt: null,
         });
       }
 
@@ -460,127 +474,72 @@ export default function CreateDealScreen({ route, navigation }) {
         </TouchableOpacity>
 
         {/* TITLE */}
-        <Text style={[styles.label, errors.title && styles.labelError]}>
-          Deal Title
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            errors.title && styles.inputError,
-            isReadOnly && styles.readOnlyInput,
-          ]}
+        <AppInput
+          label="Deal Title"
           placeholder="e.g. iPhone 15 Pro Max"
           value={form.title}
-          // This is the core logic change
           editable={!isReadOnly}
           onChangeText={(v) => setForm({ ...form, title: v })}
+          error={errors.title}
         />
-        {errors.title && <Text style={styles.error}>{errors.title}</Text>}
 
         {/* DESCRIPTION */}
-        <Text style={[styles.label, errors.description && styles.labelError]}>
-          Description
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            { height: 100 },
-            errors.description && styles.inputError,
-            // Add a grey background style if read-only
-            isReadOnly && styles.readOnlyInput,
-          ]}
+        <AppInput
+          label="Description"
           placeholder="Describe the deal"
           multiline
           value={form.description}
-          // This is the core logic change
           editable={!isReadOnly}
           onChangeText={(v) => setForm({ ...form, description: v })}
+          error={errors.description}
         />
-        {errors.description && (
-          <Text style={styles.error}>{errors.description}</Text>
-        )}
 
         {/* PRICES */}
         <View style={{ flexDirection: "row", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[
-                styles.label,
-                // Add a grey background style if read-only
-                isReadOnly && styles.readOnlyInput,
-              ]}
-            >
-              Original Price
-            </Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="decimal-pad"
-              placeholder="₹0.00"
-              value={form.originalPrice}
-              // This is the core logic change
-              editable={!isReadOnly}
-              onChangeText={(v) => handlePriceChange("originalPrice", v)}
-              onBlur={() =>
-                setForm((p) => ({
-                  ...p,
-                  originalPrice: formatINRWithCommas(p.originalPrice),
-                }))
-              }
-            />
-          </View>
+          <AppInput
+            containerStyle={{ flex: 1 }}
+            label="Original Price"
+            keyboardType="decimal-pad"
+            placeholder="₹0.00"
+            value={form.originalPrice}
+            editable={!isReadOnly}
+            onChangeText={(v) => handlePriceChange("originalPrice", v)}
+            onBlur={() =>
+              setForm((p) => ({
+                ...p,
+                originalPrice: formatINRWithCommas(p.originalPrice),
+              }))
+            }
+          />
 
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[styles.label, errors.discountPrice && styles.labelError]}
-            >
-              Deal Price
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                // Only use the error from the Yup validation
-                errors.discountPrice && styles.inputError,
-                isReadOnly && styles.readOnlyInput,
-              ]}
-              keyboardType="decimal-pad"
-              placeholder="₹0.00"
-              value={form.discountPrice}
-              editable={!isReadOnly}
-              onChangeText={(v) => handlePriceChange("discountPrice", v)}
-              onBlur={() =>
-                setForm((p) => ({
-                  ...p,
-                  discountPrice: formatINRWithCommas(p.discountPrice),
-                }))
-              }
-            />
-            {errors.discountPrice && (
-              <Text style={styles.error}>{errors.discountPrice}</Text>
-            )}
-          </View>
+          <AppInput
+            containerStyle={{ flex: 1 }}
+            label="Deal Price"
+            keyboardType="decimal-pad"
+            placeholder="₹0.00"
+            value={form.discountPrice}
+            editable={!isReadOnly}
+            onChangeText={(v) => handlePriceChange("discountPrice", v)}
+            onBlur={() =>
+              setForm((p) => ({
+                ...p,
+                discountPrice: formatINRWithCommas(p.discountPrice),
+              }))
+            }
+            error={errors.discountPrice}
+          />
         </View>
 
         {/* MIN BUYERS */}
-        <Text style={[styles.label, errors.minGroupSize && styles.labelError]}>
-          Minimum Buyers
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            errors.minGroupSize && styles.inputError,
-            // Add a grey background style if read-only
-            isReadOnly && styles.readOnlyInput,
-          ]}
+        <AppInput
+          label="Minimum Buyers"
           keyboardType="numeric"
           placeholder="Minimum 2 buyers"
           value={form.minGroupSize}
-          // This is the core logic change
           editable={!isReadOnly}
           onChangeText={handleMinBuyersChange}
+          error={errors.minGroupSize}
         />
-        {errors.minGroupSize && (
-          <Text style={styles.error}>{errors.minGroupSize}</Text>
-        )}
 
         {/* CATEGORY */}
         <Text style={[styles.label, errors.category && styles.labelError]}>
@@ -610,30 +569,14 @@ export default function CreateDealScreen({ route, navigation }) {
 
         {form.category === "Other" && (
           <>
-            <Text
-              style={[
-                styles.label,
-                errors.categoryOther && styles.labelError,
-              ]}
-            >
-              Other Category
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                errors.categoryOther && styles.inputError,
-                isReadOnly && styles.readOnlyInput,
-              ]}
+            <AppInput
+              label="Other Category"
               placeholder="e.g. Home Appliances"
               value={form.categoryOther}
               editable={!isReadOnly}
-              onChangeText={(v) =>
-                setForm((p) => ({ ...p, categoryOther: v }))
-              }
+              onChangeText={(v) => setForm((p) => ({ ...p, categoryOther: v }))}
+              error={errors.categoryOther}
             />
-            {errors.categoryOther && (
-              <Text style={styles.error}>{errors.categoryOther}</Text>
-            )}
           </>
         )}
 
@@ -679,22 +622,14 @@ export default function CreateDealScreen({ route, navigation }) {
         )}
 
         {/* LOCATION */}
-        <Text style={[styles.label, errors.location && styles.labelError]}>
-          Location
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            errors.location && styles.inputError, // Add a grey background style if read-only
-            isReadOnly && styles.readOnlyInput,
-          ]}
+        <AppInput
+          label="Location"
           placeholder="e.g. Mumbai, Andheri"
           value={form.location}
-          // This is the core logic change
           editable={!isReadOnly}
           onChangeText={(v) => setForm({ ...form, location: v })}
+          error={errors.location}
         />
-        {errors.location && <Text style={styles.error}>{errors.location}</Text>}
 
         {/* DELIVERY MODE */}
         <Text style={[styles.label, errors.deliveryMode && styles.labelError]}>
@@ -725,16 +660,11 @@ export default function CreateDealScreen({ route, navigation }) {
         {/* DELIVERY CHARGE (ONLY FOR PAID DELIVERY) */}
         {form.deliveryMode === "Paid Home Delivery" && (
           <>
-            <Text style={styles.label}>Delivery Charge</Text>
-            <TextInput
-              style={[
-                styles.input, // Add a grey background style if read-only
-                isReadOnly && styles.readOnlyInput,
-              ]}
+            <AppInput
+              label="Delivery Charge"
               keyboardType="decimal-pad"
               placeholder="₹0.00"
               value={form.deliveryCharge}
-              // This is the core logic change
               editable={!isReadOnly}
               onChangeText={(v) =>
                 setForm({ ...form, deliveryCharge: v.replace(/[₹,]/g, "") })
@@ -745,35 +675,22 @@ export default function CreateDealScreen({ route, navigation }) {
                   deliveryCharge: formatINRWithCommas(p.deliveryCharge),
                 }))
               }
+              error={errors.deliveryCharge}
             />
-            {errors.deliveryCharge && (
-              <Text style={styles.error}>{errors.deliveryCharge}</Text>
-            )}
           </>
         )}
 
         {/* SUBMIT */}
         {/* Only show the button if NOT in Read Only mode */}
         {!isReadOnly && (
-          <TouchableOpacity
-            style={[
-              styles.submit,
-              (loading || errors.discountPrice) && {
-                backgroundColor: "#9ca3af",
-              },
-            ]}
-            disabled={loading || !!errors.discountPrice}
+          <AppButton
+            title="Publish Deal"
             onPress={handleSubmit}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Save color="#fff" size={18} />
-                <Text style={styles.submitText}>Publish Deal</Text>
-              </>
-            )}
-          </TouchableOpacity>
+            loading={loading}
+            disabled={loading || !!errors.discountPrice}
+            leftIcon={<Save color="#fff" size={18} />}
+            style={{ marginTop: 30 }}
+          />
         )}
       </ScrollView>
 
@@ -856,7 +773,7 @@ export default function CreateDealScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: theme.colors.background,
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -868,17 +785,23 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 18,
     letterSpacing: 0.3,
-    color: "#0F172A",
+    color: theme.colors.text,
   },
-  label: { marginTop: 12, fontSize: 12, color: "#6b7280" },
+  label: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.textMuted,
+  },
   input: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: theme.colors.border,
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
+    color: theme.colors.text,
   },
-  error: { color: "#ef4444", fontSize: 12, marginTop: 4 },
+  error: { color: theme.colors.error, fontSize: 12, marginTop: 4 },
   imageBox: {
     height: 160,
     backgroundColor: "#f3f4f6",
@@ -887,16 +810,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   image: { width: "100%", height: "100%" },
-  submit: {
-    backgroundColor: "#2563eb",
-    marginTop: 30,
-    padding: 16,
-    borderRadius: 18,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-  },
-  submitText: { color: "#fff", fontWeight: "700" },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -915,15 +828,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   inputError: {
-    borderColor: "#ef4444",
+    borderColor: theme.colors.error,
   },
 
   labelError: {
-    color: "#ef4444",
+    color: theme.colors.error,
   },
   readOnlyInput: {
-    backgroundColor: "#f3f4f6", // Light grey
-    color: "#6b7280", // Muted text color
+    backgroundColor: theme.colors.surfaceMuted, // Light grey
+    color: theme.colors.textMuted, // Muted text color
     borderColor: "#d1d5db", // Subtle border
   },
   overlay: {

@@ -16,24 +16,47 @@ import { doc, updateDoc, onSnapshot } from "firebase/firestore";
 const { width } = Dimensions.get("window");
 
 export default function DealDetails({ route, navigation }) {
-  const { deal: initialDeal } = route.params;
-  const [deal, setDeal] = useState(initialDeal); // Use state to hold the live deal
+  const initialDeal = route?.params?.deal;
+  const [deal, setDeal] = useState(normalizeDeal(initialDeal)); // Use state to hold the live deal
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   // Use the local 'deal' state for all calculations
-  const joins = deal.joinedUsers || 0;
-  const target = deal.minGroupSize || 1; // Updated to match your CreateDeal field name
-  const progress = Math.min(joins / target, 1);
-  const isActive = deal.status === "active";
-  const isCompleted = deal.status === "completed";
+  const joinsCount =
+    safeGet(deal, "joinedUsers") ??
+    safeGet(deal, "currentJoins") ??
+    safeGet(deal, "joinedCount") ??
+    0;
+  const viewsCount = safeGet(deal, "viewsCount") ?? safeGet(deal, "views") ?? null;
+  const leftCount = safeGet(deal, "leftUsers") ?? safeGet(deal, "leftCount") ?? null;
+  const avgJoinTimeMs = safeGet(deal, "avgJoinTimeMs");
+  const avgJoinTimeSeconds =
+    safeGet(deal, "avgJoinTimeSeconds") ??
+    safeGet(deal, "avgJoinTime") ??
+    (avgJoinTimeMs ? Math.round(avgJoinTimeMs / 1000) : null);
+  const conversionRate =
+    viewsCount && viewsCount > 0 ? (joinsCount / viewsCount) * 100 : null;
+  const dropOffRate =
+    leftCount !== null && joinsCount > 0 ? (leftCount / joinsCount) * 100 : null;
+  const createdAtDate = getExpiryDate(safeGet(deal, "createdAt"));
+  const thresholdReachedDate = getExpiryDate(
+    safeGet(deal, "thresholdReachedAt"),
+  );
+  const timeToThresholdSeconds =
+    createdAtDate && thresholdReachedDate
+      ? Math.round((thresholdReachedDate.getTime() - createdAtDate.getTime()) / 1000)
+      : null;
+  const target = safeGet(deal, "minGroupSize") || 1; // Updated to match your CreateDeal field name
+  const progress = Math.min(joinsCount / target, 1);
+  const isActive = safeGet(deal, "status") === "active";
+  const isCompleted = safeGet(deal, "status") === "completed";
   const accentColor = isActive
     ? "#FF4D4D"
     : isCompleted
       ? "#10B981"
       : "#7C3AED";
 
-  const expiryDate = getExpiryDate(deal.expiresAt);
+  const expiryDate = getExpiryDate(safeGet(deal, "expiresAt"));
   const countdown =
     isActive && expiryDate ? formatCountdown(expiryDate.getTime() - now) : null;
   const expiryLabel = expiryDate
@@ -69,8 +92,9 @@ export default function DealDetails({ route, navigation }) {
   };
 
   useEffect(() => {
+    if (!initialDeal || !initialDeal.id) return;
     // Use route.params.deal.id directly to ensure the listener starts correctly
-    const dealRef = doc(db, "deals", route.params.deal.id);
+    const dealRef = doc(db, "deals", initialDeal.id);
 
     const unsubscribe = onSnapshot(
       dealRef,
@@ -85,7 +109,7 @@ export default function DealDetails({ route, navigation }) {
     );
 
     return () => unsubscribe();
-  }, [route.params.deal.id]);
+  }, [initialDeal?.id]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -120,29 +144,86 @@ export default function DealDetails({ route, navigation }) {
               <Text style={styles.title}>{deal.title}</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.editBtn}
-              onPress={() => navigation.navigate("CreateDeal", { deal })} // Passing the deal object here
-            >
-              <Ionicons
-                name={isCompleted ? "eye-outline" : "create-outline"}
-                size={20}
-                color="#7C3AED"
-              />
-              <Text style={styles.editBtnText}>
-                {isCompleted ? "View" : "Edit"}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.titleActions}>
+              <TouchableOpacity
+                style={styles.chatBtn}
+                onPress={() => navigation.navigate("DealChat", { deal })}
+              >
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={18}
+                  color="#0F172A"
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => navigation.navigate("CreateDeal", { deal })} // Passing the deal object here
+              >
+                <Ionicons
+                  name={isCompleted ? "eye-outline" : "create-outline"}
+                  size={20}
+                  color="#7C3AED"
+                />
+                <Text style={styles.editBtnText}>
+                  {isCompleted ? "View" : "Edit"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.statsGrid}>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>Current Joins</Text>
-              <Text style={styles.statValue}>{joins}</Text>
+              <Text style={styles.statValue}>{joinsCount}</Text>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>Target</Text>
               <Text style={styles.statValue}>{target}</Text>
+            </View>
+          </View>
+
+          <View style={styles.insightsSection}>
+            <Text style={styles.sectionTitle}>Insights</Text>
+            <View style={styles.insightsGrid}>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Views</Text>
+                <Text style={styles.insightValue}>
+                  {viewsCount !== null ? formatNumber(viewsCount) : "—"}
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Conversion</Text>
+                <Text style={styles.insightValue}>
+                  {conversionRate !== null
+                    ? `${conversionRate.toFixed(1)}%`
+                    : "—"}
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Avg Join Time</Text>
+                <Text style={styles.insightValue}>
+                  {avgJoinTimeSeconds !== null
+                    ? formatDuration(avgJoinTimeSeconds)
+                    : "—"}
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Time to Threshold</Text>
+                <Text style={styles.insightValue}>
+                  {timeToThresholdSeconds !== null
+                    ? formatDuration(timeToThresholdSeconds)
+                    : "—"}
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Drop-off Rate</Text>
+                <Text style={styles.insightValue}>
+                  {dropOffRate !== null
+                    ? `${dropOffRate.toFixed(1)}%`
+                    : "—"}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -240,6 +321,22 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 20,
   },
+  titleActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginLeft: 12,
+  },
+  chatBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
   category: {
     color: "#7C3AED",
     fontWeight: "800",
@@ -261,6 +358,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 25,
+  },
+  insightsSection: {
+    marginBottom: 24,
+  },
+  insightsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  insightCard: {
+    width: (width - 60) / 2,
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  insightLabel: {
+    color: "#64748B",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  insightValue: {
+    color: "#0F172A",
+    fontSize: 16,
+    fontWeight: "800",
   },
   statBox: {
     width: (width - 60) / 2,
@@ -368,4 +494,42 @@ function formatDate(date) {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatDuration(totalSeconds) {
+  if (!Number.isFinite(totalSeconds)) return "—";
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined) return "—";
+  return Number(value).toLocaleString("en-IN");
+}
+
+function normalizeDeal(input) {
+  if (!input) return {};
+  if (typeof input?.data === "function") {
+    const data = input.data();
+    return { id: input.id, ...data };
+  }
+  return input;
+}
+
+function safeGet(obj, key) {
+  try {
+    return obj ? obj[key] : undefined;
+  } catch (error) {
+    return undefined;
+  }
 }

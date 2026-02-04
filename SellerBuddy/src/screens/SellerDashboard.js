@@ -73,16 +73,34 @@ export default function SellerDashboard({ navigation }) {
           const shouldComplete = data.status === "active" && isExpired;
           const nextStatus = shouldComplete ? "completed" : data.status;
 
-          if (shouldComplete) {
-            updateDoc(doc.ref, {
-              status: "completed",
-              updatedAt: serverTimestamp(),
-            }).catch((error) => {
-              console.error("Failed to update expired deal:", error);
+          const currentJoins = data.currentJoins ?? data.joinedUsers ?? 0;
+          const minGroupSize = data.minGroupSize ?? 1;
+          const shouldSetThreshold =
+            !data.thresholdReachedAt && currentJoins >= minGroupSize;
+
+          if (shouldComplete || shouldSetThreshold) {
+            const updates = {};
+            if (shouldComplete) {
+              updates.status = "completed";
+            }
+            if (shouldSetThreshold) {
+              updates.thresholdReachedAt = serverTimestamp();
+            }
+            updates.updatedAt = serverTimestamp();
+
+            updateDoc(doc.ref, updates).catch((error) => {
+              console.error("Failed to update deal:", error);
             });
           }
 
-          dealsList.push({ id: doc.id, ...data, status: nextStatus });
+          dealsList.push({
+            id: doc.id,
+            ...data,
+            status: nextStatus,
+            thresholdReachedAt: shouldSetThreshold
+              ? new Date(nowMs)
+              : data.thresholdReachedAt,
+          });
 
           if (nextStatus === "active") {
             activeCount++;

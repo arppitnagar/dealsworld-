@@ -3,6 +3,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import DealDetails from "./src/screens/DealDetails";
+import DealChat from "./src/screens/DealChat";
 import SellerDashboard from "./src/screens/SellerDashboard";
 import CreateDealScreen from "./src/screens/CreateDealScreen";
 import { AuthProvider } from "./src/context/AuthContext";
@@ -26,6 +27,11 @@ export default function App() {
               name="DealDetails"
               component={DealDetails}
               options={{ title: "Deal Details" }}
+            />
+            <Stack.Screen
+              name="DealChat"
+              component={DealChat}
+              options={{ title: "Deal Chat" }}
             />
           </Stack.Navigator>
         </NavigationContainer>

@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   Alert,
-  ActivityIndicator,
+  StyleSheet,
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { AppInput } from "../components/ui/AppInput";
+import { AppButton } from "../components/ui/AppButton";
+import { theme } from "../theme/theme";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -28,34 +29,47 @@ export default function LoginScreen() {
   };
 
   return (
-    <View className="flex-1 justify-center p-6 bg-white">
-      <Text className="text-3xl font-bold mb-8 color-slate-900">
-        Seller Login
-      </Text>
-      <TextInput
+    <View style={styles.container}>
+      <Text style={styles.title}>Seller Login</Text>
+      <AppInput
+        label="Email"
         placeholder="Email"
-        className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-200"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
+        containerStyle={{ marginTop: 0 }}
       />
-      <TextInput
+      <AppInput
+        label="Password"
         placeholder="Password"
         secureTextEntry
-        className="bg-gray-50 p-4 rounded-xl mb-6 border border-gray-200"
         value={password}
         onChangeText={setPassword}
       />
-      <TouchableOpacity
+      <AppButton
+        title="Sign In"
         onPress={handleLogin}
-        className="bg-blue-600 p-4 rounded-xl items-center"
-      >
-        {loading ? (
-          <ActivityIndicator color="white" />
-        ) : (
-          <Text className="text-white font-bold">Sign In</Text>
-        )}
-      </TouchableOpacity>
+        loading={loading}
+        style={styles.submit}
+      />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.background,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xl,
+  },
+  submit: {
+    marginTop: theme.spacing.lg,
+  },
+});
