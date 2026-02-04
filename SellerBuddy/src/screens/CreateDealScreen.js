@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Modal,
   SafeAreaView,
+  Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -108,8 +109,11 @@ const dealSchema = Yup.object().shape({
 export default function CreateDealScreen({ route, navigation }) {
   // 1. Detect if we are in Edit/View mode
   const deal = route.params?.deal;
-  const isEditMode = !!deal;
-  const isReadOnly = deal?.status === "completed";
+  const isCompleted = deal?.status === "completed";
+  const [isDuplicateMode, setIsDuplicateMode] = useState(false);
+  const isEditMode = !!deal && !isDuplicateMode;
+  const isReadOnly = isCompleted && !isDuplicateMode;
+  const isExpiryLocked = isReadOnly;
 
   // 2. Initialize state with deal data if it exists
   const [form, setForm] = useState({
@@ -301,27 +305,116 @@ export default function CreateDealScreen({ route, navigation }) {
     <SafeAreaView style={styles.screen}>
       {/* READ-ONLY BANNER */}
       {/* READ-ONLY BANNER */}
-      {isReadOnly && (
+      {isCompleted && (
         <View style={styles.readOnlyBanner}>
           <View style={styles.bannerAccent} />
-          <View style={styles.bannerLeft}>
-            <Ionicons name="lock-closed" size={16} color="#92400e" />
-            <Text style={styles.readOnlyBannerText}>
-              This deal has been completed. Editing is disabled; you may create
-              a duplicate deal.
-            </Text>
-          </View>
+          <View style={styles.bannerContent}>
+            {!isDuplicateMode && (
+              <View style={styles.bannerHeader}>
+                <Ionicons name="lock-closed" size={16} color="#92400e" />
+                <Text style={styles.readOnlyBannerText}>
+                  This deal has been completed. Editing is disabled; you may
+                  create a duplicate deal.
+                </Text>
+              </View>
+            )}
 
-          <TouchableOpacity
-            style={styles.bannerLink}
-            onPress={() => navigation.navigate("SellerDashboard")}
-          >
-            <Text style={styles.bannerLinkText}>Dashboard</Text>
-            <Ionicons name="arrow-forward" size={14} color="#ffffff" />
-          </TouchableOpacity>
+            <View
+              style={[
+                styles.bannerActions,
+                isDuplicateMode && styles.bannerActionsCompact,
+              ]}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.bannerActionCard,
+                  isDuplicateMode && styles.bannerActionCardCompact,
+                ]}
+                onPress={() => setIsDuplicateMode(true)}
+              >
+                <View style={styles.bannerActionContent}>
+                  <View
+                    style={[
+                      styles.bannerActionIconBox,
+                      isDuplicateMode && styles.bannerActionIconBoxCompact,
+                    ]}
+                  >
+                    <Ionicons
+                      name="copy-outline"
+                      size={isDuplicateMode ? 16 : 18}
+                      color="#ffffff"
+                    />
+                  </View>
+                  <View>
+                    <Text
+                      style={[
+                        styles.bannerActionTitle,
+                        isDuplicateMode && styles.bannerActionTitleCompact,
+                      ]}
+                    >
+                      Duplicate
+                    </Text>
+                    {!isDuplicateMode && (
+                      <Text style={styles.bannerActionSub}>
+                        Create an editable copy
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <Ionicons
+                  name="arrow-forward"
+                  size={isDuplicateMode ? 16 : 18}
+                  color="rgba(255,255,255,0.4)"
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.bannerActionCard,
+                  isDuplicateMode && styles.bannerActionCardCompact,
+                ]}
+                onPress={() => navigation.navigate("SellerDashboard")}
+              >
+                <View style={styles.bannerActionContent}>
+                  <View
+                    style={[
+                      styles.bannerActionIconBox,
+                      isDuplicateMode && styles.bannerActionIconBoxCompact,
+                    ]}
+                  >
+                    <Ionicons
+                      name="grid-outline"
+                      size={isDuplicateMode ? 16 : 18}
+                      color="#ffffff"
+                    />
+                  </View>
+                  <View>
+                    <Text
+                      style={[
+                        styles.bannerActionTitle,
+                        isDuplicateMode && styles.bannerActionTitleCompact,
+                      ]}
+                    >
+                      Dashboard
+                    </Text>
+                    {!isDuplicateMode && (
+                      <Text style={styles.bannerActionSub}>
+                        Back to overview
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <Ionicons
+                  name="arrow-forward"
+                  size={isDuplicateMode ? 16 : 18}
+                  color="rgba(255,255,255,0.4)"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       )}
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.heading}>
           {isReadOnly
             ? "View Deal"
@@ -501,26 +594,31 @@ export default function CreateDealScreen({ route, navigation }) {
           Expires At
         </Text>
 
-        <View pointerEvents={isReadOnly ? "none" : "auto"}>
+        <View pointerEvents={isExpiryLocked ? "none" : "auto"}>
           <TouchableOpacity
             style={[
               styles.input,
               errors.expiresAt && styles.inputError,
-              isReadOnly && styles.readOnlyInput, // Apply grey background here
+              isExpiryLocked && styles.readOnlyInput, // Apply grey background here
             ]}
             // TouchableOpacity uses 'disabled', not 'editable'
-            disabled={isReadOnly}
+            disabled={isExpiryLocked}
             onPress={() => setShowDatePicker(true)}
           >
-            <Text style={isReadOnly ? { color: "#64748b" } : { color: "#000" }}>
+            <Text
+              style={isExpiryLocked ? { color: "#64748b" } : { color: "#000" }}
+            >
               {form.expiresAt
                 ? new Date(form.expiresAt).toDateString()
                 : "Select expiry date"}
             </Text>
           </TouchableOpacity>
         </View>
+        {errors.expiresAt && (
+          <Text style={styles.error}>{errors.expiresAt}</Text>
+        )}
 
-        {showDatePicker && !isReadOnly && (
+        {showDatePicker && !isExpiryLocked && (
           <DateTimePicker
             value={form.expiresAt instanceof Date ? form.expiresAt : new Date()}
             mode="date"
@@ -708,6 +806,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: Platform.OS === "android" ? 96 : 40,
+  },
   heading: { fontSize: 22, fontWeight: "700", marginBottom: 12 },
   label: { marginTop: 12, fontSize: 12, color: "#6b7280" },
   input: {
@@ -715,7 +817,7 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
     padding: 14,
     borderRadius: 14,
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#ffffff",
   },
   error: { color: "#ef4444", fontSize: 12, marginTop: 4 },
   imageBox: {
@@ -787,8 +889,8 @@ const styles = StyleSheet.create({
   readOnlyBanner: {
     backgroundColor: "#fff7ed", // Soft amber
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
     paddingVertical: 16,
     paddingHorizontal: 16,
     marginTop: 32,
@@ -809,30 +911,75 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 12,
   },
-  bannerLeft: {
+  bannerContent: {
+    flex: 1,
+  },
+  bannerHeader: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
-    marginRight: 10,
   },
   readOnlyBannerText: {
     color: "#92400e", // Dark amber text
     fontWeight: "600",
     fontSize: 14,
     marginLeft: 8,
+    flexShrink: 1,
   },
-  bannerLink: {
+  bannerActions: {
+    flexDirection: "column",
+    gap: 12,
+    marginTop: 12,
+  },
+  bannerActionsCompact: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+  },
+  bannerActionCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#b45309",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
+    justifyContent: "space-between",
+    backgroundColor: "#0F172A",
+    padding: 14,
+    borderRadius: 24,
+    elevation: 6,
   },
-  bannerLinkText: {
-    color: "#ffffff",
-    fontWeight: "600",
+  bannerActionCardCompact: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    elevation: 4,
+  },
+  bannerActionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  bannerActionIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  bannerActionIconBoxCompact: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    marginRight: 8,
+  },
+  bannerActionTitle: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  bannerActionTitleCompact: {
     fontSize: 12,
-    marginRight: 6,
+  },
+  bannerActionSub: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 11,
   },
 });

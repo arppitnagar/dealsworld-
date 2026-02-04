@@ -30,6 +30,7 @@ export default function SellerDashboard({ navigation }) {
   const [deals, setDeals] = useState([]);
   const [stats, setStats] = useState({ active: 0, scheduled: 0, previous: 0 });
   const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
   // Track selected filter: null (all), 'active', 'pending', or 'completed'
   const [selectedFilter, setSelectedFilter] = useState(null);
@@ -88,6 +89,13 @@ export default function SellerDashboard({ navigation }) {
 
     return () => unsubscribe();
   }, [vendorid]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Filter Logic
   const filteredDeals = selectedFilter
@@ -209,6 +217,7 @@ export default function SellerDashboard({ navigation }) {
               <DealCard
                 key={deal.id}
                 deal={deal}
+                now={now}
                 onPress={() => navigation.navigate("DealDetails", { deal })}
               />
             ))
@@ -242,7 +251,7 @@ function StatCard({ title, count, color, bgColor, icon, onPress, isSelected }) {
 }
 
 // FIXED: Added 'onPress' to the arguments here
-function DealCard({ deal, onPress }) {
+function DealCard({ deal, onPress, now }) {
   const joins = deal.joinedUsers || 0;
   const target = deal.minGroupSize || 1;
   const progress = Math.min(joins / target, 1);
@@ -252,6 +261,11 @@ function DealCard({ deal, onPress }) {
       : deal.status === "completed"
         ? "#10B981"
         : "#7C3AED";
+  const expiryDate = getExpiryDate(deal.expiresAt);
+  const countdown =
+    deal.status === "active" && expiryDate
+      ? formatCountdown(expiryDate.getTime() - now)
+      : null;
 
   return (
     <TouchableOpacity
@@ -308,10 +322,44 @@ function DealCard({ deal, onPress }) {
           <Text style={styles.joinCount}>
             {joins} / {target} Joined
           </Text>
+          {countdown && (
+            <View style={styles.countdownRow}>
+              <Ionicons name="time-outline" size={14} color={accentColor} />
+              <Text style={[styles.countdownText, { color: accentColor }]}>
+                {countdown}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
   );
+}
+
+function getExpiryDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value?.toDate === "function") return value.toDate();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return "Expired";
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) {
+    return `Ends in ${days}d ${String(hours).padStart(2, "0")}h ${String(
+      minutes,
+    ).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+  }
+  return `Ends in ${String(hours).padStart(2, "0")}:${String(
+    minutes,
+  ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 const styles = StyleSheet.create({
@@ -445,6 +493,16 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontWeight: "700",
     textTransform: "uppercase",
+  },
+  countdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+  },
+  countdownText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   emptyContainer: { alignItems: "center", marginTop: 40 },
   emptyText: {
