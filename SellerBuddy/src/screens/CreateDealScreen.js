@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Modal,
+  SafeAreaView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -297,15 +298,17 @@ export default function CreateDealScreen({ route, navigation }) {
   /* ---------- UI ---------- */
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+    <SafeAreaView style={styles.screen}>
       {/* READ-ONLY BANNER */}
       {/* READ-ONLY BANNER */}
       {isReadOnly && (
         <View style={styles.readOnlyBanner}>
+          <View style={styles.bannerAccent} />
           <View style={styles.bannerLeft}>
             <Ionicons name="lock-closed" size={16} color="#92400e" />
             <Text style={styles.readOnlyBannerText}>
-              Completed Deal (Read Only)
+              This deal has been completed. Editing is disabled; you may create
+              a duplicate deal.
             </Text>
           </View>
 
@@ -313,8 +316,8 @@ export default function CreateDealScreen({ route, navigation }) {
             style={styles.bannerLink}
             onPress={() => navigation.navigate("SellerDashboard")}
           >
-            <Text style={styles.bannerLinkText}>Back to Dashboard</Text>
-            <Ionicons name="arrow-forward" size={14} color="#b45309" />
+            <Text style={styles.bannerLinkText}>Dashboard</Text>
+            <Ionicons name="arrow-forward" size={14} color="#ffffff" />
           </TouchableOpacity>
         </View>
       )}
@@ -695,12 +698,16 @@ export default function CreateDealScreen({ route, navigation }) {
           </View>
         </Modal>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
 /* ---------- STYLES ---------- */
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
   heading: { fontSize: 22, fontWeight: "700", marginBottom: 12 },
   label: { marginTop: 12, fontSize: 12, color: "#6b7280" },
   input: {
@@ -778,19 +785,54 @@ const styles = StyleSheet.create({
     color: "#0F172A",
   },
   readOnlyBanner: {
-    backgroundColor: "#fef3c7", // Light amber/yellow
+    backgroundColor: "#fff7ed", // Soft amber
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f59e0b",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginTop: 32,
+    marginHorizontal: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#f59e0b",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  bannerAccent: {
+    width: 8,
+    alignSelf: "stretch",
+    backgroundColor: "#b45309",
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  bannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginRight: 10,
   },
   readOnlyBannerText: {
     color: "#92400e", // Dark amber text
     fontWeight: "600",
     fontSize: 14,
     marginLeft: 8,
+  },
+  bannerLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#b45309",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  bannerLinkText: {
+    color: "#ffffff",
+    fontWeight: "600",
+    fontSize: 12,
+    marginRight: 6,
   },
 });
