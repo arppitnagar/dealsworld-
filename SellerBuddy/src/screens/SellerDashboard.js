@@ -20,6 +20,9 @@ import {
   where,
   onSnapshot,
   orderBy,
+  doc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 
 const { width } = Dimensions.get("window");
@@ -59,14 +62,29 @@ export default function SellerDashboard({ navigation }) {
         let activeCount = 0;
         let scheduledCount = 0;
         let previousCount = 0;
+        const nowMs = Date.now();
 
         snapshot.forEach((doc) => {
           const data = doc.data();
-          dealsList.push({ id: doc.id, ...data });
+          const expiryDate = getExpiryDate(data.expiresAt);
+          const isExpired = expiryDate && expiryDate.getTime() <= nowMs;
+          const shouldComplete = data.status === "active" && isExpired;
+          const nextStatus = shouldComplete ? "completed" : data.status;
 
-          if (data.status === "active") {
+          if (shouldComplete) {
+            updateDoc(doc.ref, {
+              status: "completed",
+              updatedAt: serverTimestamp(),
+            }).catch((error) => {
+              console.error("Failed to update expired deal:", error);
+            });
+          }
+
+          dealsList.push({ id: doc.id, ...data, status: nextStatus });
+
+          if (nextStatus === "active") {
             activeCount++;
-          } else if (data.status === "completed") {
+          } else if (nextStatus === "completed") {
             previousCount++;
           } else {
             scheduledCount++;
@@ -266,6 +284,11 @@ function DealCard({ deal, onPress, now }) {
     deal.status === "active" && expiryDate
       ? formatCountdown(expiryDate.getTime() - now)
       : null;
+  const expiryLabel = expiryDate
+    ? expiryDate.getTime() <= now
+      ? `Expired on ${formatDate(expiryDate)}`
+      : `Expires on ${formatDate(expiryDate)}`
+    : null;
 
   return (
     <TouchableOpacity
@@ -330,6 +353,14 @@ function DealCard({ deal, onPress, now }) {
               </Text>
             </View>
           )}
+          {expiryLabel && (
+            <View style={styles.expiryRow}>
+              <Ionicons name="calendar-outline" size={14} color={accentColor} />
+              <Text style={[styles.countdownText, { color: accentColor }]}>
+                {expiryLabel}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -360,6 +391,14 @@ function formatCountdown(ms) {
   return `Ends in ${String(hours).padStart(2, "0")}:${String(
     minutes,
   ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatDate(date) {
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 const styles = StyleSheet.create({
@@ -503,6 +542,17 @@ const styles = StyleSheet.create({
   countdownText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  expiryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  expiryText: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "600",
   },
   emptyContainer: { alignItems: "center", marginTop: 40 },
   emptyText: {
