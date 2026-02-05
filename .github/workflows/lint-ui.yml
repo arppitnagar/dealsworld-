@@ -1,0 +1,30 @@
+name: UI Lint
+
+on:
+  push:
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+
+jobs:
+  lint-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Run UI Lints
+        run: npm run lint:ui

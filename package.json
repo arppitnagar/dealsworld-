@@ -1,0 +1,16 @@
+{
+  "name": "dealsworld",
+  "private": true,
+  "scripts": {
+    "lint:colors": "node scripts/check-colors.js",
+    "lint:spacing": "node scripts/check-spacing.js",
+    "lint:typography": "node scripts/check-typography.js",
+    "lint:ui": "npm run lint:colors && npm run lint:spacing && npm run lint:typography",
+    "hooks:install": "node scripts/install-git-hooks.js",
+    "setup:ui": "npm run hooks:install && npm run lint:ui"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
