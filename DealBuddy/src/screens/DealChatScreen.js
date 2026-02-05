@@ -11,29 +11,25 @@ import {
   StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../config/firebase";
 import {
   collection,
   addDoc,
-  doc,
   onSnapshot,
   orderBy,
   query,
+  doc,
   setDoc,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
 
-export default function DealChat({ route, navigation }) {
-  const deal = route?.params?.deal;
-  const dealId = deal?.id;
+export default function DealChatScreen({ route, navigation }) {
+  const { dealId, deal } = route.params || {};
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
-  const [isBuyerTyping, setIsBuyerTyping] = useState(false);
+  const [isSellerTyping, setIsSellerTyping] = useState(false);
   const listRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const insets = useSafeAreaInsets();
@@ -59,16 +55,15 @@ export default function DealChat({ route, navigation }) {
       }));
 
       list.forEach((msg) => {
-        if (msg.senderRole === "buyer") {
-          if (!msg.deliveredAtSeller || !msg.seenAtSeller) {
+        if (msg.senderRole === "seller") {
+          if (!msg.deliveredAtBuyer || !msg.seenAtBuyer) {
             updateDoc(msg.ref, {
-              deliveredAtSeller: msg.deliveredAtSeller || serverTimestamp(),
-              seenAtSeller: serverTimestamp(),
+              deliveredAtBuyer: msg.deliveredAtBuyer || serverTimestamp(),
+              seenAtBuyer: serverTimestamp(),
             });
           }
         }
       });
-
       setMessages(list);
     });
     return () => unsubscribe();
@@ -76,17 +71,17 @@ export default function DealChat({ route, navigation }) {
 
   useEffect(() => {
     if (!dealId) return;
-    const buyerTypingRef = doc(db, "deals", dealId, "typing", "buyer");
-    const unsubscribe = onSnapshot(buyerTypingRef, (snap) => {
+    const sellerTypingRef = doc(db, "deals", dealId, "typing", "seller");
+    const unsubscribe = onSnapshot(sellerTypingRef, (snap) => {
       const data = snap.exists() ? snap.data() : {};
-      setIsBuyerTyping(Boolean(data?.isTyping));
+      setIsSellerTyping(Boolean(data?.isTyping));
     });
     return () => unsubscribe();
   }, [dealId]);
 
   useEffect(() => {
     if (!dealId) return;
-    const typingRef = doc(db, "deals", dealId, "typing", "seller");
+    const typingRef = doc(db, "deals", dealId, "typing", "buyer");
 
     if (text.trim().length > 0) {
       setDoc(
@@ -132,36 +127,36 @@ export default function DealChat({ route, navigation }) {
     if (!trimmed || !dealId) return;
     setText("");
     await setDoc(
-      doc(db, "deals", dealId, "typing", "seller"),
+      doc(db, "deals", dealId, "typing", "buyer"),
       { isTyping: false, updatedAt: serverTimestamp() },
       { merge: true },
     );
     await addDoc(collection(db, "deals", dealId, "messages"), {
       text: trimmed,
       createdAt: serverTimestamp(),
-      senderRole: "seller",
-      senderId: deal?.vendorid || "seller",
-      senderName: "Seller",
+      senderRole: "buyer",
+      senderId: "buyer",
+      senderName: "Buyer",
     });
   };
 
   const renderItem = ({ item }) => {
-    const isSeller = item.senderRole === "seller";
+    const isBuyer = item.senderRole === "buyer";
     const messageTime = formatTime(getMessageDate(item.createdAt));
-    const statusLevel = isSeller
-      ? getStatusLevel(item.deliveredAtBuyer, item.seenAtBuyer)
+    const statusLevel = isBuyer
+      ? getStatusLevel(item.deliveredAtSeller, item.seenAtSeller)
       : null;
     return (
       <View
         style={[
           styles.messageRow,
-          isSeller ? styles.messageRowRight : styles.messageRowLeft,
+          isBuyer ? styles.messageRowRight : styles.messageRowLeft,
         ]}
       >
         <View
           style={[
             styles.bubble,
-            isSeller ? styles.bubbleRight : styles.bubbleLeft,
+            isBuyer ? styles.bubbleRight : styles.bubbleLeft,
           ]}
         >
           <Text style={styles.messageText}>{item.text}</Text>
@@ -227,9 +222,9 @@ export default function DealChat({ route, navigation }) {
           }
         />
 
-        {isBuyerTyping && (
+        {isSellerTyping && (
           <View style={styles.typingRow}>
-            <Text style={styles.typingText}>Buyer is typing…</Text>
+            <Text style={styles.typingText}>Seller is typing…</Text>
           </View>
         )}
 
@@ -319,13 +314,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#075E54",
   },
   headerIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 0,
-    backgroundColor: "transparent",
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
+    marginRight: 6,
   },
   headerTitleWrap: {
     flex: 1,
@@ -356,7 +351,6 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 8,
     color: "#94A3B8",
-    fontWeight: "500",
   },
   messageRow: {
     flexDirection: "row",
@@ -386,7 +380,6 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 13,
     color: "#111827",
-    lineHeight: 19,
   },
   timeText: {
     fontSize: 9,
@@ -432,16 +425,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
   },
-  typingRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#ECE5DD",
-  },
-  typingText: {
-    fontSize: 11,
-    color: "#64748B",
-    fontStyle: "italic",
-  },
   input: {
     flex: 1,
     height: 36,
@@ -459,5 +442,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#25D366",
     alignItems: "center",
     justifyContent: "center",
+  },
+  typingRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#ECE5DD",
+  },
+  typingText: {
+    fontSize: 11,
+    color: "#64748B",
+    fontStyle: "italic",
   },
 });

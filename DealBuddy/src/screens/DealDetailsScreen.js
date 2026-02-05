@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { ChevronLeft, MapPin } from "lucide-react-native";
+import { ChevronLeft, MapPin, MessageCircle } from "lucide-react-native";
 import CountdownTimer from "../components/CountdownTimer";
 import { useDeals, useRecordDealView, useLeaveDeal } from "../hooks/useDeals";
 import { hasViewedDeal, markViewedDeal } from "../utils/viewCache";
@@ -97,7 +97,15 @@ export default function DealDetailsScreen({ route, navigation }) {
           >
             <ChevronLeft size={20} color="#0F172A" />
           </TouchableOpacity>
-          <View className="absolute top-12 right-4">
+          <View className="absolute top-12 right-4 flex-row items-center space-x-2">
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate("DealChat", { dealId: deal.id, deal })
+              }
+              className="bg-white/90 p-2 rounded-full"
+            >
+              <MessageCircle size={18} color="#0F172A" />
+            </TouchableOpacity>
             <CountdownTimer expiryTime={deal.expiryTime} />
           </View>
         </View>
