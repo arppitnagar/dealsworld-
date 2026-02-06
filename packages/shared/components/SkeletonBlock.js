@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function SkeletonBlock({
   width = "100%",
@@ -10,6 +10,7 @@ export default function SkeletonBlock({
   shimmer = false,
   shimmerDuration,
 }) {
+  const { theme } = useTheme();
   const opacity = useRef(new Animated.Value(0.5)).current;
   const translateX = useRef(new Animated.Value(0)).current;
   const [layoutWidth, setLayoutWidth] = useState(0);
@@ -59,6 +60,19 @@ export default function SkeletonBlock({
   }, [layoutWidth, shimmer, translateX]);
 
   const Container = shimmer ? Animated.View : View;
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        base: {
+          backgroundColor: theme.colors.surfaceLight,
+          overflow: "hidden",
+        },
+        shimmer: {
+          height: "100%",
+        },
+      }),
+    [theme],
+  );
   return (
     <Container
       onLayout={(e) => setLayoutWidth(e.nativeEvent.layout.width)}
@@ -94,13 +108,3 @@ export default function SkeletonBlock({
     </Container>
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    backgroundColor: theme.colors.surfaceLight,
-    overflow: "hidden",
-  },
-  shimmer: {
-    height: "100%",
-  },
-});

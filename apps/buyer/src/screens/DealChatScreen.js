@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppInput, theme, ChatSkeleton } from "@dealsworld/shared";
+import { AppInput, ChatSkeleton, useTheme } from "@dealsworld/shared";
 import { db } from "../config/firebase";
+import { useAuth } from "../context/AuthContext";
 import {
   collection,
   addDoc,
@@ -27,12 +28,17 @@ import {
 
 export default function DealChatScreen({ route, navigation }) {
   const { dealId, deal } = route.params || {};
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [isSellerTyping, setIsSellerTyping] = useState(false);
   const listRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const chatNotifyRef = useRef(0);
+  const chatInitRef = useRef(false);
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
 
   const topInset =
@@ -46,6 +52,12 @@ export default function DealChatScreen({ route, navigation }) {
 
   useEffect(() => {
     if (!dealId) return;
+    chatInitRef.current = false;
+    chatNotifyRef.current = 0;
+  }, [dealId]);
+
+  useEffect(() => {
+    if (!dealId) return;
     const messagesRef = collection(db, "deals", dealId, "messages");
     const q = query(messagesRef, orderBy("createdAt", "asc"));
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -54,6 +66,43 @@ export default function DealChatScreen({ route, navigation }) {
         ref: docSnap.ref,
         ...docSnap.data(),
       }));
+
+      const sellerMessages = list.filter(
+        (msg) => msg.senderRole === "seller",
+      );
+      const sellerTimes = sellerMessages
+        .map((msg) => getMessageDate(msg.createdAt)?.getTime() || 0)
+        .filter((value) => value > 0);
+      const latestSellerMs =
+        sellerTimes.length > 0 ? Math.max(...sellerTimes) : 0;
+
+      if (!chatInitRef.current) {
+        chatInitRef.current = true;
+        chatNotifyRef.current = latestSellerMs;
+      } else if (latestSellerMs > chatNotifyRef.current && user?.uid) {
+        const newMessages = sellerMessages.filter((msg) => {
+          const messageMs = getMessageDate(msg.createdAt)?.getTime() || 0;
+          return messageMs > chatNotifyRef.current;
+        });
+        chatNotifyRef.current = latestSellerMs;
+
+        const notificationsRef = collection(
+          db,
+          "users",
+          user.uid,
+          "notifications",
+        );
+        newMessages.forEach((msg) => {
+          addDoc(notificationsRef, {
+            type: "chat",
+            dealId,
+            title: "Seller replied",
+            body: msg.text || "New message received",
+            createdAt: serverTimestamp(),
+            isRead: false,
+          });
+        });
+      }
 
       list.forEach((msg) => {
         if (msg.senderRole === "seller") {
@@ -69,7 +118,7 @@ export default function DealChatScreen({ route, navigation }) {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [dealId]);
+  }, [dealId, user?.uid]);
 
   useEffect(() => {
     if (!dealId) return;
@@ -180,7 +229,7 @@ export default function DealChatScreen({ route, navigation }) {
           ) : null}
           {statusLevel ? (
             <View style={styles.statusRow}>
-              <StatusIndicator level={statusLevel} />
+            <StatusIndicator level={statusLevel} theme={theme} styles={styles} />
             </View>
           ) : null}
         </View>
@@ -287,7 +336,7 @@ function getStatusLevel(deliveredAt, seenAt) {
   return "sent";
 }
 
-function StatusIndicator({ level }) {
+function StatusIndicator({ level, theme, styles }) {
   const isSeen = level === "seen";
   const strokeColor = isSeen
     ? theme.colors.chatStatusSeen
@@ -320,7 +369,8 @@ function StatusIndicator({ level }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.chatBg,
@@ -485,4 +535,4 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontStyle: "italic",
   },
-});
+  });

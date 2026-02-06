@@ -1,10 +1,29 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import InfoCard from "./InfoCard";
-import { metricsStyles } from "../styles/metrics";
+import { getMetricsStyles } from "../styles/metrics";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function MetricsGrid({ items, columns = 2, gap = 12, style }) {
   if (!items || items.length === 0) return null;
+  const { theme } = useTheme();
+  const metricsStyles = useMemo(() => getMetricsStyles(theme), [theme]);
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        grid: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+        },
+        card: {
+          marginBottom: 12,
+        },
+        label: metricsStyles.label,
+        value: metricsStyles.value,
+      }),
+    [metricsStyles],
+  );
   const widthPercent = `${Math.floor(100 / columns)}%`;
 
   return (
@@ -18,16 +37,3 @@ export default function MetricsGrid({ items, columns = 2, gap = 12, style }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  card: {
-    marginBottom: 12,
-  },
-  label: metricsStyles.label,
-  value: metricsStyles.value,
-});

@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../theme/theme";
-import { cardStyles } from "../styles/cards";
+import { getCardStyles } from "../styles/cards";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function StatsCard({
   title,
@@ -14,6 +14,39 @@ export default function StatsCard({
   isSelected,
   style,
 }) {
+  const { theme } = useTheme();
+  const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        card: {
+          ...cardStyles.base,
+          ...cardStyles.shadow,
+          padding: 16,
+          alignItems: "center",
+        },
+        iconCircle: {
+          width: 36,
+          height: 36,
+          borderRadius: 12,
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 10,
+        },
+        value: {
+          fontSize: 24,
+          fontWeight: "900",
+        },
+        label: {
+          fontSize: 10,
+          color: theme.colors.textMuted,
+          fontWeight: "700",
+          textTransform: "uppercase",
+        },
+      }),
+    [cardStyles, theme],
+  );
+
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -33,30 +66,3 @@ export default function StatsCard({
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    ...cardStyles.base,
-    ...cardStyles.shadow,
-    padding: 16,
-    alignItems: "center",
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-  value: {
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  label: {
-    fontSize: 10,
-    color: theme.colors.textMuted,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-});

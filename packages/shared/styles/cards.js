@@ -1,6 +1,4 @@
-import { theme } from "../theme/theme";
-
-export const cardStyles = {
+export const getCardStyles = (theme) => ({
   base: {
     backgroundColor: theme.colors.background,
     borderRadius: 20,
@@ -14,4 +12,4 @@ export const cardStyles = {
   tight: {
     padding: 12,
   },
-};
+});

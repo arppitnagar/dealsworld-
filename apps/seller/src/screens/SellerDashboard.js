@@ -24,7 +24,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import {
-  cardStyles,
+  getCardStyles,
   PrimaryBanner,
   EmptyState,
   DealCard as SharedDealCard,
@@ -45,6 +45,7 @@ import {
 
 const { width } = Dimensions.get("window");
 const SPACING = 20;
+const cardStyles = getCardStyles(theme);
 
 export default function SellerDashboard({ navigation }) {
   const [loading, setLoading] = useState(true);

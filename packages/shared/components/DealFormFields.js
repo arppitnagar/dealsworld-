@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
@@ -9,8 +9,8 @@ import {
 import { Camera } from "lucide-react-native";
 import AppInput from "./ui/AppInput";
 import FormSection from "./FormSection";
-import { theme } from "../theme/theme";
-import { formStyles } from "../styles/forms";
+import { useTheme } from "../theme/ThemeProvider";
+import { getFormStyles } from "../styles/forms";
 
 export default function DealFormFields({
   form = {},
@@ -30,6 +30,50 @@ export default function DealFormFields({
   onBlurDeliveryCharge,
   onDeliveryChargeChange,
 }) {
+  const { theme } = useTheme();
+  const formStyles = useMemo(() => getFormStyles(theme), [theme]);
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        label: formStyles.label,
+        input: {
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: 14,
+          borderRadius: theme.radii.md,
+          backgroundColor: theme.colors.surface,
+          color: theme.colors.text,
+        },
+        error: formStyles.error,
+        row: {
+          flexDirection: "row",
+          gap: 12,
+        },
+        half: {
+          flex: 1,
+        },
+        imageBox: {
+          height: 160,
+          backgroundColor: theme.colors.surfaceMuted,
+          borderRadius: 18,
+          justifyContent: "center",
+          alignItems: "center",
+        },
+        image: { width: "100%", height: "100%" },
+        inputError: {
+          borderColor: theme.colors.error,
+        },
+        labelError: {
+          color: theme.colors.error,
+        },
+        readOnlyInput: {
+          backgroundColor: theme.colors.surfaceMuted,
+          color: theme.colors.textMuted,
+          borderColor: theme.colors.border,
+        },
+      }),
+    [formStyles, theme],
+  );
   const category = form.category || "";
   const expiresAt = form.expiresAt;
   const deliveryMode = form.deliveryMode || "";
@@ -247,42 +291,3 @@ export default function DealFormFields({
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  label: formStyles.label,
-  input: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 14,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surface,
-    color: theme.colors.text,
-  },
-  error: formStyles.error,
-  row: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  half: {
-    flex: 1,
-  },
-  imageBox: {
-    height: 160,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  image: { width: "100%", height: "100%" },
-  inputError: {
-    borderColor: theme.colors.error,
-  },
-  labelError: {
-    color: theme.colors.error,
-  },
-  readOnlyInput: {
-    backgroundColor: theme.colors.surfaceMuted,
-    color: theme.colors.textMuted,
-    borderColor: theme.colors.border,
-  },
-});

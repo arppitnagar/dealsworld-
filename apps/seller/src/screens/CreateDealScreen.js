@@ -27,9 +27,10 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   AppButton,
   theme,
-  formStyles,
+  getFormStyles,
   DealFormFields,
 } from "@dealsworld/shared";
+const formStyles = getFormStyles(theme);
 /* ---------- CATEGORY OPTIONS ---------- */
 const CATEGORIES = [
   { label: "Food & Beverages", icon: "🍔" },

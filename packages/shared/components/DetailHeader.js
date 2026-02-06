@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function DetailHeader({
   category,
@@ -11,6 +11,65 @@ export default function DetailHeader({
   editLabel = "Edit",
   editIcon = "create-outline",
 }) {
+  const { theme } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        header: {
+          marginBottom: 20,
+        },
+        titleRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        },
+        titleWrap: {
+          flex: 1,
+        },
+        actions: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+          marginLeft: 12,
+        },
+        chatBtn: {
+          width: 38,
+          height: 38,
+          borderRadius: 12,
+          backgroundColor: theme.colors.surfaceMuted,
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+        },
+        category: {
+          color: theme.colors.purple,
+          fontWeight: "800",
+          fontSize: 12,
+          textTransform: "uppercase",
+          marginBottom: 4,
+        },
+        title: {
+          fontSize: 24,
+          fontWeight: "800",
+          color: theme.colors.text,
+        },
+        editBtn: {
+          flexDirection: "row",
+          alignItems: "center",
+          backgroundColor: theme.colors.purpleSoft,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 10,
+        },
+        editBtnText: {
+          color: theme.colors.purple,
+          fontWeight: "700",
+          marginLeft: 6,
+        },
+      }),
+    [theme],
+  );
   return (
     <View style={styles.header}>
       <View style={styles.titleRow}>
@@ -41,58 +100,3 @@ export default function DetailHeader({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  header: {
-    marginBottom: 20,
-  },
-  titleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  titleWrap: {
-    flex: 1,
-  },
-  actions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginLeft: 12,
-  },
-  chatBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: theme.colors.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  category: {
-    color: theme.colors.purple,
-    fontWeight: "800",
-    fontSize: 12,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: theme.colors.text,
-  },
-  editBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: theme.colors.purpleSoft,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  editBtnText: {
-    color: theme.colors.purple,
-    fontWeight: "700",
-    marginLeft: 6,
-  },
-});

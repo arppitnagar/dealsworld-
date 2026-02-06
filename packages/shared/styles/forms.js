@@ -1,6 +1,4 @@
-import { theme } from "../theme/theme";
-
-export const formStyles = {
+export const getFormStyles = (theme) => ({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -29,4 +27,4 @@ export const formStyles = {
     fontSize: 12,
     marginTop: 4,
   },
-};
+});

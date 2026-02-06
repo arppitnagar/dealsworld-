@@ -6,9 +6,17 @@ export const useDeals = () => {
   return useQuery({
     queryKey: ["deals"],
     queryFn: async () => {
-      const { data } = await apiClient.get("/deals"); // Ensure you have this GET route in server.js
+      const { data } = await apiClient.get("/deals", {
+        params: { limit: 200 },
+      }); // Ensure you have this GET route in server.js
       return data;
     },
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: true,
+    placeholderData: (previous) => previous,
   });
 };
 

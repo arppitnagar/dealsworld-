@@ -1,7 +1,7 @@
-import { theme } from "../theme/theme";
+import { theme as defaultTheme } from "../theme/theme";
 import { statusLabels } from "./statusLabels";
 
-export const statusTokens = {
+export const getStatusTokens = (theme = defaultTheme) => ({
   active: {
     label: statusLabels.active,
     color: theme.colors.statusActive,
@@ -32,9 +32,12 @@ export const statusTokens = {
     color: theme.colors.statusDraft,
     bg: theme.colors.surfaceMuted,
   },
-};
+});
 
-export function getStatusToken(status) {
+export const statusTokens = getStatusTokens(defaultTheme);
+
+export function getStatusToken(status, theme = defaultTheme) {
   if (!status) return null;
-  return statusTokens[String(status).toLowerCase()] || null;
+  const tokens = getStatusTokens(theme);
+  return tokens[String(status).toLowerCase()] || null;
 }

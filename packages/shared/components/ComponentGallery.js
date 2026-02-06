@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../theme/theme";
-import { cardStyles } from "../styles/cards";
+import { getCardStyles } from "../styles/cards";
+import { useTheme } from "../theme/ThemeProvider";
 import PrimaryBanner from "./PrimaryBanner";
 import SectionHeader from "./SectionHeader";
 import StatusPill from "./StatusPill";
@@ -20,6 +20,63 @@ import SkeletonStatsRow from "./SkeletonStatsRow";
 import ChatSkeleton from "./ChatSkeleton";
 
 export default function ComponentGallery() {
+  const { theme } = useTheme();
+  const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        screen: {
+          flex: 1,
+          backgroundColor: theme.colors.surfaceMuted,
+        },
+        content: {
+          padding: theme.spacing.lg,
+          gap: theme.spacing.md,
+          paddingBottom: theme.spacing.xl,
+        },
+        row: {
+          flexDirection: "row",
+          gap: theme.spacing.sm,
+          flexWrap: "wrap",
+        },
+        buttonRow: {
+          flexDirection: "row",
+          gap: theme.spacing.sm,
+        },
+        noteCard: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.spacing.sm,
+          ...cardStyles.base,
+          ...cardStyles.padded,
+        },
+        noteText: {
+          color: theme.colors.textMuted,
+          fontSize: 12,
+        },
+        speedChip: {
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+          borderRadius: 999,
+          backgroundColor: theme.colors.surfaceMuted,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+        },
+        speedChipActive: {
+          backgroundColor: theme.colors.text,
+          borderColor: theme.colors.text,
+        },
+        speedChipText: {
+          fontSize: 11,
+          fontWeight: "700",
+          color: theme.colors.textMuted,
+        },
+        speedChipTextActive: {
+          color: theme.colors.onPrimary,
+        },
+      }),
+    [cardStyles, theme],
+  );
   const [shimmerDuration, setShimmerDuration] = useState(
     theme.skeleton.shimmerDuration,
   );
@@ -145,55 +202,3 @@ export default function ComponentGallery() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  content: {
-    padding: theme.spacing.lg,
-    gap: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
-  },
-  row: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    flexWrap: "wrap",
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  noteCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-    ...cardStyles.base,
-    ...cardStyles.padded,
-  },
-  noteText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-  },
-  speedChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  speedChipActive: {
-    backgroundColor: theme.colors.text,
-    borderColor: theme.colors.text,
-  },
-  speedChipText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: theme.colors.textMuted,
-  },
-  speedChipTextActive: {
-    color: theme.colors.onPrimary,
-  },
-});

@@ -1,6 +1,4 @@
-import { theme } from "../theme/theme";
-
-export const sectionStyles = {
+export const getSectionStyles = (theme) => ({
   container: {
     paddingHorizontal: theme.spacing.lg,
   },
@@ -19,4 +17,4 @@ export const sectionStyles = {
     justifyContent: "space-between",
     alignItems: "flex-end",
   },
-};
+});

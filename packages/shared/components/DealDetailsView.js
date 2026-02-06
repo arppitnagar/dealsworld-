@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import DetailHeader from "./DetailHeader";
 import StatusPill from "./StatusPill";
@@ -7,7 +7,7 @@ import InfoCard from "./InfoCard";
 import PriceBlock from "./PriceBlock";
 import MetricsGrid from "./MetricsGrid";
 import SectionHeader from "./SectionHeader";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function DealDetailsView({
   deal,
@@ -28,6 +28,41 @@ export default function DealDetailsView({
   editIcon,
   style,
 }) {
+  const { theme } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          gap: 8,
+        },
+        headerCard: {
+          backgroundColor: theme.colors.infoSoft,
+          borderColor: theme.colors.infoBorder,
+        },
+        statusRow: {
+          marginTop: 8,
+          marginBottom: 4,
+        },
+        detailRow: {
+          marginTop: 6,
+        },
+        description: {
+          fontSize: 14,
+          color: theme.colors.textMuted,
+          marginTop: 12,
+          lineHeight: 20,
+        },
+        priceCard: {
+          marginTop: 20,
+          backgroundColor: theme.colors.infoSoft,
+          borderColor: theme.colors.infoBorder,
+        },
+        metricsSection: {
+          marginTop: 20,
+        },
+      }),
+    [theme],
+  );
   return (
     <View style={[styles.container, style]}>
       <InfoCard style={styles.headerCard}>
@@ -86,34 +121,3 @@ export default function DealDetailsView({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-  },
-  headerCard: {
-    backgroundColor: theme.colors.infoSoft,
-    borderColor: theme.colors.infoBorder,
-  },
-  statusRow: {
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  detailRow: {
-    marginTop: 6,
-  },
-  description: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    marginTop: 12,
-    lineHeight: 20,
-  },
-  priceCard: {
-    marginTop: 20,
-    backgroundColor: theme.colors.infoSoft,
-    borderColor: theme.colors.infoBorder,
-  },
-  metricsSection: {
-    marginTop: 20,
-  },
-});

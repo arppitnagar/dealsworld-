@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { ui } from "../styles/ui";
-import { theme } from "../theme/theme";
+import { getUi } from "../styles/ui";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function PrimaryBanner({
   title,
@@ -12,6 +12,42 @@ export default function PrimaryBanner({
   rightIcon,
   style,
 }) {
+  const { theme } = useTheme();
+  const ui = useMemo(() => getUi(theme), [theme]);
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        banner: {
+          ...ui.banner,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        },
+        content: {
+          flexDirection: "row",
+          alignItems: "center",
+        },
+        iconWrap: {
+          width: 42,
+          height: 42,
+          borderRadius: 14,
+          backgroundColor: theme.colors.onPrimarySoft,
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: 15,
+        },
+        textWrap: {
+          gap: 2,
+        },
+        title: {
+          ...theme.typography.bannerTitle,
+        },
+        subtitle: {
+          ...theme.typography.bannerSubtitle,
+        },
+      }),
+    [theme, ui],
+  );
   return (
     <TouchableOpacity
       style={[styles.banner, style]}
@@ -39,34 +75,3 @@ export default function PrimaryBanner({
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  banner: {
-    ...ui.banner,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  content: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: theme.colors.onPrimarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 15,
-  },
-  textWrap: {
-    gap: 2,
-  },
-  title: {
-    ...theme.typography.bannerTitle,
-  },
-  subtitle: {
-    ...theme.typography.bannerSubtitle,
-  },
-});

@@ -1,6 +1,4 @@
-import { theme } from "../theme/theme";
-
-export const ui = {
+export const getUi = (theme) => ({
   card: {
     backgroundColor: theme.colors.background,
     borderRadius: 20,
@@ -25,4 +23,4 @@ export const ui = {
     fontWeight: "800",
     color: theme.colors.text,
   },
-};
+});

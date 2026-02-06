@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function DetailRow({
   label,
@@ -10,6 +10,26 @@ export default function DetailRow({
   color,
   style,
 }) {
+  const { theme } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        row: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        },
+        label: {
+          fontSize: 12,
+          fontWeight: "600",
+        },
+        value: {
+          fontSize: 13,
+          fontWeight: "600",
+        },
+      }),
+    [theme],
+  );
   const tint = color || theme.colors.textMuted;
   return (
     <View style={[styles.row, style]}>
@@ -21,19 +41,3 @@ export default function DetailRow({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  value: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-});

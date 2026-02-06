@@ -1,9 +1,29 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function MetricRow({ icon, label, value, color, style }) {
+  const { theme } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        row: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+        },
+        label: {
+          fontSize: 12,
+          fontWeight: "600",
+        },
+        value: {
+          fontSize: 12,
+          fontWeight: "600",
+        },
+      }),
+    [theme],
+  );
   const tint = color || theme.colors.textMuted;
   return (
     <View style={[styles.row, style]}>
@@ -17,19 +37,3 @@ export default function MetricRow({ icon, label, value, color, style }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  value: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-});

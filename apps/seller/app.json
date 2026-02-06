@@ -2,13 +2,18 @@
   "expo": {
     "name": "SellerBuddy",
     "slug": "sellerbuddy",
+    "icon": "../../packages/shared/components/ui/DealBuddy App Icon.png",
     "ios": {
       "infoPlist": {
         "CFBundleDisplayName": "SellerBuddy"
       }
     },
     "android": {
-      "package": "com.dealsworld.sellerbuddy"
+      "package": "com.dealsworld.sellerbuddy",
+      "adaptiveIcon": {
+        "foregroundImage": "../../packages/shared/components/ui/DealBuddy App Icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "plugins": [
       "expo-router",

@@ -2,5 +2,8 @@
   "name": "@dealsworld/shared",
   "version": "1.0.0",
   "private": true,
-  "main": "index.js"
+  "main": "index.js",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0"
+  }
 }

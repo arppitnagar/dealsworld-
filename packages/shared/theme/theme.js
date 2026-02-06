@@ -1,4 +1,4 @@
-const colors = {
+export const lightColors = {
   primary: "#2563eb",
   onPrimary: "#ffffff",
   text: "#0F172A",
@@ -58,7 +58,67 @@ const colors = {
   statusDraft: "#94A3B8",
 };
 
-const typography = {
+export const darkColors = {
+  primary: "#60A5FA",
+  onPrimary: "#0B1220",
+  text: "#F8FAFC",
+  textMuted: "#94A3B8",
+  background: "#0B1220",
+  surface: "#0F172A",
+  surfaceMuted: "#111827",
+  border: "#23324A",
+  surfaceLight: "#1E293B",
+  surfaceLighter: "#273449",
+  error: "#F87171",
+  success: "#34D399",
+  warning: "#FBBF24",
+  infoSoft: "#0F2747",
+  infoBorder: "#1E3A8A",
+  warningBright: "#FB923C",
+  successSoft: "#063A2A",
+  successDark: "#6EE7B7",
+  danger: "#F87171",
+  dangerSoft: "#3A0F14",
+  dangerSoftAlt: "#2A0C12",
+  dangerSoftLight: "#4C141A",
+  dangerBorder: "#7F1D1D",
+  dangerDark: "#FCA5A5",
+  purple: "#A78BFA",
+  purpleSoft: "#2A1C4D",
+  successSoftAlt: "#064E3B",
+  dashboardBg: "#0A1222",
+  amberSoft: "#3A2A0E",
+  amberBorder: "#D97706",
+  amberText: "#FCD34D",
+  amberAccent: "#FDBA74",
+  amberChipBg: "#3A2A0E",
+  chatBg: "#0B1220",
+  chatHeader: "#0F766E",
+  chatHeaderSubtle: "rgba(255,255,255,0.75)",
+  chatEmptyIcon: "#475569",
+  chatBubbleSent: "#134E4A",
+  chatBubbleReceived: "#1E293B",
+  chatInputBg: "#0F172A",
+  chatPlaceholder: "#64748B",
+  chatSend: "#22C55E",
+  chatStatusSeen: "#60A5FA",
+  chatStatusDefault: "#94A3B8",
+  overlay: "rgba(0,0,0,0.65)",
+  overlayStrong: "rgba(0,0,0,0.75)",
+  overlaySoft: "rgba(0,0,0,0.45)",
+  onPrimaryMuted: "rgba(11,18,32,0.6)",
+  onPrimarySoft: "rgba(11,18,32,0.18)",
+  onPrimaryFaint: "rgba(11,18,32,0.1)",
+  surfaceGlass: "rgba(15,23,42,0.92)",
+  surfaceGlassStrong: "rgba(15,23,42,0.96)",
+  iconMuted: "#94A3B8",
+  statusActive: "#F87171",
+  statusScheduled: "#A78BFA",
+  statusExpired: "#FBBF24",
+  statusDraft: "#64748B",
+};
+
+const getTypography = (colors) => ({
   title: { fontSize: 28, fontWeight: "800", color: colors.text },
   subtitle: { fontSize: 14, fontWeight: "600", color: colors.textMuted },
   label: { fontSize: 12, fontWeight: "600", color: colors.textMuted },
@@ -73,38 +133,43 @@ const typography = {
     fontWeight: "600",
     color: colors.onPrimaryMuted,
   },
-};
+});
 
-const shadow = {
+const getShadow = (colors, mode) => ({
   card: {
-    shadowColor: colors.text,
-    shadowOpacity: 0.08,
+    shadowColor: mode === "dark" ? "#000000" : colors.text,
+    shadowOpacity: mode === "dark" ? 0.25 : 0.08,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
+});
+
+export const createTheme = (mode = "light") => {
+  const colors = mode === "dark" ? darkColors : lightColors;
+  return {
+    colors,
+    skeleton: {
+      shimmerDuration: 1200,
+    },
+    spacing: {
+      xs: 6,
+      sm: 10,
+      md: 16,
+      lg: 24,
+      xl: 32,
+    },
+    radii: {
+      sm: 10,
+      md: 14,
+      lg: 18,
+      xl: 24,
+    },
+    typography: getTypography(colors),
+    shadow: getShadow(colors, mode),
+  };
 };
 
-export const theme = {
-  colors,
-  skeleton: {
-    shimmerDuration: 1200,
-  },
-  spacing: {
-    xs: 6,
-    sm: 10,
-    md: 16,
-    lg: 24,
-    xl: 32,
-  },
-  radii: {
-    sm: 10,
-    md: 14,
-    lg: 18,
-    xl: 24,
-  },
-  typography,
-  shadow,
-};
+export const theme = createTheme("light");
 
 export default theme;

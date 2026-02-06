@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   RefreshControl,
   StyleSheet,
+  ImageBackground,
 } from "react-native";
 import {
   Search,
@@ -14,26 +15,28 @@ import {
   ChevronRight,
   X,
   Heart,
+  Bell,
+  UserCircle,
 } from "lucide-react-native";
 import { useDeals } from "../hooks/useDeals";
-import { hasViewedDeal } from "../utils/viewCache";
-import { hasSubscribedDeal } from "../utils/subscriptionCache";
-import {
-  getFavoritedDealIds,
-  toggleFavoritedDeal,
-} from "../utils/favoriteCache";
+import { useDealState } from "../hooks/useDealState";
+import { useNotifications } from "../hooks/useNotifications";
+import { useUserProfile } from "../hooks/useUserProfile";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../config/firebase";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import {
-  theme,
-  ui,
+  useTheme,
+  getUi,
   EmptyState,
   StatusPill,
   getStatusColor,
   getStatusLabel,
-  cardStyles,
+  getCardStyles,
   CardHeader,
   SkeletonList,
   SkeletonStatsRow,
@@ -44,6 +47,7 @@ import {
 } from "@dealsworld/shared";
 
 const CATEGORIES = ["All", "Food", "Fashion", "Electronics", "Home", "Fitness"];
+const HOME_HERO_IMAGE = require("../../../../packages/shared/components/ui/DealBuddy Home Screen Dark Mode.png");
 
 const DealCard = ({
   deal,
@@ -51,8 +55,23 @@ const DealCard = ({
   isFavorite,
   onToggleFavorite,
   selectedFilter,
+  styles,
+  theme,
 }) => {
-  const progress = Math.min((deal.joinedUsers / deal.minGroupSize) * 100, 100);
+  const joinCountRaw = deal?.currentJoins ?? deal?.joinedUsers ?? 0;
+  const joinCount = Number.isFinite(Number(joinCountRaw))
+    ? Number(joinCountRaw)
+    : 0;
+  const minGroupSizeRaw = deal?.minGroupSize ?? deal?.minThreshold ?? 1;
+  const minGroupSize = Number.isFinite(Number(minGroupSizeRaw))
+    ? Number(minGroupSizeRaw)
+    : 1;
+  const thresholdReached =
+    joinCount >= minGroupSize || Boolean(deal?.thresholdReachedAt);
+  const progress =
+    minGroupSize > 0
+      ? Math.min((joinCount / minGroupSize) * 100, 100)
+      : 0;
   const expiryMs = getExpiryMs(deal);
   const originalPrice = Number(deal?.originalPrice);
   const discountPrice = Number(deal?.discountPrice);
@@ -62,7 +81,7 @@ const DealCard = ({
   const discountPercent = showDiscountPill
     ? Math.round(((originalPrice - discountPrice) / originalPrice) * 100)
     : null;
-  const cardBorderColor = getCardBorderColor(selectedFilter);
+  const cardBorderColor = getCardBorderColor(selectedFilter, theme);
 
   return (
     <TouchableOpacity
@@ -76,13 +95,19 @@ const DealCard = ({
             <Text style={styles.categoryPillText}>{deal.category}</Text>
             <StatusPill
               label={getStatusLabel(deal.status)}
-              color={getStatusColor(deal.status)}
+              color={getStatusColor(deal.status, theme)}
             />
+            {thresholdReached ? (
+              <StatusPill
+                label="Threshold Reached"
+                color={theme.colors.success}
+              />
+            ) : null}
           </View>
           <View style={styles.cardTopRight}>
             <View style={styles.joinedRow}>
               <Flame size={14} color={theme.colors.warningBright} />
-              <Text style={styles.joinedText}>{deal.joinedUsers} joined</Text>
+              <Text style={styles.joinedText}>{joinCount} joined</Text>
             </View>
             <TouchableOpacity
               style={styles.favoriteBtn}
@@ -128,8 +153,8 @@ const DealCard = ({
 
         <View style={styles.cardFooterRow}>
           <Text style={styles.neededText}>
-            {deal.minGroupSize - deal.joinedUsers > 0
-              ? `${deal.minGroupSize - deal.joinedUsers} more users needed`
+            {minGroupSize - joinCount > 0
+              ? `${minGroupSize - joinCount} more users needed`
               : "Deal Unlocked!"}
           </Text>
 
@@ -158,29 +183,40 @@ const DealCard = ({
 
 export default function HomeScreen({ navigation }) {
   const { data: deals, isLoading, refetch } = useDeals();
+  const { theme } = useTheme();
+  const ui = useMemo(() => getUi(theme), [theme]);
+  const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
+  const styles = useMemo(
+    () => createStyles(theme, ui, cardStyles),
+    [theme, ui, cardStyles],
+  );
   const insets = useSafeAreaInsets();
   const [now, setNow] = useState(Date.now());
   const [activeCategory, setActiveCategory] = useState("All");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("new");
-  const [favoriteIds, setFavoriteIds] = useState(() =>
-    getFavoritedDealIds(),
-  );
+  const {
+    viewedIds,
+    favoriteIds,
+    joinedIds,
+    toggleFavorite: toggleFavoriteDeal,
+    loading: dealStateLoading,
+  } = useDealState();
+  const { user } = useAuth();
+  const { profile, updateProfile } = useUserProfile();
+  const { unreadCount } = useNotifications();
+  const dealNotifyRef = useRef(0);
+  const dealNotifyBusyRef = useRef(false);
 
-  const toggleFavorite = (dealId) => {
-    if (!dealId) return;
-    toggleFavoritedDeal(dealId);
-    setFavoriteIds(getFavoritedDealIds());
+  const dismissSearch = () => {
+    if (searchOpen) setSearchOpen(false);
   };
 
-  useEffect(() => {
-    if (!navigation?.addListener) return undefined;
-    const unsubscribe = navigation.addListener("focus", () => {
-      setFavoriteIds(getFavoritedDealIds());
-    });
-    return unsubscribe;
-  }, [navigation]);
+  const handleToggleFavorite = (dealId) => {
+    if (!dealId) return;
+    toggleFavoriteDeal(dealId);
+  };
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -188,6 +224,65 @@ export default function HomeScreen({ navigation }) {
     }, 1000);
     return () => clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    const profileMs = getTimeMs(profile?.lastNotifiedDealAt);
+    if (profileMs && profileMs > dealNotifyRef.current) {
+      dealNotifyRef.current = profileMs;
+    }
+  }, [profile?.lastNotifiedDealAt]);
+
+  useEffect(() => {
+    if (!user?.uid || !deals?.length || !profile) return;
+    if (dealNotifyBusyRef.current) return;
+    const lastNotified = dealNotifyRef.current || 0;
+    const nowMs = Date.now();
+    const newDeals = deals
+      .map((deal) => ({
+        deal,
+        createdMs: getTimeMs(deal?.createdAt),
+        expiryMs: getExpiryMs(deal),
+      }))
+      .filter(({ createdMs, expiryMs }) => {
+        if (!createdMs) return false;
+        if (createdMs <= lastNotified) return false;
+        if (typeof expiryMs === "number" && expiryMs <= nowMs) return false;
+        return true;
+      })
+      .sort((a, b) => a.createdMs - b.createdMs);
+
+    if (newDeals.length === 0) return;
+    dealNotifyBusyRef.current = true;
+
+    const notificationsRef = collection(
+      db,
+      "users",
+      user.uid,
+      "notifications",
+    );
+
+    const maxCreated = newDeals[newDeals.length - 1].createdMs;
+    dealNotifyRef.current = Math.max(dealNotifyRef.current, maxCreated);
+
+    Promise.all(
+      newDeals.map(({ deal }) =>
+        addDoc(notificationsRef, {
+          type: "deal",
+          dealId: deal.id,
+          title: "New deal published",
+          body: deal.title || "A new deal is available",
+          createdAt: serverTimestamp(),
+          isRead: false,
+        }),
+      ),
+    )
+      .then(() => {
+        updateProfile({ lastNotifiedDealAt: new Date(maxCreated) });
+      })
+      .finally(() => {
+        dealNotifyBusyRef.current = false;
+      });
+  }, [deals, profile, updateProfile, user?.uid]);
 
   const fuzzyMatch = (query, text) => {
     if (!query) return true;
@@ -221,8 +316,8 @@ export default function HomeScreen({ navigation }) {
         typeof expiryMs === "number" ? expiryMs <= now : true;
       const isCompleted =
         String(deal?.status || "").toLowerCase() === "completed";
-      const isViewed = hasViewedDeal(deal.id);
-      const isSubscribed = hasSubscribedDeal(deal.id);
+      const isViewed = viewedIds.has(deal.id);
+      const isSubscribed = joinedIds.has(deal.id);
       const isFavorite = favoriteIds.has(deal.id);
 
       if (isExpired || isCompleted) return false;
@@ -250,7 +345,16 @@ export default function HomeScreen({ navigation }) {
       const haystack = buildSearchHaystack(deal).toLowerCase();
       return fuzzyMatch(normalizedQuery, haystack);
     });
-  }, [deals, activeCategory, searchText, selectedFilter, favoriteIds, now]);
+  }, [
+    deals,
+    activeCategory,
+    searchText,
+    selectedFilter,
+    favoriteIds,
+    viewedIds,
+    joinedIds,
+    now,
+  ]);
 
   const dealsHeaderTitle = (() => {
     switch (selectedFilter) {
@@ -267,7 +371,7 @@ export default function HomeScreen({ navigation }) {
     }
   })();
 
-  if (isLoading) {
+  if (isLoading || dealStateLoading) {
     return (
       <View style={styles.loadingScreen}>
         <SkeletonStatsRow />
@@ -307,10 +411,30 @@ export default function HomeScreen({ navigation }) {
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              style={styles.searchBtn}
+              style={[
+                styles.searchBtn,
+                searchOpen && styles.searchBtnActive,
+              ]}
               onPress={() => setSearchOpen((prev) => !prev)}
             >
-              <Search size={20} color={theme.colors.textMuted} />
+              {searchOpen ? (
+                <X size={20} color={theme.colors.primary} />
+              ) : (
+                <Search size={20} color={theme.colors.textMuted} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => navigation.navigate("Notifications")}
+            >
+              <Bell size={20} color={theme.colors.textMuted} />
+              {unreadCount > 0 ? <View style={styles.badgeDot} /> : null}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => navigation.navigate("Profile")}
+            >
+              <UserCircle size={20} color={theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
         </View>
@@ -344,21 +468,28 @@ export default function HomeScreen({ navigation }) {
         refreshControl={
           <RefreshControl refreshing={isLoading} onRefresh={refetch} />
         }
+        onTouchStart={dismissSearch}
       >
         <View style={styles.bannerWrap}>
-          <TouchableOpacity style={styles.banner}>
-            <View style={styles.bannerContent}>
-              <Text style={styles.bannerTitle}>
-                {`Refer & Earn ${formatINR(100)}`}
-              </Text>
-              <Text style={styles.bannerSubtitle}>
-                Get rewards when your friends join a deal
-              </Text>
-            </View>
-            <View style={styles.bannerIcon}>
-              <ChevronRight size={24} color="white" />
-            </View>
-          </TouchableOpacity>
+          <ImageBackground
+            source={HOME_HERO_IMAGE}
+            style={styles.bannerImage}
+            imageStyle={styles.bannerImageAsset}
+          >
+            <TouchableOpacity style={styles.bannerOverlay}>
+              <View style={styles.bannerContent}>
+                <Text style={styles.bannerTitle}>
+                  {`Refer & Earn ${formatINR(100)}`}
+                </Text>
+                <Text style={styles.bannerSubtitle}>
+                  Get rewards when your friends join a deal
+                </Text>
+              </View>
+              <View style={styles.bannerIcon}>
+                <ChevronRight size={24} color="white" />
+              </View>
+            </TouchableOpacity>
+          </ImageBackground>
         </View>
 
         <View style={styles.categoryWrap}>
@@ -396,7 +527,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.statsRow}>
           <StatsCard
             title="New"
-            count={getNewCount(deals, favoriteIds)}
+            count={getNewCount(deals, favoriteIds, viewedIds, joinedIds)}
             color={theme.colors.primary}
             bgColor={theme.colors.infoSoft}
             icon="sparkles"
@@ -408,7 +539,7 @@ export default function HomeScreen({ navigation }) {
           />
           <StatsCard
             title="Viewed"
-            count={getViewedCount(deals, favoriteIds)}
+            count={getViewedCount(deals, favoriteIds, viewedIds, joinedIds)}
             color={theme.colors.warningBright}
             bgColor={theme.colors.amberSoft}
             icon="eye"
@@ -420,7 +551,7 @@ export default function HomeScreen({ navigation }) {
           />
           <StatsCard
             title="Loved"
-            count={getFavoriteCount(deals, favoriteIds)}
+            count={getFavoriteCount(deals, favoriteIds, joinedIds)}
             color={theme.colors.danger}
             bgColor={theme.colors.dangerSoft}
             icon="heart"
@@ -434,7 +565,7 @@ export default function HomeScreen({ navigation }) {
           />
           <StatsCard
             title="Joined"
-            count={getMyDealsCount(deals)}
+            count={getMyDealsCount(deals, joinedIds)}
             color={theme.colors.success}
             bgColor={theme.colors.successSoftAlt}
             icon="checkmark-circle"
@@ -463,8 +594,10 @@ export default function HomeScreen({ navigation }) {
                 deal={deal}
                 navigation={navigation}
                 isFavorite={favoriteIds.has(deal.id)}
-                onToggleFavorite={toggleFavorite}
+                onToggleFavorite={handleToggleFavorite}
                 selectedFilter={selectedFilter}
+                styles={styles}
+                theme={theme}
               />
             ))
           ) : (
@@ -502,7 +635,23 @@ function getExpiryMs(deal) {
   return expiryTimeMs || null;
 }
 
-function getNewCount(deals, favoriteIds) {
+function getTimeMs(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value?.toDate === "function") return value.toDate().getTime();
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  if (typeof value === "object") {
+    const seconds = value.seconds ?? value._seconds;
+    if (typeof seconds === "number") return seconds * 1000;
+  }
+  return null;
+}
+
+function getNewCount(deals, favoriteIds, viewedIds, joinedIds) {
   if (!deals) return 0;
   const now = Date.now();
   return deals.filter((deal) => {
@@ -512,14 +661,14 @@ function getNewCount(deals, favoriteIds) {
     const isCompleted =
       String(deal?.status || "").toLowerCase() === "completed";
     if (isCompleted) return false;
-    if (hasViewedDeal(deal.id)) return false;
-    if (hasSubscribedDeal(deal.id)) return false;
+    if (viewedIds && viewedIds.has(deal.id)) return false;
+    if (joinedIds && joinedIds.has(deal.id)) return false;
     if (favoriteIds && favoriteIds.has(deal.id)) return false;
     return true;
   }).length;
 }
 
-function getViewedCount(deals, favoriteIds) {
+function getViewedCount(deals, favoriteIds, viewedIds, joinedIds) {
   if (!deals) return 0;
   const now = Date.now();
   return deals.filter((deal) => {
@@ -529,14 +678,14 @@ function getViewedCount(deals, favoriteIds) {
     const isCompleted =
       String(deal?.status || "").toLowerCase() === "completed";
     if (isCompleted) return false;
-    if (!hasViewedDeal(deal.id)) return false;
+    if (!viewedIds || !viewedIds.has(deal.id)) return false;
     if (favoriteIds && favoriteIds.has(deal.id)) return false;
-    if (hasSubscribedDeal(deal.id)) return false;
+    if (joinedIds && joinedIds.has(deal.id)) return false;
     return true;
   }).length;
 }
 
-function getMyDealsCount(deals) {
+function getMyDealsCount(deals, joinedIds) {
   if (!deals) return 0;
   const now = Date.now();
   return deals.filter((deal) => {
@@ -546,11 +695,11 @@ function getMyDealsCount(deals) {
     const isCompleted =
       String(deal?.status || "").toLowerCase() === "completed";
     if (isCompleted) return false;
-    return hasSubscribedDeal(deal.id);
+    return joinedIds && joinedIds.has(deal.id);
   }).length;
 }
 
-function getFavoriteCount(deals, favoriteIds) {
+function getFavoriteCount(deals, favoriteIds, joinedIds) {
   if (!deals || !favoriteIds) return 0;
   const now = Date.now();
   return deals.filter((deal) => {
@@ -561,7 +710,7 @@ function getFavoriteCount(deals, favoriteIds) {
     const isCompleted =
       String(deal?.status || "").toLowerCase() === "completed";
     if (isCompleted) return false;
-    if (hasSubscribedDeal(deal.id)) return false;
+    if (joinedIds && joinedIds.has(deal.id)) return false;
     return true;
   }).length;
 }
@@ -606,7 +755,7 @@ function buildSearchHaystack(deal) {
   return parts.join(" ");
 }
 
-function getCardBorderColor(selectedFilter) {
+function getCardBorderColor(selectedFilter, theme) {
   switch (selectedFilter) {
     case "new":
       return theme.colors.primary;
@@ -680,7 +829,8 @@ function TimeLeftValue({ expiryMs, style }) {
   return <Text style={style}>{value || "00:00:00"}</Text>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme, ui, cardStyles) =>
+  StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.surfaceMuted,
@@ -727,6 +877,28 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
     padding: 10,
     borderRadius: 999,
+  },
+  searchBtnActive: {
+    backgroundColor: theme.colors.infoSoft,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  iconBtn: {
+    backgroundColor: theme.colors.surfaceMuted,
+    padding: 10,
+    borderRadius: 999,
+    position: "relative",
+  },
+  badgeDot: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.danger,
+    borderWidth: 1,
+    borderColor: theme.colors.background,
   },
   headerActions: {
     flexDirection: "row",
@@ -782,10 +954,18 @@ const styles = StyleSheet.create({
   bannerWrap: {
     padding: 8,
   },
-  banner: {
+  bannerImage: {
+    borderRadius: theme.radii.xl,
+    overflow: "hidden",
+  },
+  bannerImageAsset: {
+    borderRadius: theme.radii.xl,
+  },
+  bannerOverlay: {
     ...ui.banner,
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: theme.colors.overlaySoft,
   },
   bannerContent: {
     flex: 1,
@@ -1008,4 +1188,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginRight: 4,
   },
-});
+  });

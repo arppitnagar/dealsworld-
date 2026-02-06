@@ -1,6 +1,4 @@
-import { theme } from "../theme/theme";
-
-export const metricsStyles = {
+export const getMetricsStyles = (theme) => ({
   label: {
     fontSize: 11,
     fontWeight: "700",
@@ -14,4 +12,4 @@ export const metricsStyles = {
     color: theme.colors.text,
     marginTop: 6,
   },
-};
+});

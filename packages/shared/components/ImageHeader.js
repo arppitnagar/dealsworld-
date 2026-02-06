@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Image, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function ImageHeader({
   imageUri,
@@ -9,6 +9,47 @@ export default function ImageHeader({
   onBack,
   right,
 }) {
+  const { theme } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          width: "100%",
+          backgroundColor: theme.colors.surfaceLight,
+        },
+        image: {
+          width: "100%",
+          height: "100%",
+        },
+        placeholder: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        backBtn: {
+          position: "absolute",
+          top: 20,
+          left: 20,
+          width: 38,
+          height: 38,
+          borderRadius: 12,
+          backgroundColor: theme.colors.surfaceGlassStrong,
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+        },
+        rightSlot: {
+          position: "absolute",
+          top: 20,
+          right: 20,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        },
+      }),
+    [theme],
+  );
   return (
     <View style={[styles.container, { height }]}>
       {imageUri ? (
@@ -31,40 +72,3 @@ export default function ImageHeader({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    width: "100%",
-    backgroundColor: theme.colors.surfaceLight,
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
-  placeholder: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backBtn: {
-    position: "absolute",
-    top: 20,
-    left: 20,
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  rightSlot: {
-    position: "absolute",
-    top: 20,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-});

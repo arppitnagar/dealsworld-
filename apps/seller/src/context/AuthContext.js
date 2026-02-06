@@ -1,11 +1,12 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
-import { auth } from "../config/firebase"; // Ensure your firebase config exports 'auth'
+import { auth, db } from "../config/firebase"; // Ensure your firebase config exports 'auth'
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 const AuthContext = createContext({});
 
@@ -18,14 +19,62 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
+      if (user) {
+        ensureProfile(user).catch((error) => {
+          console.warn("Failed to seed seller profile:", error);
+        });
+      }
     });
     return unsubscribe;
   }, []);
 
+  const ensureProfile = async (nextUser) => {
+    if (!nextUser?.uid) return;
+    const ref = doc(db, "users", nextUser.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(
+        ref,
+        {
+          email: nextUser.email || "",
+          role: "seller",
+          theme: "light",
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return;
+    }
+
+    const data = snap.data();
+    if (!data?.role) {
+      await setDoc(ref, { role: "seller" }, { merge: true });
+    }
+  };
+
   const login = (email, password) =>
     signInWithEmailAndPassword(auth, email, password);
-  const register = (email, password) =>
-    createUserWithEmailAndPassword(auth, email, password);
+  const register = async (email, password) => {
+    const credential = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      password,
+    );
+    if (credential?.user?.uid) {
+      const ref = doc(db, "users", credential.user.uid);
+      await setDoc(
+        ref,
+        {
+          email: credential.user.email || email,
+          role: "seller",
+          theme: "light",
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+    return credential;
+  };
   const logout = () => signOut(auth);
 
   return (

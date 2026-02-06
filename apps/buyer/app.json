@@ -2,13 +2,18 @@
   "expo": {
     "name": "DealBuddy",
     "slug": "dealbuddy",
+    "icon": "../../packages/shared/components/ui/DealBuddy App Icon.png",
     "ios": {
       "infoPlist": {
         "CFBundleDisplayName": "DealBuddy"
       }
     },
     "android": {
-      "package": "com.dealsworld.dealbuddy"
+      "package": "com.dealsworld.dealbuddy",
+      "adaptiveIcon": {
+        "foregroundImage": "../../packages/shared/components/ui/DealBuddy App Icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     }
   }
 }

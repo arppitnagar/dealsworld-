@@ -1,9 +1,36 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 import { formatINR } from "../utils/formatters";
 
 export default function PriceBlock({ price, original, meta }) {
+  const { theme } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        row: {
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: 8,
+        },
+        price: {
+          fontSize: 24,
+          fontWeight: "800",
+          color: theme.colors.text,
+        },
+        original: {
+          fontSize: 12,
+          color: theme.colors.textMuted,
+          textDecorationLine: "line-through",
+          marginLeft: 8,
+        },
+        meta: {
+          fontSize: 12,
+          color: theme.colors.textMuted,
+        },
+      }),
+    [theme],
+  );
   return (
     <View>
       <View style={styles.row}>
@@ -16,26 +43,3 @@ export default function PriceBlock({ price, original, meta }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  price: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: theme.colors.text,
-  },
-  original: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    textDecorationLine: "line-through",
-    marginLeft: 8,
-  },
-  meta: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-});

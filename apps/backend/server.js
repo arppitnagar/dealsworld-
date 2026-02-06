@@ -87,8 +87,27 @@ app.post("/api/deals/create", async (req, res) => {
 
 app.get("/api/deals", async (req, res) => {
   try {
-    const snapshot = await db.collection("deals").get();
-    const deals = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const nowMs = Date.now();
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 200;
+    const fetchLimit = Math.min(limit * 3, 1000);
+
+    const snapshot = await db
+      .collection("deals")
+      .where("status", "==", "active")
+      .orderBy("createdAt", "desc")
+      .limit(fetchLimit)
+      .get();
+
+    const deals = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((deal) => {
+        const expiryMs = getExpiryMs(deal);
+        if (typeof expiryMs !== "number") return false;
+        return expiryMs > nowMs;
+      })
+      .slice(0, limit);
+
     res.json(deals);
   } catch (error) {
     res.status(500).send(error.message);
@@ -109,6 +128,50 @@ app.get("/api/deals/vendor/:vendorId", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+function getExpiryMs(deal) {
+  const expiresAt = deal?.expiresAt;
+  const expiryTime = deal?.expiryTime;
+  const candidate = expiresAt ?? expiryTime;
+  if (!candidate) return null;
+  if (candidate instanceof Date) return candidate.getTime();
+  if (typeof candidate?.toDate === "function") {
+    const date = candidate.toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime())
+      ? date.getTime()
+      : null;
+  }
+  if (typeof candidate === "number") {
+    return candidate < 1e12 ? candidate * 1000 : candidate;
+  }
+  if (typeof candidate === "string") {
+    const trimmed = candidate.trim();
+    if (!trimmed) return null;
+    if (/^\d+$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) {
+        return numeric < 1e12 ? numeric * 1000 : numeric;
+      }
+    }
+    const normalized = trimmed.replace(
+      /UTC([+-])(\d{1,2})(?::?(\d{2}))?/i,
+      (_, sign, hours, minutes) =>
+        `GMT${sign}${String(hours).padStart(2, "0")}:${String(
+          minutes || "00",
+        ).padStart(2, "0")}`,
+    );
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+  }
+  if (typeof candidate === "object") {
+    const seconds = candidate.seconds ?? candidate._seconds;
+    const nanos = candidate.nanoseconds ?? candidate._nanoseconds ?? 0;
+    if (typeof seconds === "number") {
+      return seconds * 1000 + Math.floor(nanos / 1e6);
+    }
+  }
+  return null;
+}
 
 // API: Record a deal view (server-side)
 app.post("/api/deals/:dealId/view", async (req, res) => {
@@ -140,8 +203,16 @@ app.post("/api/deals/:dealId/join", async (req, res) => {
 
       const data = snap.data();
       const currentJoins = data.currentJoins ?? data.joinedUsers ?? 0;
+      const minGroupSizeRaw = data.minGroupSize ?? data.minThreshold ?? 1;
+      const minGroupSize = Number.isFinite(Number(minGroupSizeRaw))
+        ? Number(minGroupSizeRaw)
+        : 1;
+
+      if (currentJoins >= minGroupSize || data.thresholdReachedAt) {
+        throw new Error("Minimum threshold reached");
+      }
+
       const nextJoins = currentJoins + 1;
-      const minGroupSize = data.minGroupSize ?? 1;
 
       const updates = {
         currentJoins: nextJoins,

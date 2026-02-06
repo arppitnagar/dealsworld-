@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, StyleSheet } from "react-native";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 import SkeletonBlock from "./SkeletonBlock";
 
 export default function ChatSkeleton({
@@ -8,6 +8,57 @@ export default function ChatSkeleton({
   showHeaderText = true,
   shimmerDuration,
 }) {
+  const { theme } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flex: 1,
+          padding: theme.spacing.sm,
+        },
+        header: {
+          marginBottom: theme.spacing.sm,
+        },
+        headerSub: {
+          marginTop: 6,
+        },
+        headerLoading: {
+          marginTop: 6,
+        },
+        row: {
+          flexDirection: "row",
+          marginBottom: theme.spacing.sm,
+        },
+        rowRight: {
+          justifyContent: "flex-end",
+        },
+        rowLeft: {
+          justifyContent: "flex-start",
+        },
+        bubble: {
+          borderRadius: 14,
+        },
+        bubbleRight: {
+          alignSelf: "flex-end",
+        },
+        bubbleLeft: {
+          alignSelf: "flex-start",
+        },
+        inputBar: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.spacing.sm,
+          paddingTop: theme.spacing.sm,
+        },
+        input: {
+          borderRadius: 16,
+        },
+        send: {
+          borderRadius: 16,
+        },
+      }),
+    [theme],
+  );
   const items = Array.from({ length: count }, (_, i) => i);
   return (
     <View style={styles.container}>
@@ -72,50 +123,3 @@ export default function ChatSkeleton({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: theme.spacing.sm,
-  },
-  header: {
-    marginBottom: theme.spacing.sm,
-  },
-  headerSub: {
-    marginTop: 6,
-  },
-  headerLoading: {
-    marginTop: 6,
-  },
-  row: {
-    flexDirection: "row",
-    marginBottom: theme.spacing.sm,
-  },
-  rowRight: {
-    justifyContent: "flex-end",
-  },
-  rowLeft: {
-    justifyContent: "flex-start",
-  },
-  bubble: {
-    borderRadius: 14,
-  },
-  bubbleRight: {
-    alignSelf: "flex-end",
-  },
-  bubbleLeft: {
-    alignSelf: "flex-start",
-  },
-  inputBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.sm,
-  },
-  input: {
-    borderRadius: 16,
-  },
-  send: {
-    borderRadius: 16,
-  },
-});

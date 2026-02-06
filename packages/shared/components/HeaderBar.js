@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function HeaderBar({
   title,
@@ -9,6 +9,29 @@ export default function HeaderBar({
   style,
   onTitleLongPress,
 }) {
+  const { theme } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        header: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        },
+        title: {
+          fontSize: 28,
+          fontWeight: "900",
+          color: theme.colors.text,
+        },
+        subtitle: {
+          fontSize: 14,
+          color: theme.colors.textMuted,
+          fontWeight: "500",
+          marginTop: 2,
+        },
+      }),
+    [theme],
+  );
   return (
     <View style={[styles.header, style]}>
       <View>
@@ -25,22 +48,3 @@ export default function HeaderBar({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: theme.colors.text,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-});

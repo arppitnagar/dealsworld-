@@ -4,6 +4,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  Alert,
   Share,
   Modal,
   Animated,
@@ -18,9 +19,10 @@ import {
   InfoCard,
   toDate,
   formatINR,
-  theme,
   SkeletonBlock,
   DealFormFields,
+  useTheme,
+  EmptyState,
 } from "@dealsworld/shared";
 import {
   useDeals,
@@ -28,16 +30,8 @@ import {
   useLeaveDeal,
   useJoinDeal,
 } from "../hooks/useDeals";
-import { hasViewedDeal, markViewedDeal } from "../utils/viewCache";
-import {
-  hasSubscribedDeal,
-  markSubscribedDeal,
-  unmarkSubscribedDeal,
-} from "../utils/subscriptionCache";
-import {
-  hasFavoritedDeal,
-  toggleFavoritedDeal,
-} from "../utils/favoriteCache";
+import { useDealState } from "../hooks/useDealState";
+import { useAddresses } from "../hooks/useAddresses";
 
 const IST_OFFSET_MINUTES = 330;
 const MONTHS_SHORT = [
@@ -67,7 +61,14 @@ function formatExpiresAtIST(expiryMs) {
   return `${day}-${month}-${year} ${hours}:${minutes} IST`;
 }
 
+function formatCityLine(city, state, pincode) {
+  const parts = [city, state, pincode].filter(Boolean);
+  return parts.join(", ");
+}
+
 export default function DealDetailsScreen({ route, navigation }) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const SHARE_BASE_URL = "https://dealbuddy.app/deal";
   const APP_STORE_URL = "https://apps.apple.com/app/id0000000000";
   const PLAY_STORE_URL =
@@ -77,10 +78,23 @@ export default function DealDetailsScreen({ route, navigation }) {
   const { mutate: recordView } = useRecordDealView();
   const { mutate: joinDeal, isLoading: joining } = useJoinDeal();
   const { mutate: leaveDeal, isLoading: leaving } = useLeaveDeal();
+  const { addresses, loading: addressesLoading } = useAddresses();
+  const {
+    dealStates,
+    viewedIds,
+    favoriteIds,
+    joinedIds,
+    markViewed,
+    toggleFavorite,
+    markJoined,
+    unmarkJoined,
+    loading: dealStateLoading,
+    setDeliveryAddress,
+  } = useDealState();
   const hasRecorded = useRef(false);
-  const [hasJoined, setHasJoined] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
   const [showJoinSuccess, setShowJoinSuccess] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
   const insets = useSafeAreaInsets();
   const successScale = useRef(new Animated.Value(0.9)).current;
   const successOpacity = useRef(new Animated.Value(0)).current;
@@ -129,20 +143,45 @@ export default function DealDetailsScreen({ route, navigation }) {
     };
   }, [deal]);
   const dealImage = deal?.imageUrl || deal?.image || null;
+  const dealState = useMemo(
+    () => (dealId ? dealStates.get(dealId) : null),
+    [dealId, dealStates],
+  );
+  const hasJoined = Boolean(dealId && joinedIds.has(dealId));
+  const isFavorite = Boolean(dealId && favoriteIds.has(dealId));
+  const joinCountRaw = deal?.currentJoins ?? deal?.joinedUsers ?? 0;
+  const joinCount = Number.isFinite(Number(joinCountRaw))
+    ? Number(joinCountRaw)
+    : 0;
+  const minGroupSizeRaw = deal?.minGroupSize ?? deal?.minThreshold ?? 1;
+  const minGroupSize = Number.isFinite(Number(minGroupSizeRaw))
+    ? Number(minGroupSizeRaw)
+    : 1;
+  const thresholdReached =
+    joinCount >= minGroupSize || Boolean(deal?.thresholdReachedAt);
+  const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
+  const requiresDeliveryAddress =
+    deliveryModeLabel.length > 0 && !/pick/i.test(deliveryModeLabel);
+  const deliveryAddress = useMemo(() => {
+    if (dealState?.deliveryAddress) return dealState.deliveryAddress;
+    if (dealState?.deliveryAddressId && addresses?.length) {
+      return (
+        addresses.find((item) => item.id === dealState.deliveryAddressId) ||
+        null
+      );
+    }
+    return null;
+  }, [addresses, dealState]);
 
   useEffect(() => {
-    if (!dealId || hasRecorded.current) return;
-    if (!hasViewedDeal(dealId)) {
+    if (!dealId || hasRecorded.current || dealStateLoading) return;
+    if (!viewedIds.has(dealId)) {
       recordView(dealId, {
-        onSuccess: () => markViewedDeal(dealId),
+        onSuccess: () => markViewed(dealId),
       });
     }
     hasRecorded.current = true;
-    if (hasSubscribedDeal(dealId)) {
-      setHasJoined(true);
-    }
-    setIsFavorite(hasFavoritedDeal(dealId));
-  }, [dealId, recordView]);
+  }, [dealId, dealStateLoading, markViewed, recordView, viewedIds]);
 
   useEffect(() => {
     if (!showJoinSuccess) return;
@@ -165,10 +204,59 @@ export default function DealDetailsScreen({ route, navigation }) {
     return () => clearTimeout(timer);
   }, [showJoinSuccess, successOpacity, successScale]);
 
+  useEffect(() => {
+    if (!showAddressModal) return;
+    if (!addresses || addresses.length === 0) return;
+    const defaultAddress =
+      addresses.find((item) => item.isDefault) || addresses[0];
+    const preferredId =
+      dealState?.deliveryAddressId || defaultAddress?.id || null;
+    setSelectedAddressId((prev) => {
+      if (prev && addresses.some((item) => item.id === prev)) return prev;
+      return preferredId;
+    });
+  }, [addresses, dealState?.deliveryAddressId, showAddressModal]);
+
   const handleToggleFavorite = () => {
     if (!dealId) return;
-    const nextValue = toggleFavoritedDeal(dealId);
-    setIsFavorite(nextValue);
+    toggleFavorite(dealId);
+  };
+
+  const handleConfirmAddress = () => {
+    const address = addresses?.find((item) => item.id === selectedAddressId);
+    if (!address) {
+      Alert.alert("Select address", "Please choose a delivery address.");
+      return;
+    }
+    setShowAddressModal(false);
+    if (hasJoined) {
+      setDeliveryAddress(dealId, address, deal?.deliveryMode);
+      return;
+    }
+    handleJoin(address);
+  };
+
+  const handleJoin = (address) => {
+    if (joining) return;
+    joinDeal(
+      { dealId, createdAt: deal?.createdAt },
+      {
+        onSuccess: () => {
+          markJoined(dealId);
+          if (address) {
+            setDeliveryAddress(dealId, address, deal?.deliveryMode);
+          }
+          setShowJoinSuccess(true);
+        },
+        onError: (error) => {
+          const message =
+            error?.response?.data?.error ||
+            error?.message ||
+            "Unable to join this deal.";
+          Alert.alert("Join failed", message);
+        },
+      },
+    );
   };
 
   const handleShareDeal = async () => {
@@ -202,7 +290,10 @@ export default function DealDetailsScreen({ route, navigation }) {
       `${SHARE_BASE_URL}/${deal.id}`;
     const storeLinks = `Install DealBuddy: iOS ${APP_STORE_URL} | Android ${PLAY_STORE_URL}`;
 
+    const introLine =
+      "Hey Buddy! Just snagged a sizzling deal on DealBuddy 🔥 Check this out!";
     const lineParts = [
+      introLine,
       headline,
       priceLine,
       deal.category ? `Category: ${deal.category}` : null,
@@ -287,28 +378,43 @@ export default function DealDetailsScreen({ route, navigation }) {
 
   const handleToggleJoin = () => {
     if (!dealId) return;
+    if (!hasJoined && thresholdReached) {
+      Alert.alert(
+        "Deal unlocked",
+        "Minimum group size already reached. Joining is closed for this deal.",
+      );
+      return;
+    }
     if (hasJoined) {
       if (leaving) return;
       leaveDeal(dealId, {
         onSuccess: () => {
-          setHasJoined(false);
-          unmarkSubscribedDeal(dealId);
+          unmarkJoined(dealId);
         },
       });
       return;
     }
 
-    if (joining) return;
-    joinDeal(
-      { dealId, createdAt: deal?.createdAt },
-      {
-        onSuccess: () => {
-          markSubscribedDeal(dealId);
-          setHasJoined(true);
-          setShowJoinSuccess(true);
-        },
-      },
-    );
+    if (requiresDeliveryAddress) {
+      if (!addressesLoading && (!addresses || addresses.length === 0)) {
+        Alert.alert(
+          "Delivery address needed",
+          "Please add a delivery address before joining this deal.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Add Address",
+              onPress: () => navigation.navigate("AddressForm"),
+            },
+          ],
+        );
+        return;
+      }
+      setShowAddressModal(true);
+      return;
+    }
+
+    handleJoin();
   };
 
   return (
@@ -404,13 +510,15 @@ export default function DealDetailsScreen({ route, navigation }) {
                 ? leaving
                   ? "Leaving..."
                   : "Leave Deal"
-                : joining
-                  ? "Joining..."
-                  : "Join Deal"
+                : thresholdReached
+                  ? "Threshold Reached"
+                  : joining
+                    ? "Joining..."
+                    : "Join Deal"
             }
             onPress={handleToggleJoin}
             loading={joining || leaving}
-            disabled={joining || leaving}
+            disabled={joining || leaving || (!hasJoined && thresholdReached)}
             style={hasJoined ? styles.leaveButton : styles.joinButton}
             textStyle={
               hasJoined ? styles.leaveButtonText : styles.joinButtonText
@@ -419,10 +527,193 @@ export default function DealDetailsScreen({ route, navigation }) {
           <Text style={styles.actionHint}>
             {hasJoined
               ? "You are part of this deal."
-              : "Join to unlock group savings."}
+              : thresholdReached
+                ? "This deal already reached its minimum group size."
+                : "Join to unlock group savings."}
           </Text>
         </InfoCard>
+
+        {requiresDeliveryAddress && hasJoined ? (
+          <InfoCard title="Delivery Address" style={styles.deliveryCard}>
+            {deliveryAddress ? (
+              <View>
+                {deliveryAddress.name ? (
+                  <Text style={styles.deliveryLine}>{deliveryAddress.name}</Text>
+                ) : null}
+                <Text style={styles.deliveryLine}>
+                  {deliveryAddress.line1 || ""}
+                </Text>
+                {deliveryAddress.line2 ? (
+                  <Text style={styles.deliveryLine}>
+                    {deliveryAddress.line2}
+                  </Text>
+                ) : null}
+                <Text style={styles.deliveryLine}>
+                  {formatCityLine(
+                    deliveryAddress.city,
+                    deliveryAddress.state,
+                    deliveryAddress.pincode,
+                  )}
+                </Text>
+                {deliveryAddress.phone ? (
+                  <Text style={styles.deliveryPhone}>
+                    {deliveryAddress.phone}
+                  </Text>
+                ) : null}
+                <Text style={styles.deliveryMeta}>
+                  Delivery mode: {deliveryModeLabel || "Delivery"}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.deliveryMeta}>
+                No delivery address saved yet.
+              </Text>
+            )}
+
+            <View style={styles.deliveryActions}>
+              <AppButton
+                title={deliveryAddress ? "Change Address" : "Add Address"}
+                variant="secondary"
+                onPress={() => {
+                  if (!addressesLoading && (!addresses || addresses.length === 0)) {
+                    Alert.alert(
+                      "No saved address",
+                      "Please add a delivery address to continue.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Add Address",
+                          onPress: () => navigation.navigate("AddressForm"),
+                        },
+                      ],
+                    );
+                    return;
+                  }
+                  setShowAddressModal(true);
+                }}
+                style={styles.deliveryActionButton}
+              />
+            </View>
+          </InfoCard>
+        ) : null}
       </ScrollView>
+
+      {showAddressModal && (
+        <Modal
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowAddressModal(false)}
+        >
+          <View style={styles.addressOverlay}>
+            <View
+              style={[
+                styles.addressSheet,
+                { paddingBottom: Math.max(insets.bottom, 16) },
+              ]}
+            >
+              <View style={styles.addressHeader}>
+                <Text style={styles.addressTitle}>Select delivery address</Text>
+                <TouchableOpacity
+                  style={styles.addressClose}
+                  onPress={() => setShowAddressModal(false)}
+                >
+                  <Ionicons
+                    name="close"
+                    size={18}
+                    color={theme.colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.addressSubtitle}>
+                Delivery mode: {deliveryModeLabel || "Delivery"}
+              </Text>
+
+              {addressesLoading ? (
+                <Text style={styles.addressLoading}>Loading addresses...</Text>
+              ) : addresses?.length ? (
+                <ScrollView
+                  style={styles.addressList}
+                  contentContainerStyle={styles.addressListContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {addresses.map((item) => {
+                    const selected = item.id === selectedAddressId;
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={[
+                          styles.addressOption,
+                          selected && styles.addressOptionSelected,
+                        ]}
+                        onPress={() => setSelectedAddressId(item.id)}
+                      >
+                        <View style={styles.addressOptionHeader}>
+                          <View style={styles.addressTag}>
+                            <Text style={styles.addressTagText}>
+                              {item.label || "Address"}
+                            </Text>
+                          </View>
+                          {item.isDefault ? (
+                            <View style={styles.addressDefaultTag}>
+                              <Ionicons
+                                name="star"
+                                size={12}
+                                color={theme.colors.warningBright}
+                              />
+                              <Text style={styles.addressDefaultText}>
+                                Default
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        {item.name ? (
+                          <Text style={styles.addressLine}>{item.name}</Text>
+                        ) : null}
+                        <Text style={styles.addressLine}>{item.line1 || ""}</Text>
+                        {item.line2 ? (
+                          <Text style={styles.addressLine}>{item.line2}</Text>
+                        ) : null}
+                        <Text style={styles.addressLine}>
+                          {formatCityLine(item.city, item.state, item.pincode)}
+                        </Text>
+                        {item.phone ? (
+                          <Text style={styles.addressPhone}>{item.phone}</Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              ) : (
+                <View style={styles.addressEmptyWrap}>
+                  <EmptyState
+                    icon="location-outline"
+                    title="No saved addresses"
+                    subtitle="Add one to continue."
+                  />
+                </View>
+              )}
+
+              <View style={styles.addressActions}>
+                <AppButton
+                  title="Add Address"
+                  variant="secondary"
+                  onPress={() => {
+                    setShowAddressModal(false);
+                    navigation.navigate("AddressForm");
+                  }}
+                  style={styles.addressActionButton}
+                />
+                <AppButton
+                  title="Use Selected Address"
+                  onPress={handleConfirmAddress}
+                  disabled={!selectedAddressId}
+                  style={styles.addressActionButton}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {showJoinSuccess && (
         <Modal transparent animationType="fade">
@@ -450,7 +741,8 @@ export default function DealDetailsScreen({ route, navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.dashboardBg,
@@ -664,6 +956,147 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: 12,
   },
+  deliveryCard: {
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  deliveryLine: {
+    color: theme.colors.text,
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  deliveryPhone: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  deliveryMeta: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    marginTop: 8,
+  },
+  deliveryActions: {
+    marginTop: 12,
+  },
+  deliveryActionButton: {
+    borderRadius: theme.radii.md,
+  },
+  addressOverlay: {
+    flex: 1,
+    backgroundColor: theme.colors.overlaySoft,
+    justifyContent: "flex-end",
+  },
+  addressSheet: {
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    maxHeight: "80%",
+  },
+  addressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  addressTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+  addressSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  addressClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addressLoading: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    marginBottom: 16,
+  },
+  addressList: {
+    marginBottom: 16,
+  },
+  addressListContent: {
+    paddingBottom: 12,
+    gap: 12,
+  },
+  addressOption: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: theme.colors.surface,
+  },
+  addressOptionSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.infoSoft,
+  },
+  addressOptionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  addressTag: {
+    backgroundColor: theme.colors.infoSoft,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  addressTagText: {
+    color: theme.colors.primary,
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  addressDefaultTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: theme.colors.surfaceMuted,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  addressDefaultText: {
+    fontSize: 10,
+    color: theme.colors.textMuted,
+    fontWeight: "700",
+  },
+  addressLine: {
+    color: theme.colors.text,
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  addressPhone: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  addressEmptyWrap: {
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  addressActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingBottom: 16,
+  },
+  addressActionButton: {
+    flex: 1,
+  },
   successOverlay: {
     flex: 1,
     backgroundColor: theme.colors.overlaySoft,
@@ -688,7 +1121,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: theme.colors.text,
   },
-});
+  });
 
 
 

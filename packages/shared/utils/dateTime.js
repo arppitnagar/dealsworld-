@@ -11,6 +11,34 @@ export function toDate(value) {
       return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
   }
+  if (typeof value === "number") {
+    const ms = value < 1e12 ? value * 1000 : value;
+    const parsed = new Date(ms);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^\d+$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) {
+        const ms = numeric < 1e12 ? numeric * 1000 : numeric;
+        const parsed = new Date(ms);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+    }
+
+    const normalized = trimmed.replace(
+      /UTC([+-])(\d{1,2})(?::?(\d{2}))?/i,
+      (_, sign, hours, minutes) =>
+        `GMT${sign}${String(hours).padStart(2, "0")}:${String(
+          minutes || "00",
+        ).padStart(2, "0")}`,
+    );
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
