@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Image,
   ScrollView,
   Alert,
   StyleSheet,
@@ -13,7 +12,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Camera, Save } from "lucide-react-native";
+import { Save } from "lucide-react-native";
 import LottieView from "lottie-react-native";
 import { db } from "../config/firebase";
 import {
@@ -26,11 +25,10 @@ import {
 import * as Yup from "yup";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  AppInput,
   AppButton,
   theme,
   formStyles,
-  FormSection,
+  DealFormFields,
 } from "@dealsworld/shared";
 /* ---------- CATEGORY OPTIONS ---------- */
 const CATEGORIES = [
@@ -459,174 +457,40 @@ export default function CreateDealScreen({ route, navigation }) {
               ? "Edit Deal"
               : "Create New Deal"}
         </Text>
-        <FormSection title="Deal Details">
-        {/* IMAGE PICKER SECTION */}
-        <TouchableOpacity
-          style={[
-            styles.imageBox,
-            isReadOnly && { borderStyle: "solid", opacity: 0.8 },
-          ]}
-          onPress={pickImage}
-          // This prevents the function from firing
-          disabled={isReadOnly}
-          activeOpacity={isReadOnly ? 1 : 0.7}
-        >
-          {image ? (
-            <Image source={{ uri: image }} style={styles.image} />
-          ) : (
-            <Camera size={40} color={theme.colors.iconMuted} />
-          )}
-        </TouchableOpacity>
-
-        {/* TITLE */}
-        <AppInput
-          label="Deal Title"
-          placeholder="e.g. iPhone 15 Pro Max"
-          value={form.title}
-          editable={!isReadOnly}
-          onChangeText={(v) => setForm({ ...form, title: v })}
-          error={errors.title}
+        <DealFormFields
+          form={form}
+          errors={errors}
+          image={image}
+          isReadOnly={isReadOnly}
+          isExpiryLocked={isExpiryLocked}
+          onPickImage={pickImage}
+          onFieldChange={(key, value) =>
+            setForm((p) => ({ ...p, [key]: value }))
+          }
+          onPriceChange={handlePriceChange}
+          onMinBuyersChange={handleMinBuyersChange}
+          onCategoryPress={() => setCategoryModalVisible(true)}
+          onDeliveryModePress={() => setDeliveryModalVisible(true)}
+          onExpiresAtPress={() => setShowDatePicker(true)}
+          onBlurPrice={(field) =>
+            setForm((p) => ({
+              ...p,
+              [field]: formatINRWithCommas(p[field]),
+            }))
+          }
+          onBlurDeliveryCharge={() =>
+            setForm((p) => ({
+              ...p,
+              deliveryCharge: formatINRWithCommas(p.deliveryCharge),
+            }))
+          }
+          onDeliveryChargeChange={(value) =>
+            setForm((p) => ({
+              ...p,
+              deliveryCharge: value.replace(/[^0-9.]/g, ""),
+            }))
+          }
         />
-
-        {/* DESCRIPTION */}
-        <AppInput
-          label="Description"
-          placeholder="Describe the deal"
-          multiline
-          value={form.description}
-          editable={!isReadOnly}
-          onChangeText={(v) => setForm({ ...form, description: v })}
-          error={errors.description}
-        />
-        </FormSection>
-
-        <FormSection title="Pricing">
-        {/* PRICES */}
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <AppInput
-            containerStyle={{ flex: 1 }}
-            label="Original Price"
-            keyboardType="decimal-pad"
-            placeholder="₹0.00"
-            value={form.originalPrice}
-            editable={!isReadOnly}
-            onChangeText={(v) => handlePriceChange("originalPrice", v)}
-            onBlur={() =>
-              setForm((p) => ({
-                ...p,
-                originalPrice: formatINRWithCommas(p.originalPrice),
-              }))
-            }
-          />
-
-          <AppInput
-            containerStyle={{ flex: 1 }}
-            label="Deal Price"
-            keyboardType="decimal-pad"
-            placeholder="₹0.00"
-            value={form.discountPrice}
-            editable={!isReadOnly}
-            onChangeText={(v) => handlePriceChange("discountPrice", v)}
-            onBlur={() =>
-              setForm((p) => ({
-                ...p,
-                discountPrice: formatINRWithCommas(p.discountPrice),
-              }))
-            }
-            error={errors.discountPrice}
-          />
-        </View>
-
-        {/* MIN BUYERS */}
-        <AppInput
-          label="Minimum Buyers"
-          keyboardType="numeric"
-          placeholder="Minimum 2 buyers"
-          value={form.minGroupSize}
-          editable={!isReadOnly}
-          onChangeText={handleMinBuyersChange}
-          error={errors.minGroupSize}
-        />
-        </FormSection>
-
-        <FormSection title="Logistics">
-        {/* CATEGORY */}
-        <Text style={[styles.label, errors.category && styles.labelError]}>
-          Category
-        </Text>
-
-        {/* Wrap the TouchableOpacity inside this View */}
-        <View pointerEvents={isReadOnly ? "none" : "auto"}>
-          <TouchableOpacity
-            style={[
-              styles.input,
-              errors.category && styles.inputError,
-              isReadOnly && styles.readOnlyInput,
-            ]}
-            // Use 'disabled' for TouchableOpacity, not 'editable'
-            disabled={isReadOnly}
-            onPress={() => setCategoryModalVisible(true)}
-          >
-            <Text
-              style={
-                isReadOnly
-                  ? { color: theme.colors.textMuted }
-                  : { color: theme.colors.text }
-              }
-            >
-              {form.category || "Select category"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {errors.category && <Text style={styles.error}>{errors.category}</Text>}
-        {errors.category && <Text style={styles.error}>{errors.category}</Text>}
-
-        {form.category === "Other" && (
-          <>
-            <AppInput
-              label="Other Category"
-              placeholder="e.g. Home Appliances"
-              value={form.categoryOther}
-              editable={!isReadOnly}
-              onChangeText={(v) => setForm((p) => ({ ...p, categoryOther: v }))}
-              error={errors.categoryOther}
-            />
-          </>
-        )}
-
-        {/* EXPIRES AT */}
-        <Text style={[styles.label, errors.expiresAt && styles.labelError]}>
-          Expires At
-        </Text>
-
-        <View pointerEvents={isExpiryLocked ? "none" : "auto"}>
-          <TouchableOpacity
-            style={[
-              styles.input,
-              errors.expiresAt && styles.inputError,
-              isExpiryLocked && styles.readOnlyInput, // Apply grey background here
-            ]}
-            // TouchableOpacity uses 'disabled', not 'editable'
-            disabled={isExpiryLocked}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Text
-              style={
-                isExpiryLocked
-                  ? { color: theme.colors.textMuted }
-                  : { color: theme.colors.text }
-              }
-            >
-              {form.expiresAt
-                ? new Date(form.expiresAt).toDateString()
-                : "Select expiry date"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        {errors.expiresAt && (
-          <Text style={styles.error}>{errors.expiresAt}</Text>
-        )}
 
         {showDatePicker && !isExpiryLocked && (
           <DateTimePicker
@@ -639,72 +503,6 @@ export default function CreateDealScreen({ route, navigation }) {
             }}
           />
         )}
-
-        {/* LOCATION */}
-        <AppInput
-          label="Location"
-          placeholder="e.g. Mumbai, Andheri"
-          value={form.location}
-          editable={!isReadOnly}
-          onChangeText={(v) => setForm({ ...form, location: v })}
-          error={errors.location}
-        />
-
-        {/* DELIVERY MODE */}
-        <Text style={[styles.label, errors.deliveryMode && styles.labelError]}>
-          Delivery Mode
-        </Text>
-
-        <View pointerEvents={isReadOnly ? "none" : "auto"}>
-          <TouchableOpacity
-            style={[
-              styles.input,
-              errors.deliveryMode && styles.inputError,
-              isReadOnly && styles.readOnlyInput, // Grey background for the box
-            ]}
-            // TouchableOpacity uses 'disabled' instead of 'editable'
-            disabled={isReadOnly}
-            onPress={() => setDeliveryModalVisible(true)}
-          >
-            <Text
-              style={
-                isReadOnly
-                  ? { color: theme.colors.textMuted }
-                  : { color: theme.colors.text }
-              }
-            >
-              {form.deliveryMode || "Select delivery mode"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {errors.deliveryMode && (
-          <Text style={styles.error}>{errors.deliveryMode}</Text>
-        )}
-
-        {/* DELIVERY CHARGE (ONLY FOR PAID DELIVERY) */}
-        {form.deliveryMode === "Paid Home Delivery" && (
-          <>
-            <AppInput
-              label="Delivery Charge"
-              keyboardType="decimal-pad"
-              placeholder="₹0.00"
-              value={form.deliveryCharge}
-              editable={!isReadOnly}
-              onChangeText={(v) =>
-                setForm({ ...form, deliveryCharge: v.replace(/[₹,]/g, "") })
-              }
-              onBlur={() =>
-                setForm((p) => ({
-                  ...p,
-                  deliveryCharge: formatINRWithCommas(p.deliveryCharge),
-                }))
-              }
-              error={errors.deliveryCharge}
-            />
-          </>
-        )}
-        </FormSection>
 
         {/* SUBMIT */}
         {/* Only show the button if NOT in Read Only mode */}
@@ -976,3 +774,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
+
+
+

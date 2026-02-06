@@ -49,12 +49,12 @@ const SPACING = 20;
 export default function SellerDashboard({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [deals, setDeals] = useState([]);
-  const [stats, setStats] = useState({ active: 0, scheduled: 0, previous: 0 });
+  const [stats, setStats] = useState({ active: 0, scheduled: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Track selected filter: null (all), 'active', 'pending', or 'completed'
+  // Track selected filter: null (all), 'active', or 'pending'
   const [selectedFilter, setSelectedFilter] = useState(null);
 
   const vendorid = "vendor_001";
@@ -80,30 +80,24 @@ export default function SellerDashboard({ navigation }) {
         const dealsList = [];
         let activeCount = 0;
         let scheduledCount = 0;
-        let previousCount = 0;
         const nowMs = Date.now();
 
         snapshot.forEach((doc) => {
           const data = doc.data();
           const expiryDate = toDate(data.expiresAt);
           const isExpired = expiryDate && expiryDate.getTime() <= nowMs;
-          const shouldComplete = data.status === "active" && isExpired;
-          const nextStatus = shouldComplete ? "completed" : data.status;
+          const status = String(data.status || "").toLowerCase();
 
           const currentJoins = data.currentJoins ?? data.joinedUsers ?? 0;
           const minGroupSize = data.minGroupSize ?? 1;
           const shouldSetThreshold =
             !data.thresholdReachedAt && currentJoins >= minGroupSize;
 
-          if (shouldComplete || shouldSetThreshold) {
-            const updates = {};
-            if (shouldComplete) {
-              updates.status = "completed";
-            }
-            if (shouldSetThreshold) {
-              updates.thresholdReachedAt = serverTimestamp();
-            }
-            updates.updatedAt = serverTimestamp();
+          if (shouldSetThreshold) {
+            const updates = {
+              thresholdReachedAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            };
 
             updateDoc(doc.ref, updates).catch((error) => {
               console.error("Failed to update deal:", error);
@@ -113,25 +107,23 @@ export default function SellerDashboard({ navigation }) {
           dealsList.push({
             id: doc.id,
             ...data,
-            status: nextStatus,
             thresholdReachedAt: shouldSetThreshold
               ? new Date(nowMs)
               : data.thresholdReachedAt,
           });
 
-          if (nextStatus === "active") {
-            activeCount++;
-          } else if (nextStatus === "completed") {
-            previousCount++;
-          } else {
-            scheduledCount++;
+          if (!isExpired && status !== "completed") {
+            if (status === "active") {
+              activeCount++;
+            } else {
+              scheduledCount++;
+            }
           }
         });
 
         setStats({
           active: activeCount,
           scheduled: scheduledCount,
-          previous: previousCount,
         });
         setDeals(dealsList);
         setLoading(false);
@@ -157,12 +149,18 @@ export default function SellerDashboard({ navigation }) {
   const queryTokens = normalizedQuery ? normalizedQuery.split(/\s+/) : [];
 
   const filteredDeals = deals.filter((deal) => {
+    const status = String(deal.status || "").toLowerCase();
+    const expiryDate = toDate(deal.expiresAt);
+    const isExpired = expiryDate && expiryDate.getTime() <= now;
+    const isCompleted = status === "completed";
+    if (isExpired || isCompleted) return false;
+
     if (selectedFilter) {
       if (selectedFilter === "pending") {
-        if (deal.status === "active" || deal.status === "completed") {
+        if (status === "active" || status === "completed") {
           return false;
         }
-      } else if (deal.status !== selectedFilter) {
+      } else if (status !== selectedFilter) {
         return false;
       }
     }
@@ -235,7 +233,7 @@ export default function SellerDashboard({ navigation }) {
           value={searchQuery}
           onChangeText={setSearchQuery}
           onClear={() => setSearchQuery("")}
-          placeholder="Smart search by any field..."
+          placeholder="Smart search by any value..."
           style={styles.searchBar}
         />
 
@@ -259,16 +257,6 @@ export default function SellerDashboard({ navigation }) {
             icon="calendar"
             isSelected={selectedFilter === "pending"}
             onPress={() => handleFilterPress("pending")}
-            style={styles.statCard}
-          />
-          <StatsCard
-            title="Previous"
-            count={stats.previous}
-            color={theme.colors.success}
-            bgColor={theme.colors.successSoftAlt}
-            icon="checkmark-circle"
-            isSelected={selectedFilter === "completed"}
-            onPress={() => handleFilterPress("completed")}
             style={styles.statCard}
           />
         </View>
@@ -441,7 +429,13 @@ function buildSearchText(deal) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.dashboardBg },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, width: "100%" },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    width: "100%",
+  },
   scrollContent: { paddingBottom: 40 },
   header: {
     paddingHorizontal: SPACING,
@@ -478,7 +472,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   statCard: {
-    width: (width - 60) / 3,
+    width: (width - 60) / 2,
   },
   createBtn: {
     marginHorizontal: SPACING,

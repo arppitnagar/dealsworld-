@@ -2,6 +2,15 @@ export function toDate(value) {
   if (!value) return null;
   if (value instanceof Date) return value;
   if (typeof value?.toDate === "function") return value.toDate();
+  if (typeof value === "object") {
+    const seconds = value.seconds ?? value._seconds;
+    const nanoseconds = value.nanoseconds ?? value._nanoseconds ?? 0;
+    if (typeof seconds === "number") {
+      const ms = seconds * 1000 + Math.floor(nanoseconds / 1e6);
+      const parsed = new Date(ms);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+  }
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

@@ -13,6 +13,7 @@ const colors = {
   success: "#10B981",
   warning: "#B45309",
   infoSoft: "#EFF6FF",
+  infoBorder: "#BFDBFE",
   warningBright: "#F97316",
   successSoft: "#DCFCE7",
   successDark: "#15803D",
@@ -44,8 +45,10 @@ const colors = {
   chatStatusDefault: "#6B7280",
   overlay: "rgba(0,0,0,0.5)",
   overlayStrong: "rgba(0,0,0,0.6)",
+  overlaySoft: "rgba(0,0,0,0.35)",
   onPrimaryMuted: "rgba(255,255,255,0.4)",
   onPrimarySoft: "rgba(255,255,255,0.15)",
+  onPrimaryFaint: "rgba(255,255,255,0.1)",
   surfaceGlass: "rgba(255,255,255,0.9)",
   surfaceGlassStrong: "rgba(255,255,255,0.95)",
   iconMuted: "#9CA3AF",
@@ -103,3 +106,5 @@ export const theme = {
   typography,
   shadow,
 };
+
+export default theme;

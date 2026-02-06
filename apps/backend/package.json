@@ -2,6 +2,9 @@
   "name": "dealsworld-backend",
   "version": "1.0.0",
   "main": "server.js",
+  "scripts": {
+    "dev": "node server.js"
+  },
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",

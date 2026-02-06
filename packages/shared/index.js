@@ -1,7 +1,7 @@
 export { default as CountdownTimer } from "./components/CountdownTimer";
 export { default as AppButton } from "./components/ui/AppButton";
 export { default as AppInput } from "./components/ui/AppInput";
-export { default as theme } from "./theme/theme";
+export { theme } from "./theme/theme";
 export { ui } from "./styles/ui";
 export { cardStyles } from "./styles/cards";
 export { formStyles } from "./styles/forms";
@@ -34,6 +34,8 @@ export { statusTokens, getStatusToken } from "./utils/statusTokens";
 export { metricsStyles } from "./styles/metrics";
 export { default as ImageHeader } from "./components/ImageHeader";
 export { default as ComponentGallery } from "./components/ComponentGallery";
+export { default as DealDetailsView } from "./components/DealDetailsView";
+export { default as DealFormFields } from "./components/DealFormFields";
 export {
   toDate,
   formatDate,
@@ -41,3 +43,4 @@ export {
   formatCountdown,
   formatDuration,
 } from "./utils/dateTime";
+export { formatINR } from "./utils/formatters";

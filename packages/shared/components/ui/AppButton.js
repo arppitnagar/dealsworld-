@@ -77,3 +77,5 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
 });
+
+export default AppButton;

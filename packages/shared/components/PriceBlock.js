@@ -1,14 +1,15 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { theme } from "../theme/theme";
+import { formatINR } from "../utils/formatters";
 
 export default function PriceBlock({ price, original, meta }) {
   return (
     <View>
       <View style={styles.row}>
-        <Text style={styles.price}>â‚¹{price}</Text>
+        <Text style={styles.price}>{formatINR(price)}</Text>
         {original !== undefined && original !== null && (
-          <Text style={styles.original}>â‚¹{original}</Text>
+          <Text style={styles.original}>{formatINR(original)}</Text>
         )}
       </View>
       {meta ? <Text style={styles.meta}>{meta}</Text> : null}

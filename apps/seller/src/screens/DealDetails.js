@@ -11,11 +11,7 @@ import {
 import { db } from "../config/firebase";
 import { doc, updateDoc, onSnapshot } from "firebase/firestore";
 import {
-  InfoCard,
-  DetailHeader,
   StatsGrid,
-  StatusPill,
-  PriceBlock,
   MetricsGrid,
   getStatusColor,
   getStatusLabel,
@@ -27,6 +23,7 @@ import {
   formatCountdown,
   theme,
   SkeletonBlock,
+  DealDetailsView,
 } from "@dealsworld/shared";
 
 const { width } = Dimensions.get("window");
@@ -142,9 +139,20 @@ export default function DealDetails({ route, navigation }) {
         />
 
         <View style={styles.content}>
-          <DetailHeader
-            category={deal.category || "General"}
-            title={deal.title}
+          <DealDetailsView
+            deal={deal}
+            statusLabel={
+              String(safeGet(deal, "status") || "").toLowerCase() === "completed"
+                ? null
+                : getStatusLabel(safeGet(deal, "status"))
+            }
+            statusColor={accentColor}
+            location={deal.location || "Location"}
+            expiryLabel={expiryLabel}
+            price={safeGet(deal, "discountPrice") ?? safeGet(deal, "dealPrice")}
+            original={safeGet(deal, "originalPrice")}
+            meta={`${joinsCount} joined · Target ${target}`}
+            showDescription={false}
             onChat={() => navigation.navigate("DealChat", { deal })}
             onEdit={() => navigation.navigate("CreateDeal", { deal })}
             editLabel={safeGet(deal, "status") === "completed" ? "View" : "Edit"}
@@ -154,12 +162,6 @@ export default function DealDetails({ route, navigation }) {
                 : "create-outline"
             }
           />
-          <View style={styles.statusRow}>
-            <StatusPill
-              label={getStatusLabel(safeGet(deal, "status"))}
-              color={accentColor}
-            />
-          </View>
 
           <StatsGrid
             items={[
@@ -219,18 +221,6 @@ export default function DealDetails({ route, navigation }) {
                 },
               ]}
             />
-          </View>
-
-          <View style={styles.priceSection}>
-            <InfoCard>
-              <PriceBlock
-                price={
-                  safeGet(deal, "discountPrice") ?? safeGet(deal, "dealPrice")
-                }
-                original={safeGet(deal, "originalPrice")}
-                meta={`${joinsCount} joined · Target ${target}`}
-              />
-            </InfoCard>
           </View>
 
           <View style={styles.progressSection}>
@@ -301,7 +291,6 @@ const styles = StyleSheet.create({
     marginTop: -30,
     backgroundColor: theme.colors.background,
   },
-  statusRow: { marginTop: 8, marginBottom: 20 },
   insightsSection: {
     marginBottom: 24,
   },
@@ -339,7 +328,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   endBtnText: { color: theme.colors.error, fontWeight: "800" },
-  priceSection: { marginBottom: 20 },
   skeletonContent: {
     padding: 20,
     gap: 12,
@@ -388,3 +376,4 @@ function formatDuration(seconds) {
   if (hrs > 0) return `${hrs}h ${mins}m`;
   return `${mins}m`;
 }
+

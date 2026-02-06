@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "DealBuddy",
+    "slug": "dealbuddy",
+    "ios": {
+      "infoPlist": {
+        "CFBundleDisplayName": "DealBuddy"
+      }
+    },
+    "android": {
+      "package": "com.dealsworld.dealbuddy"
+    }
+  }
+}

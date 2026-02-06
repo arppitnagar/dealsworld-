@@ -1,17 +1,32 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   ScrollView,
   RefreshControl,
   StyleSheet,
 } from "react-native";
-import { Search, Flame, MapPin, ChevronRight } from "lucide-react-native";
-import { useDeals } from "../hooks/useDeals";
 import {
-  CountdownTimer,
+  Search,
+  Flame,
+  MapPin,
+  ChevronRight,
+  X,
+  Heart,
+} from "lucide-react-native";
+import { useDeals } from "../hooks/useDeals";
+import { hasViewedDeal } from "../utils/viewCache";
+import { hasSubscribedDeal } from "../utils/subscriptionCache";
+import {
+  getFavoritedDealIds,
+  toggleFavoritedDeal,
+} from "../utils/favoriteCache";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import {
   theme,
   ui,
   EmptyState,
@@ -22,32 +37,39 @@ import {
   CardHeader,
   SkeletonList,
   SkeletonStatsRow,
+  AppInput,
+  formatINR,
+  StatsCard,
+  toDate,
 } from "@dealsworld/shared";
 
 const CATEGORIES = ["All", "Food", "Fashion", "Electronics", "Home", "Fitness"];
 
-const DealCard = ({ deal, navigation }) => {
+const DealCard = ({
+  deal,
+  navigation,
+  isFavorite,
+  onToggleFavorite,
+  selectedFilter,
+}) => {
   const progress = Math.min((deal.joinedUsers / deal.minGroupSize) * 100, 100);
+  const expiryMs = getExpiryMs(deal);
+  const originalPrice = Number(deal?.originalPrice);
+  const discountPrice = Number(deal?.discountPrice);
+  const hasOriginalPrice = Number.isFinite(originalPrice) && originalPrice > 0;
+  const hasDiscountPrice = Number.isFinite(discountPrice) && discountPrice >= 0;
+  const showDiscountPill = hasOriginalPrice && hasDiscountPrice;
+  const discountPercent = showDiscountPill
+    ? Math.round(((originalPrice - discountPrice) / originalPrice) * 100)
+    : null;
+  const cardBorderColor = getCardBorderColor(selectedFilter);
 
   return (
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={() => navigation.navigate("DealDetails", { dealId: deal.id })}
-      style={styles.card}
+      style={[styles.card, cardBorderColor && { borderColor: cardBorderColor }]}
     >
-      <View>
-        <Image
-          source={{
-            uri: deal.imageUrl || "https://via.placeholder.com/400x200",
-          }}
-          style={styles.cardImage}
-          resizeMode="cover"
-        />
-        <View style={styles.timerWrap}>
-          <CountdownTimer expiryTime={deal.expiryTime} />
-        </View>
-      </View>
-
       <View style={styles.cardContent}>
         <View style={styles.cardTopRow}>
           <View style={styles.categoryRow}>
@@ -57,9 +79,26 @@ const DealCard = ({ deal, navigation }) => {
               color={getStatusColor(deal.status)}
             />
           </View>
-          <View style={styles.joinedRow}>
-            <Flame size={14} color={theme.colors.warningBright} />
-            <Text style={styles.joinedText}>{deal.joinedUsers} joined</Text>
+          <View style={styles.cardTopRight}>
+            <View style={styles.joinedRow}>
+              <Flame size={14} color={theme.colors.warningBright} />
+              <Text style={styles.joinedText}>{deal.joinedUsers} joined</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.favoriteBtn}
+              onPress={(event) => {
+                event?.stopPropagation?.();
+                onToggleFavorite?.(deal.id);
+              }}
+            >
+              <Heart
+                size={16}
+                color={
+                  isFavorite ? theme.colors.danger : theme.colors.textMuted
+                }
+                fill={isFavorite ? theme.colors.danger : "transparent"}
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -68,18 +107,19 @@ const DealCard = ({ deal, navigation }) => {
         </Text>
 
         <View style={styles.priceRow}>
-          <Text style={styles.priceText}>â‚¹{deal.discountPrice}</Text>
-          <Text style={styles.priceOriginal}>â‚¹{deal.originalPrice}</Text>
-          <View style={styles.discountPill}>
-            <Text style={styles.discountText}>
-              {Math.round(
-                ((deal.originalPrice - deal.discountPrice) /
-                  deal.originalPrice) *
-                  100,
-              )}
-              % OFF
+          <Text style={styles.priceText}>{formatINR(deal.discountPrice)}</Text>
+          {hasOriginalPrice ? (
+            <Text style={styles.priceOriginal}>
+              {formatINR(deal.originalPrice)}
             </Text>
-          </View>
+          ) : null}
+          {showDiscountPill &&
+          discountPercent !== null &&
+          discountPercent > 0 ? (
+            <View style={styles.discountPill}>
+              <Text style={styles.discountText}>{discountPercent}% OFF</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.progressTrack}>
@@ -98,6 +138,19 @@ const DealCard = ({ deal, navigation }) => {
             <ChevronRight size={16} color={theme.colors.primary} />
           </View>
         </View>
+
+        <View style={styles.cardTimeRow}>
+          <View style={styles.timeBlock}>
+            <Text style={styles.timeLabel}>Time Left</Text>
+            <TimeLeftValue expiryMs={expiryMs} style={styles.timeValue} />
+          </View>
+          <View style={styles.expiresAtBlock}>
+            <Text style={styles.timeLabel}>Expires At</Text>
+            <Text style={styles.expiresAtText}>
+              {formatExpiresAtIST(expiryMs)}
+            </Text>
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -105,6 +158,114 @@ const DealCard = ({ deal, navigation }) => {
 
 export default function HomeScreen({ navigation }) {
   const { data: deals, isLoading, refetch } = useDeals();
+  const insets = useSafeAreaInsets();
+  const [now, setNow] = useState(Date.now());
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState("new");
+  const [favoriteIds, setFavoriteIds] = useState(() =>
+    getFavoritedDealIds(),
+  );
+
+  const toggleFavorite = (dealId) => {
+    if (!dealId) return;
+    toggleFavoritedDeal(dealId);
+    setFavoriteIds(getFavoritedDealIds());
+  };
+
+  useEffect(() => {
+    if (!navigation?.addListener) return undefined;
+    const unsubscribe = navigation.addListener("focus", () => {
+      setFavoriteIds(getFavoritedDealIds());
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const fuzzyMatch = (query, text) => {
+    if (!query) return true;
+    if (!text) return false;
+    if (text.includes(query)) return true;
+
+    const isNumericQuery = /^[0-9]+$/.test(query);
+    if (isNumericQuery) {
+      return false;
+    }
+
+    let qi = 0;
+    for (let ti = 0; ti < text.length && qi < query.length; ti += 1) {
+      if (text[ti] === query[qi]) qi += 1;
+    }
+    const score = qi / query.length;
+
+    if (query.length <= 2) {
+      return score === 1;
+    }
+
+    return score >= 0.7;
+  };
+
+  const filteredDeals = useMemo(() => {
+    if (!deals) return [];
+    const normalizedQuery = searchText.trim().toLowerCase();
+    return deals.filter((deal) => {
+      const expiryMs = getExpiryMs(deal);
+      const isExpired =
+        typeof expiryMs === "number" ? expiryMs <= now : true;
+      const isCompleted =
+        String(deal?.status || "").toLowerCase() === "completed";
+      const isViewed = hasViewedDeal(deal.id);
+      const isSubscribed = hasSubscribedDeal(deal.id);
+      const isFavorite = favoriteIds.has(deal.id);
+
+      if (isExpired || isCompleted) return false;
+
+      if (selectedFilter === "new") {
+        if (isViewed || isSubscribed || isFavorite) return false;
+      }
+      if (selectedFilter === "viewed") {
+        if (!isViewed || isFavorite || isSubscribed) return false;
+      }
+      if (selectedFilter === "favourite") {
+        if (!isFavorite || isSubscribed) return false;
+      }
+      if (selectedFilter === "my") {
+        if (!isSubscribed) return false;
+      }
+
+      const matchesCategory =
+        activeCategory === "All" ||
+        String(deal.category || "")
+          .toLowerCase()
+          .includes(activeCategory.toLowerCase());
+      if (!matchesCategory) return false;
+      if (!normalizedQuery) return true;
+      const haystack = buildSearchHaystack(deal).toLowerCase();
+      return fuzzyMatch(normalizedQuery, haystack);
+    });
+  }, [deals, activeCategory, searchText, selectedFilter, favoriteIds, now]);
+
+  const dealsHeaderTitle = (() => {
+    switch (selectedFilter) {
+      case "new":
+        return "New Deals";
+      case "viewed":
+        return "Viewed Deals";
+      case "favourite":
+        return "Loved Deals";
+      case "my":
+        return "Joined Deals";
+      default:
+        return "All Deals";
+    }
+  })();
 
   if (isLoading) {
     return (
@@ -116,8 +277,8 @@ export default function HomeScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
         <View style={styles.headerRow}>
           <View>
             <TouchableOpacity
@@ -145,11 +306,37 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.debugChipText}>Style</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.searchBtn}>
+            <TouchableOpacity
+              style={styles.searchBtn}
+              onPress={() => setSearchOpen((prev) => !prev)}
+            >
               <Search size={20} color={theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
         </View>
+        {searchOpen && (
+          <View style={styles.searchRow}>
+            <View style={styles.searchInputWrap}>
+              <AppInput
+                value={searchText}
+                onChangeText={setSearchText}
+                placeholder="Smart search by any value..."
+                containerStyle={styles.searchInputContainer}
+                inputStyle={styles.searchInput}
+              />
+              {searchText.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearSearchBtn}
+                  onPress={() => setSearchText("")}
+                >
+                  <View style={styles.clearSearchCircle}>
+                    <X size={14} color={theme.colors.textMuted} />
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
       </View>
 
       <ScrollView
@@ -161,7 +348,9 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.bannerWrap}>
           <TouchableOpacity style={styles.banner}>
             <View style={styles.bannerContent}>
-              <Text style={styles.bannerTitle}>Refer & Earn â‚¹100</Text>
+              <Text style={styles.bannerTitle}>
+                {`Refer & Earn ${formatINR(100)}`}
+              </Text>
               <Text style={styles.bannerSubtitle}>
                 Get rewards when your friends join a deal
               </Text>
@@ -183,13 +372,16 @@ export default function HomeScreen({ navigation }) {
                 key={cat}
                 style={[
                   styles.categoryPill,
-                  index === 0 ? styles.categoryPillActive : styles.categoryPillIdle,
+                  activeCategory === cat
+                    ? styles.categoryPillActive
+                    : styles.categoryPillIdle,
                 ]}
+                onPress={() => setActiveCategory(cat)}
               >
                 <Text
                   style={[
                     styles.categoryText,
-                    index === 0
+                    activeCategory === cat
                       ? styles.categoryTextActive
                       : styles.categoryTextIdle,
                   ]}
@@ -201,9 +393,62 @@ export default function HomeScreen({ navigation }) {
           </ScrollView>
         </View>
 
+        <View style={styles.statsRow}>
+          <StatsCard
+            title="New"
+            count={getNewCount(deals, favoriteIds)}
+            color={theme.colors.primary}
+            bgColor={theme.colors.infoSoft}
+            icon="sparkles"
+            isSelected={selectedFilter === "new"}
+            onPress={() =>
+              setSelectedFilter((prev) => (prev === "new" ? null : "new"))
+            }
+            style={styles.statCard}
+          />
+          <StatsCard
+            title="Viewed"
+            count={getViewedCount(deals, favoriteIds)}
+            color={theme.colors.warningBright}
+            bgColor={theme.colors.amberSoft}
+            icon="eye"
+            isSelected={selectedFilter === "viewed"}
+            onPress={() =>
+              setSelectedFilter((prev) => (prev === "viewed" ? null : "viewed"))
+            }
+            style={styles.statCard}
+          />
+          <StatsCard
+            title="Loved"
+            count={getFavoriteCount(deals, favoriteIds)}
+            color={theme.colors.danger}
+            bgColor={theme.colors.dangerSoft}
+            icon="heart"
+            isSelected={selectedFilter === "favourite"}
+            onPress={() =>
+              setSelectedFilter((prev) =>
+                prev === "favourite" ? null : "favourite",
+              )
+            }
+            style={styles.statCard}
+          />
+          <StatsCard
+            title="Joined"
+            count={getMyDealsCount(deals)}
+            color={theme.colors.success}
+            bgColor={theme.colors.successSoftAlt}
+            icon="checkmark-circle"
+            isSelected={selectedFilter === "my"}
+            onPress={() =>
+              setSelectedFilter((prev) => (prev === "my" ? null : "my"))
+            }
+            style={styles.statCard}
+          />
+        </View>
+
         <View style={styles.listWrap}>
           <CardHeader
-            title="Featured Deals"
+            title={dealsHeaderTitle}
             right={
               <TouchableOpacity>
                 <Text style={styles.seeAllText}>See All</Text>
@@ -211,23 +456,228 @@ export default function HomeScreen({ navigation }) {
             }
           />
 
-          {deals?.length > 0 ? (
-            deals.map((deal) => (
-              <DealCard key={deal.id} deal={deal} navigation={navigation} />
+          {filteredDeals?.length > 0 ? (
+            filteredDeals.map((deal) => (
+              <DealCard
+                key={deal.id}
+                deal={deal}
+                navigation={navigation}
+                isFavorite={favoriteIds.has(deal.id)}
+                onToggleFavorite={toggleFavorite}
+                selectedFilter={selectedFilter}
+              />
             ))
           ) : (
             <View style={styles.emptyWrap}>
               <EmptyState
                 icon="search-outline"
-                title="No active deals nearby"
-                subtitle="Try adjusting your location or search."
+                title={
+                  selectedFilter
+                    ? "No deals for this filter."
+                    : "No active deals nearby"
+                }
+                subtitle="Try adjusting your filters or search."
               />
             </View>
           )}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
+}
+
+function getExpiryMs(deal) {
+  const expiresAtDate = toDate(deal?.expiresAt);
+  const expiryTimeDate = toDate(deal?.expiryTime);
+  const expiresAtMs =
+    expiresAtDate instanceof Date && !Number.isNaN(expiresAtDate.getTime())
+      ? expiresAtDate.getTime()
+      : null;
+  const expiryTimeMs =
+    expiryTimeDate instanceof Date && !Number.isNaN(expiryTimeDate.getTime())
+      ? expiryTimeDate.getTime()
+      : null;
+
+  if (expiresAtMs) return expiresAtMs;
+  return expiryTimeMs || null;
+}
+
+function getNewCount(deals, favoriteIds) {
+  if (!deals) return 0;
+  const now = Date.now();
+  return deals.filter((deal) => {
+    const expiryMs = getExpiryMs(deal);
+    const isExpired = typeof expiryMs === "number" ? expiryMs <= now : true;
+    if (isExpired) return false;
+    const isCompleted =
+      String(deal?.status || "").toLowerCase() === "completed";
+    if (isCompleted) return false;
+    if (hasViewedDeal(deal.id)) return false;
+    if (hasSubscribedDeal(deal.id)) return false;
+    if (favoriteIds && favoriteIds.has(deal.id)) return false;
+    return true;
+  }).length;
+}
+
+function getViewedCount(deals, favoriteIds) {
+  if (!deals) return 0;
+  const now = Date.now();
+  return deals.filter((deal) => {
+    const expiryMs = getExpiryMs(deal);
+    const isExpired = typeof expiryMs === "number" ? expiryMs <= now : true;
+    if (isExpired) return false;
+    const isCompleted =
+      String(deal?.status || "").toLowerCase() === "completed";
+    if (isCompleted) return false;
+    if (!hasViewedDeal(deal.id)) return false;
+    if (favoriteIds && favoriteIds.has(deal.id)) return false;
+    if (hasSubscribedDeal(deal.id)) return false;
+    return true;
+  }).length;
+}
+
+function getMyDealsCount(deals) {
+  if (!deals) return 0;
+  const now = Date.now();
+  return deals.filter((deal) => {
+    const expiryMs = getExpiryMs(deal);
+    const isExpired = typeof expiryMs === "number" ? expiryMs <= now : true;
+    if (isExpired) return false;
+    const isCompleted =
+      String(deal?.status || "").toLowerCase() === "completed";
+    if (isCompleted) return false;
+    return hasSubscribedDeal(deal.id);
+  }).length;
+}
+
+function getFavoriteCount(deals, favoriteIds) {
+  if (!deals || !favoriteIds) return 0;
+  const now = Date.now();
+  return deals.filter((deal) => {
+    if (!favoriteIds.has(deal.id)) return false;
+    const expiryMs = getExpiryMs(deal);
+    const isExpired = typeof expiryMs === "number" ? expiryMs <= now : true;
+    if (isExpired) return false;
+    const isCompleted =
+      String(deal?.status || "").toLowerCase() === "completed";
+    if (isCompleted) return false;
+    if (hasSubscribedDeal(deal.id)) return false;
+    return true;
+  }).length;
+}
+
+function buildSearchHaystack(deal) {
+  const parts = [];
+  const visited = new Set();
+
+  const visit = (value) => {
+    if (value === null || value === undefined) return;
+    if (typeof value === "string") {
+      parts.push(value);
+      return;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      parts.push(String(value));
+      return;
+    }
+    if (value instanceof Date) {
+      parts.push(value.toISOString());
+      return;
+    }
+    if (typeof value?.toDate === "function") {
+      const date = value.toDate();
+      if (date instanceof Date && !Number.isNaN(date.getTime())) {
+        parts.push(date.toISOString());
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value === "object") {
+      if (visited.has(value)) return;
+      visited.add(value);
+      Object.values(value).forEach(visit);
+    }
+  };
+
+  visit(deal);
+  return parts.join(" ");
+}
+
+function getCardBorderColor(selectedFilter) {
+  switch (selectedFilter) {
+    case "new":
+      return theme.colors.primary;
+    case "viewed":
+      return theme.colors.warningBright;
+    case "favourite":
+      return theme.colors.danger;
+    case "my":
+      return theme.colors.success;
+    default:
+      return null;
+  }
+}
+
+const IST_OFFSET_MINUTES = 330;
+const MONTHS_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function formatExpiresAtIST(expiryMs) {
+  if (typeof expiryMs !== "number") return "--";
+  const istMs = expiryMs + IST_OFFSET_MINUTES * 60 * 1000;
+  const istDate = new Date(istMs);
+  const day = String(istDate.getUTCDate()).padStart(2, "0");
+  const month = MONTHS_SHORT[istDate.getUTCMonth()];
+  const year = istDate.getUTCFullYear();
+  const hours = String(istDate.getUTCHours()).padStart(2, "0");
+  const minutes = String(istDate.getUTCMinutes()).padStart(2, "0");
+  return `${day}-${month}-${year} ${hours}:${minutes}`;
+}
+
+function formatTimeLeftMs(expiryMs) {
+  if (typeof expiryMs !== "number") return null;
+  const diffMs = expiryMs - Date.now();
+  if (diffMs <= 0) return null;
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const time = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+    2,
+    "0",
+  )}:${String(seconds).padStart(2, "0")}`;
+  return days > 0 ? `${days}d ${time}` : time;
+}
+
+function TimeLeftValue({ expiryMs, style }) {
+  const [value, setValue] = useState(() => formatTimeLeftMs(expiryMs));
+
+  useEffect(() => {
+    setValue(formatTimeLeftMs(expiryMs));
+    if (typeof expiryMs !== "number") return undefined;
+    const timer = setInterval(() => {
+      setValue(formatTimeLeftMs(expiryMs));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [expiryMs]);
+
+  return <Text style={style}>{value || "00:00:00"}</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -245,8 +695,8 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: theme.colors.background,
-    paddingTop: 56,
-    paddingBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
@@ -283,6 +733,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  searchRow: {
+    marginTop: 10,
+  },
+  searchInputWrap: {
+    position: "relative",
+  },
+  searchInputContainer: {
+    marginTop: 0,
+  },
+  searchInput: {
+    backgroundColor: theme.colors.surfaceMuted,
+    paddingRight: 36,
+  },
+  clearSearchBtn: {
+    position: "absolute",
+    right: 12,
+    top: "50%",
+    marginTop: -12,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearSearchCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   debugChip: {
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -297,7 +780,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   bannerWrap: {
-    padding: 20,
+    padding: 8,
   },
   banner: {
     ...ui.banner,
@@ -320,7 +803,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   categoryWrap: {
-    marginBottom: 16,
+    marginBottom: 4,
+  },
+  statsRow: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    gap: 8,
+    flexWrap: "nowrap",
+    marginBottom: 8,
+  },
+  statCard: {
+    flexBasis: "23%",
+    flexGrow: 1,
   },
   categoryPill: {
     marginRight: 8,
@@ -346,6 +840,7 @@ const styles = StyleSheet.create({
   },
   listWrap: {
     paddingHorizontal: 20,
+    paddingTop: 4,
     paddingBottom: 32,
   },
   seeAllText: {
@@ -363,23 +858,21 @@ const styles = StyleSheet.create({
     ...cardStyles.base,
     ...cardStyles.shadow,
   },
-  cardImage: {
-    width: "100%",
-    height: 192,
-  },
-  timerWrap: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-  },
   cardContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 6,
   },
   cardTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
+  },
+  cardTopRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   categoryPillText: {
     fontSize: 10,
@@ -407,6 +900,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginLeft: 4,
+  },
+  favoriteBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: theme.colors.surfaceGlassStrong,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   cardTitle: {
     fontSize: 18,
@@ -457,6 +960,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  cardTimeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginTop: 10,
+  },
+  timeBlock: {
+    flex: 1,
+  },
+  expiresAtBlock: {
+    alignItems: "flex-end",
+    marginLeft: 12,
+  },
+  timeLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  timeValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginTop: 2,
+  },
+  expiresAtText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginTop: 2,
   },
   neededText: {
     fontSize: 10,
