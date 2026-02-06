@@ -581,7 +581,14 @@ export default function HomeScreen({ navigation }) {
           <CardHeader
             title={dealsHeaderTitle}
             right={
-              <TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedFilter(null);
+                  setActiveCategory("All");
+                  setSearchText("");
+                  setSearchOpen(false);
+                }}
+              >
                 <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             }
