@@ -5,6 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Platform,
+  StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -52,6 +54,10 @@ export default function DealDetailsLayout({
 }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const statusBarHeight =
+    Platform.OS === "android" ? StatusBar.currentHeight || 0 : 0;
+  const topInset = Math.max(insets.top, statusBarHeight, 16);
+  const compactTopInset = Math.max(insets.top, statusBarHeight, 12);
   const isDashboard = variant === "dashboard";
   const styles = useMemo(
     () =>
@@ -304,7 +310,7 @@ export default function DealDetailsLayout({
       {isDashboard ? (
         <LinearGradient
           colors={[theme.colors.primary, theme.colors.purple]}
-          style={[styles.headerGradient, { paddingTop: Math.max(insets.top, 16) }]}
+          style={[styles.headerGradient, { paddingTop: topInset }]}
         >
           <View style={[styles.headerBar, { backgroundColor: "transparent" }]}>
             {headerContent}
@@ -315,7 +321,7 @@ export default function DealDetailsLayout({
         </LinearGradient>
       ) : (
         <View style={{ backgroundColor: theme.colors.primary }}>
-          <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 12) }]}>
+          <View style={[styles.headerBar, { paddingTop: compactTopInset }]}>
             {headerContent}
           </View>
           {headerBelow ? (

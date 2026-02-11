@@ -228,7 +228,11 @@ export default function SellerDashboard({ navigation }) {
           style={[styles.header, { paddingTop: 16 }]}
         >
           <View style={styles.headerRow}>
-            <View style={styles.greetingRow}>
+            <TouchableOpacity
+              style={styles.greetingRow}
+              onPress={() => navigation.navigate("Profile")}
+              activeOpacity={0.8}
+            >
               <View style={styles.avatarWrap}>
                 <Ionicons
                   name="person-outline"
@@ -240,7 +244,7 @@ export default function SellerDashboard({ navigation }) {
                 <Text style={styles.greetingLabel}>{greetingLabel}</Text>
                 <Text style={styles.greetingName}>Seller</Text>
               </View>
-            </View>
+            </TouchableOpacity>
             <View style={styles.headerActions}>
               {__DEV__ && (
                 <TouchableOpacity
