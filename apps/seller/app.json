@@ -2,6 +2,7 @@
   "expo": {
     "name": "SellerBuddy",
     "slug": "sellerbuddy",
+    "entryPoint": "./index.js",
     "icon": "../../packages/shared/components/ui/DealBuddy App Icon.png",
     "ios": {
       "infoPlist": {
@@ -16,7 +17,6 @@
       }
     },
     "plugins": [
-      "expo-router",
       "@react-native-community/datetimepicker"
     ]
   }

@@ -9,19 +9,21 @@ import {
   Modal,
   Animated,
   Easing,
+  ActivityIndicator,
   StyleSheet,
   TextInput,
 } from "react-native";
 import { Heart, MessageCircle } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  AppButton,
   InfoCard,
   toDate,
+  formatExpiryLabel,
   formatINR,
   SkeletonBlock,
-  DealFormFields,
+  DealDetailsLayout,
   useTheme,
   EmptyState,
 } from "@dealsworld/shared";
@@ -80,6 +82,14 @@ function formatReviewDate(value) {
   });
 }
 
+function formatNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0";
+  if (numeric >= 1000000) return `${(numeric / 1000000).toFixed(1)}M`;
+  if (numeric >= 1000) return `${(numeric / 1000).toFixed(1)}K`;
+  return String(Math.round(numeric));
+}
+
 export default function DealDetailsScreen({ route, navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -130,46 +140,6 @@ export default function DealDetailsScreen({ route, navigation }) {
     () => deals?.find((d) => d.id === dealId),
     [deals, dealId],
   );
-  const detailForm = useMemo(() => {
-    if (!deal) {
-      return {
-        title: "",
-        description: "",
-        category: "",
-        categoryOther: "",
-        deliveryMode: "",
-        deliveryCharge: "",
-        originalPrice: "",
-        discountPrice: "",
-        minGroupSize: "",
-        expiresAt: null,
-        location: "",
-      };
-    }
-
-    const formatMoney = (value) =>
-      value === null || value === undefined || value === ""
-        ? ""
-        : formatINR(value);
-
-    return {
-      title: deal.title || "",
-      description: deal.description || "",
-      category: deal.category || "",
-      categoryOther: "",
-      deliveryMode: deal.deliveryMode || "",
-      deliveryCharge: formatMoney(deal.deliveryCharge),
-      originalPrice: formatMoney(deal.originalPrice),
-      discountPrice: formatMoney(deal.discountPrice),
-      minGroupSize:
-        deal.minGroupSize === null || deal.minGroupSize === undefined
-          ? ""
-          : String(deal.minGroupSize),
-      expiresAt: toDate(deal.expiresAt || deal.expiryTime),
-      location: deal.location || "",
-    };
-  }, [deal]);
-  const dealImage = deal?.imageUrl || deal?.image || null;
   const dealState = useMemo(
     () => (dealId ? dealStates.get(dealId) : null),
     [dealId, dealStates],
@@ -180,6 +150,15 @@ export default function DealDetailsScreen({ route, navigation }) {
   const joinCount = Number.isFinite(Number(joinCountRaw))
     ? Number(joinCountRaw)
     : 0;
+  const viewsCountRaw = deal?.viewsCount ?? deal?.views ?? 0;
+  const viewsCount = Number.isFinite(Number(viewsCountRaw))
+    ? Number(viewsCountRaw)
+    : 0;
+  const favoritesCountRaw =
+    deal?.favoritesCount ?? deal?.favouritesCount ?? 0;
+  const favoritesCount = Number.isFinite(Number(favoritesCountRaw))
+    ? Number(favoritesCountRaw)
+    : 0;
   const minGroupSizeRaw = deal?.minGroupSize ?? deal?.minThreshold ?? 1;
   const minGroupSize = Number.isFinite(Number(minGroupSizeRaw))
     ? Number(minGroupSizeRaw)
@@ -187,6 +166,9 @@ export default function DealDetailsScreen({ route, navigation }) {
   const thresholdReached =
     joinCount >= minGroupSize || Boolean(deal?.thresholdReachedAt);
   const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
+  const isPickup = /pick/i.test(deliveryModeLabel);
+  const storeAddress =
+    deal?.storeAddress || deal?.pickupAddress || deal?.location || null;
   const requiresDeliveryAddress =
     deliveryModeLabel.length > 0 && !/pick/i.test(deliveryModeLabel);
   const deliveryAddress = useMemo(() => {
@@ -409,26 +391,17 @@ export default function DealDetailsScreen({ route, navigation }) {
     return (
       <View style={styles.notFoundScreen}>
         <Text style={styles.notFoundText}>Deal not found.</Text>
-        <AppButton
+        <GradientButton
           title="Go Back"
           onPress={() => navigation.goBack()}
-          style={{
-            backgroundColor: theme.colors.text,
-            borderColor: theme.colors.text,
-            paddingVertical: 10,
-            paddingHorizontal: 16,
-            borderRadius: theme.radii.md,
-          }}
-          textStyle={{ color: theme.colors.onPrimary }}
+          style={{ borderRadius: theme.radii.md }}
         />
       </View>
     );
   }
 
   const expiryDate = toDate(deal.expiresAt || deal.expiryTime);
-  const expiryLabel = expiryDate
-    ? formatExpiresAtIST(expiryDate.getTime())
-    : "Not set";
+  const expiryLabel = expiryDate ? formatExpiryLabel(expiryDate) : null;
   const originalValue = Number(deal.originalPrice);
   const discountValue = Number(deal.discountPrice);
   const hasOriginal = Number.isFinite(originalValue) && originalValue > 0;
@@ -439,6 +412,7 @@ export default function DealDetailsScreen({ route, navigation }) {
       : null;
   const primaryPrice =
     hasDiscount ? discountValue : hasOriginal ? originalValue : null;
+  const originalDisplay = percentOff ? originalValue : null;
   const ratingCountRaw = deal?.ratingCount ?? 0;
   const ratingCount = Number.isFinite(Number(ratingCountRaw))
     ? Number(ratingCountRaw)
@@ -449,6 +423,26 @@ export default function DealDetailsScreen({ route, navigation }) {
     : null;
   const ratingLabel =
     ratingCount > 0 && ratingAvg !== null ? ratingAvg.toFixed(1) : "0.0";
+  const insights = [
+    {
+      key: "views",
+      label: "Views",
+      value: formatNumber(viewsCount),
+      icon: "eye-outline",
+    },
+    {
+      key: "favorites",
+      label: "Marked as favourite",
+      value: formatNumber(favoritesCount),
+      icon: "heart-outline",
+    },
+    {
+      key: "joined",
+      label: "Total joined",
+      value: formatNumber(joinCount),
+      icon: "people-outline",
+    },
+  ];
 
   const handleToggleJoin = () => {
     if (!dealId) return;
@@ -491,91 +485,179 @@ export default function DealDetailsScreen({ route, navigation }) {
     handleJoin();
   };
 
-  return (
-    <View style={styles.screen}>
-      <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 12) }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
+  const GradientButton = ({
+    title,
+    onPress,
+    loading,
+    disabled,
+    leftIcon,
+    rightIcon,
+    style,
+    textStyle,
+  }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={[
+        styles.gradientButtonWrap,
+        style,
+        (disabled || loading) && styles.gradientButtonDisabled,
+      ]}
+    >
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.purple]}
+        style={styles.gradientButton}
+      >
+        {loading ? (
+          <ActivityIndicator color={theme.colors.onPrimary} />
+        ) : (
+          <View style={styles.gradientButtonContent}>
+            {leftIcon ? (
+              <View style={styles.gradientButtonIconWrap}>{leftIcon}</View>
+            ) : null}
+            <Text style={[styles.gradientButtonText, textStyle]}>{title}</Text>
+            {rightIcon ? (
+              <View style={styles.gradientButtonIcon}>{rightIcon}</View>
+            ) : null}
+          </View>
+        )}
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+
+  const GradientIconButton = ({ onPress, children, disabled }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      style={styles.headerIconButton}
+    >
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.purple]}
+        style={styles.headerIconGradient}
+      >
+        <View style={styles.headerIconInner}>{children}</View>
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+
+  const headerActionContent = (
+    <>
+      <View style={styles.headerActionItem}>
+        <GradientIconButton
+          onPress={handleToggleJoin}
+          disabled={joining || leaving || (!hasJoined && thresholdReached)}
         >
-          <Ionicons name="arrow-back" size={20} color={theme.colors.onPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Deal Details</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleShareDeal} style={styles.iconButton}>
+          {joining || leaving ? (
+            <ActivityIndicator color={theme.colors.onPrimary} size="small" />
+          ) : (
             <Ionicons
-              name="share-social-outline"
-              size={18}
-              color={theme.colors.onPrimary}
+              name={hasJoined ? "exit-outline" : "person-add-outline"}
+              size={16}
+              color={hasJoined ? theme.colors.danger : theme.colors.onPrimary}
             />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate("DealChat", { dealId: deal.id, deal })
-            }
-            style={styles.iconButton}
-          >
-            <MessageCircle size={18} color={theme.colors.onPrimary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleToggleFavorite}
-            style={styles.iconButton}
-          >
-            <Heart
-              size={18}
-              color={isFavorite ? theme.colors.danger : theme.colors.onPrimary}
-              fill={isFavorite ? theme.colors.danger : "transparent"}
-            />
-          </TouchableOpacity>
-        </View>
+          )}
+        </GradientIconButton>
+        <Text style={styles.headerActionLabel}>
+          {hasJoined ? "Leave" : "Join"}
+        </Text>
       </View>
+      <GradientIconButton onPress={handleShareDeal}>
+        <Ionicons
+          name="share-social-outline"
+          size={16}
+          color={theme.colors.onPrimary}
+        />
+      </GradientIconButton>
+      <GradientIconButton
+        onPress={() => navigation.navigate("DealChat", { dealId: deal.id, deal })}
+      >
+        <MessageCircle size={16} color={theme.colors.onPrimary} />
+      </GradientIconButton>
+      <GradientIconButton onPress={handleToggleFavorite}>
+        <Heart
+          size={16}
+          color={isFavorite ? theme.colors.danger : theme.colors.onPrimary}
+          fill={isFavorite ? theme.colors.danger : "transparent"}
+        />
+      </GradientIconButton>
+    </>
+  );
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.heroCard}>
-          <View style={styles.heroAccent} />
-          <Text style={styles.heroTitle}>{deal.title || "Deal"}</Text>
-          <View style={styles.heroMetaRow}>
-            {deal.category ? (
-              <View style={styles.heroChip}>
-                <Text style={styles.heroChipText}>{deal.category}</Text>
+  return (
+    <>
+      <DealDetailsLayout
+        headerTitle="Deal Details"
+        onBack={() => navigation.goBack()}
+        actions={headerActionContent}
+        title={deal.title || "Deal"}
+        description={deal.description}
+        category={deal.category}
+        location={deal.location}
+        price={primaryPrice}
+        original={originalDisplay}
+        discountPercent={percentOff}
+        expiryLabel={expiryLabel}
+        joinedCount={joinCount}
+        targetCount={minGroupSize}
+        progressColor={theme.colors.primary}
+        variant="dashboard"
+        contentStyle={styles.scrollContent}
+      >
+        <InfoCard title="Deal Insights" style={styles.insightsCard}>
+          <View style={styles.insightsGrid}>
+            {insights.map((item) => (
+              <View key={item.key} style={styles.insightTile}>
+                <View style={styles.insightIconWrap}>
+                  <Ionicons
+                    name={item.icon}
+                    size={16}
+                    color={theme.colors.primary}
+                  />
+                </View>
+                <Text style={styles.insightValue}>{item.value}</Text>
+                <Text style={styles.insightLabel}>{item.label}</Text>
               </View>
-            ) : null}
-            {deal.location ? (
-              <View style={styles.heroChipOutline}>
-                <Text style={styles.heroChipOutlineText}>{deal.location}</Text>
-              </View>
-            ) : null}
+            ))}
           </View>
-          <View style={styles.heroPriceRow}>
-            {primaryPrice !== null ? (
-              <Text style={styles.heroPrice}>{formatINR(primaryPrice)}</Text>
-            ) : (
-              <Text style={styles.heroPriceMuted}>Price on request</Text>
-            )}
-            {hasOriginal && hasDiscount ? (
-              <Text style={styles.heroMrp}>
-                MRP {formatINR(originalValue)}
+        </InfoCard>
+
+        <InfoCard title="Logistics" style={styles.logisticsCard}>
+          <View style={styles.logisticsItem}>
+            <View style={styles.logisticsIconWrap}>
+              <Ionicons
+                name="cube-outline"
+                size={16}
+                color={theme.colors.primary}
+              />
+            </View>
+            <View style={styles.logisticsContent}>
+              <Text style={styles.logisticsLabel}>Delivery mode</Text>
+              <Text style={styles.logisticsValue}>
+                {deliveryModeLabel || "-"}
               </Text>
-            ) : null}
-            {percentOff ? (
-              <View style={styles.heroDiscountBadge}>
-                <Text style={styles.heroDiscountText}>{percentOff}% OFF</Text>
-              </View>
-            ) : null}
+            </View>
           </View>
-          <Text style={styles.heroExpiry}>Expires: {expiryLabel}</Text>
-        </View>
-
-        <View style={styles.detailsCard}>
-          <DealFormFields
-            form={detailForm}
-            errors={{}}
-            image={dealImage}
-            isReadOnly
-            isExpiryLocked
-            showImage={Boolean(dealImage)}
-          />
-        </View>
+          {isPickup ? (
+            <>
+              <View style={styles.logisticsDivider} />
+              <View style={styles.logisticsItem}>
+                <View style={styles.logisticsIconWrap}>
+                  <Ionicons
+                    name="location-outline"
+                    size={16}
+                    color={theme.colors.primary}
+                  />
+                </View>
+                <View style={styles.logisticsContent}>
+                  <Text style={styles.logisticsLabel}>Store address</Text>
+                  <Text style={styles.logisticsValue}>
+                    {storeAddress || "-"}
+                  </Text>
+                </View>
+              </View>
+            </>
+          ) : null}
+        </InfoCard>
 
         <InfoCard title="Ratings & Reviews" style={styles.reviewCard}>
           <View style={styles.reviewSummaryRow}>
@@ -625,7 +707,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                 style={styles.reviewInput}
                 multiline
               />
-              <AppButton
+              <GradientButton
                 title={
                   submittingReview
                     ? "Saving..."
@@ -685,36 +767,6 @@ export default function DealDetailsScreen({ route, navigation }) {
           </View>
         </InfoCard>
 
-        <InfoCard title="Participation" style={styles.actionCard}>
-          <AppButton
-            title={
-              hasJoined
-                ? leaving
-                  ? "Leaving..."
-                  : "Leave Deal"
-                : thresholdReached
-                  ? "Threshold Reached"
-                  : joining
-                    ? "Joining..."
-                    : "Join Deal"
-            }
-            onPress={handleToggleJoin}
-            loading={joining || leaving}
-            disabled={joining || leaving || (!hasJoined && thresholdReached)}
-            style={hasJoined ? styles.leaveButton : styles.joinButton}
-            textStyle={
-              hasJoined ? styles.leaveButtonText : styles.joinButtonText
-            }
-          />
-          <Text style={styles.actionHint}>
-            {hasJoined
-              ? "You are part of this deal."
-              : thresholdReached
-                ? "This deal already reached its minimum group size."
-                : "Join to unlock group savings."}
-          </Text>
-        </InfoCard>
-
         {requiresDeliveryAddress && hasJoined ? (
           <InfoCard title="Delivery Address" style={styles.deliveryCard}>
             {deliveryAddress ? (
@@ -753,9 +805,8 @@ export default function DealDetailsScreen({ route, navigation }) {
             )}
 
             <View style={styles.deliveryActions}>
-              <AppButton
+              <GradientButton
                 title={deliveryAddress ? "Change Address" : "Add Address"}
-                variant="secondary"
                 onPress={() => {
                   if (!addressesLoading && (!addresses || addresses.length === 0)) {
                     Alert.alert(
@@ -778,7 +829,7 @@ export default function DealDetailsScreen({ route, navigation }) {
             </View>
           </InfoCard>
         ) : null}
-      </ScrollView>
+      </DealDetailsLayout>
 
       {showAddressModal && (
         <Modal
@@ -876,16 +927,15 @@ export default function DealDetailsScreen({ route, navigation }) {
               )}
 
               <View style={styles.addressActions}>
-                <AppButton
+                <GradientButton
                   title="Add Address"
-                  variant="secondary"
                   onPress={() => {
                     setShowAddressModal(false);
                     navigation.navigate("AddressForm");
                   }}
                   style={styles.addressActionButton}
                 />
-                <AppButton
+                <GradientButton
                   title="Use Selected Address"
                   onPress={handleConfirmAddress}
                   disabled={!selectedAddressId}
@@ -919,158 +969,170 @@ export default function DealDetailsScreen({ route, navigation }) {
           </View>
         </Modal>
       )}
-    </View>
+    </>
   );
 }
 
 const createStyles = (theme) =>
   StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: theme.colors.dashboardBg,
-  },
-  headerBar: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.onPrimarySoft,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.onPrimarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 0,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 22,
-    fontWeight: "800",
-    color: theme.colors.onPrimary,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.onPrimarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 0,
-  },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 56,
     gap: 20,
   },
-  heroCard: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 24,
-    padding: 20,
+  gradientButtonWrap: {
+    borderRadius: 20,
     overflow: "hidden",
     ...theme.shadow.card,
   },
-  heroAccent: {
-    width: 56,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: theme.colors.onPrimary,
-    opacity: 0.7,
-    marginBottom: 12,
+  gradientButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  heroTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: theme.colors.onPrimary,
-  },
-  heroMetaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
-  },
-  heroChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: theme.colors.onPrimarySoft,
-  },
-  heroChipText: {
-    color: theme.colors.onPrimary,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  heroChipOutline: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-    backgroundColor: theme.colors.onPrimaryFaint,
-  },
-  heroChipOutlineText: {
-    color: theme.colors.onPrimary,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  heroPriceRow: {
+  gradientButtonContent: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: 10,
-    marginTop: 14,
+    justifyContent: "center",
+    gap: 12,
   },
-  heroPrice: {
-    fontSize: 22,
-    fontWeight: "800",
+  gradientButtonText: {
     color: theme.colors.onPrimary,
-  },
-  heroPriceMuted: {
+    fontWeight: "800",
     fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.onPrimarySoft,
   },
-  heroMrp: {
-    fontSize: 12,
+  gradientButtonIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gradientButtonIcon: {
+    marginHorizontal: 6,
+  },
+  gradientButtonDisabled: {
+    opacity: 0.65,
+  },
+  headerIconButton: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  headerIconGradient: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerIconInner: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerActionItem: {
+    alignItems: "center",
+    gap: 4,
+  },
+  headerActionLabel: {
+    fontSize: 9,
+    fontWeight: "700",
     color: theme.colors.onPrimaryMuted,
-    textDecorationLine: "line-through",
   },
-  heroDiscountBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: theme.colors.warningBright,
-  },
-  heroDiscountText: {
-    color: theme.colors.onPrimary,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  heroExpiry: {
-    marginTop: 12,
-    fontSize: 12,
-    color: theme.colors.onPrimaryMuted,
-  },
-  detailsCard: {
-    backgroundColor: theme.colors.background,
+  insightsCard: {
+    backgroundColor: theme.colors.surfaceGlass,
     borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
     ...theme.shadow.card,
+  },
+  insightsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  insightTile: {
+    flexBasis: "48%",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.infoBorder,
+    backgroundColor: theme.colors.surfaceLighter,
+    minHeight: 84,
+    justifyContent: "space-between",
+  },
+  insightIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.infoSoft,
+    borderWidth: 1,
+    borderColor: theme.colors.infoBorder,
+  },
+  insightValue: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+  insightLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  logisticsCard: {
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  logisticsItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 6,
+  },
+  logisticsIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.infoSoft,
+    borderWidth: 1,
+    borderColor: theme.colors.infoBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logisticsContent: {
+    flex: 1,
+    gap: 4,
+  },
+  logisticsDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    opacity: 0.6,
+    marginVertical: 8,
+  },
+  logisticsLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  logisticsValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.text,
   },
   reviewCard: {
     backgroundColor: theme.colors.background,
@@ -1128,9 +1190,7 @@ const createStyles = (theme) =>
     textAlignVertical: "top",
   },
   reviewSubmitButton: {
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
+    borderRadius: theme.radii.lg,
   },
   reviewList: {
     marginTop: 16,
@@ -1203,40 +1263,6 @@ const createStyles = (theme) =>
     color: theme.colors.textMuted,
     fontWeight: "600",
     marginBottom: 16,
-  },
-  actionCard: {
-    backgroundColor: theme.colors.infoSoft,
-    borderColor: theme.colors.primary,
-    borderWidth: 1,
-    ...theme.shadow.card,
-  },
-  joinButton: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-    borderRadius: theme.radii.md,
-    shadowColor: theme.colors.primary,
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  joinButtonText: {
-    color: theme.colors.onPrimary,
-    fontWeight: "700",
-  },
-  leaveButton: {
-    backgroundColor: theme.colors.amberSoft,
-    borderColor: theme.colors.amberBorder,
-    borderRadius: theme.radii.md,
-  },
-  leaveButtonText: {
-    color: theme.colors.amberText,
-    fontWeight: "700",
-  },
-  actionHint: {
-    marginTop: 8,
-    color: theme.colors.textMuted,
-    fontSize: 12,
   },
   deliveryCard: {
     backgroundColor: theme.colors.background,

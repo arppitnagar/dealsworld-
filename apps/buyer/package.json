@@ -1,5 +1,12 @@
 {
+  "name": "dealsworld-buyer",
+  "private": true,
   "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "web": "expo start --web",
+    "admin:web": "echo skip"
+  },
   "dependencies": {
     "@dealsworld/shared": "file:../../packages/shared",
     "@react-native-async-storage/async-storage": "^2.2.0",

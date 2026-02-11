@@ -21,6 +21,7 @@ import {
   updatePassword,
 } from "firebase/auth";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getProfileBaseStyles } from "../styles/profileStyles";
 
 export default function ChangePasswordScreen({ navigation }) {
   const { theme } = useTheme();
@@ -189,77 +190,10 @@ export default function ChangePasswordScreen({ navigation }) {
   );
 }
 
-const createStyles = (theme) =>
-  StyleSheet.create({
-    screen: {
-      flex: 1,
-      backgroundColor: theme.colors.dashboardBg,
-    },
-    headerBar: {
-      backgroundColor: theme.colors.primary,
-      paddingHorizontal: 16,
-      paddingBottom: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.onPrimarySoft,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
-    backButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: theme.colors.onPrimarySoft,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 0,
-    },
-    headerTitle: {
-      flex: 1,
-      textAlign: "center",
-      fontSize: 20,
-      fontWeight: "800",
-      color: theme.colors.onPrimary,
-    },
-    scrollContent: {
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 32,
-      gap: 18,
-    },
-    heroCard: {
-      backgroundColor: theme.colors.primary,
-      borderRadius: 24,
-      padding: 18,
-      overflow: "hidden",
-      ...theme.shadow.card,
-    },
-    heroAccent: {
-      width: 56,
-      height: 6,
-      borderRadius: 999,
-      backgroundColor: theme.colors.onPrimary,
-      opacity: 0.7,
-      marginBottom: 10,
-    },
-    heroTitle: {
-      fontSize: 18,
-      fontWeight: "800",
-      color: theme.colors.onPrimary,
-    },
-    heroSubtitle: {
-      fontSize: 12,
-      marginTop: 6,
-      color: theme.colors.onPrimaryMuted,
-    },
-    card: {
-      backgroundColor: theme.colors.background,
-      borderRadius: 20,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      ...theme.shadow.card,
-    },
+const createStyles = (theme) => {
+  const base = getProfileBaseStyles(theme);
+  return StyleSheet.create({
+    ...base,
     inputSpacing: {
       marginTop: 0,
     },
@@ -272,3 +206,4 @@ const createStyles = (theme) =>
       marginTop: 16,
     },
   });
+};

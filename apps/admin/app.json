@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "AdminBuddy",
+    "slug": "adminbuddy",
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

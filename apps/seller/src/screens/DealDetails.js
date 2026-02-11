@@ -8,22 +8,21 @@ import {
   Alert,
   Dimensions,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import Svg, { Path } from "react-native-svg";
 import { db } from "../config/firebase";
 import { doc, updateDoc, onSnapshot } from "firebase/firestore";
 import {
-  StatsGrid,
-  MetricsGrid,
   getStatusColor,
   getStatusLabel,
-  ImageHeader,
   DetailRow,
-  CardHeader,
   toDate,
   formatExpiryLabel,
   formatCountdown,
   theme,
   SkeletonBlock,
-  DealDetailsView,
+  DealDetailsLayout,
+  InfoCard,
 } from "@dealsworld/shared";
 
 const { width } = Dimensions.get("window");
@@ -42,31 +41,113 @@ export default function DealDetails({ route, navigation }) {
     0;
   const viewsCount = safeGet(deal, "viewsCount") ?? safeGet(deal, "views") ?? null;
   const leftCount = safeGet(deal, "leftUsers") ?? safeGet(deal, "leftCount") ?? null;
-  const avgJoinTimeMs = safeGet(deal, "avgJoinTimeMs");
-  const avgJoinTimeSeconds =
-    safeGet(deal, "avgJoinTimeSeconds") ??
-    safeGet(deal, "avgJoinTime") ??
-    (avgJoinTimeMs ? Math.round(avgJoinTimeMs / 1000) : null);
+  const favoritesCountRaw =
+    safeGet(deal, "favoritesCount") ?? safeGet(deal, "favouritesCount") ?? 0;
+  const favoritesCount = Number.isFinite(Number(favoritesCountRaw))
+    ? Number(favoritesCountRaw)
+    : 0;
   const conversionRate =
     viewsCount && viewsCount > 0 ? (joinsCount / viewsCount) * 100 : null;
   const dropOffRate =
     leftCount !== null && joinsCount > 0 ? (leftCount / joinsCount) * 100 : null;
   const createdAtDate = toDate(safeGet(deal, "createdAt"));
+  const approvedAtDate = toDate(deal?.approval?.approvedAt || deal?.approvedAt);
+  const activeStartDate = approvedAtDate || createdAtDate;
   const thresholdReachedDate = toDate(safeGet(deal, "thresholdReachedAt"));
   const timeToThresholdSeconds =
-    createdAtDate && thresholdReachedDate
-      ? Math.round((thresholdReachedDate.getTime() - createdAtDate.getTime()) / 1000)
+    activeStartDate && thresholdReachedDate
+      ? Math.round((thresholdReachedDate.getTime() - activeStartDate.getTime()) / 1000)
       : null;
   const target = safeGet(deal, "minGroupSize") || 1;
-  const progress = Math.min(joinsCount / target, 1);
-  const accentColor = getStatusColor(safeGet(deal, "status"));
+  const lifecycleStatus = getDealLifecycleStatus(deal);
+  const accentColor = getStatusColor(lifecycleStatus);
 
   const expiryDate = toDate(safeGet(deal, "expiresAt"));
   const countdown =
-    safeGet(deal, "status") === "active" && expiryDate
+    lifecycleStatus === "active" && expiryDate
       ? formatCountdown(expiryDate.getTime() - now)
       : null;
   const expiryLabel = expiryDate ? formatExpiryLabel(expiryDate, now) : null;
+  const statusLabel =
+    lifecycleStatus === "pending"
+      ? "Pending"
+      : getStatusLabel(lifecycleStatus);
+  const priceValue =
+    safeGet(deal, "discountPrice") ?? safeGet(deal, "dealPrice");
+  const originalValue = safeGet(deal, "originalPrice");
+  const priceNumber = Number.isFinite(Number(priceValue))
+    ? Number(priceValue)
+    : null;
+  const originalNumber = Number.isFinite(Number(originalValue))
+    ? Number(originalValue)
+    : null;
+  const discountPercent =
+    originalNumber && priceNumber && originalNumber > priceNumber
+      ? Math.round(((originalNumber - priceNumber) / originalNumber) * 100)
+      : null;
+  const originalDisplay = discountPercent ? originalNumber : null;
+  const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
+  const isPickup = /pick/i.test(deliveryModeLabel);
+  const storeAddress =
+    deal?.storeAddress || deal?.pickupAddress || deal?.location || null;
+  const sparklineWidth = 56;
+  const sparklineHeight = 18;
+  const buildSparklinePath = (points, width, height) => {
+    if (!points || points.length === 0) return "";
+    const step = width / Math.max(points.length - 1, 1);
+    return points
+      .map((value, index) => {
+        const x = index * step;
+        const y = height - value * height;
+        return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+      })
+      .join(" ");
+  };
+  const insights = [
+    {
+      key: "views",
+      label: "Views",
+      value: viewsCount !== null ? formatNumber(viewsCount) : "-",
+      tone: "info",
+      icon: "eye-outline",
+      sparkline: [0.2, 0.35, 0.28, 0.52, 0.48, 0.7, 0.6, 0.82],
+    },
+    {
+      key: "favorites",
+      label: "Marked as favourite",
+      value: formatNumber(favoritesCount),
+      tone: "accent",
+      icon: "heart",
+      sparkline: [0.12, 0.2, 0.18, 0.32, 0.26, 0.4, 0.36, 0.5],
+    },
+    {
+      key: "conversion",
+      label: "Conversion",
+      value: conversionRate !== null ? `${conversionRate.toFixed(1)}%` : "-",
+      tone: "success",
+      icon: "analytics-outline",
+      sparkline: [0.05, 0.12, 0.1, 0.22, 0.18, 0.3, 0.26, 0.38],
+    },
+    {
+      key: "threshold",
+      label: "Time to reach minimum buyer",
+      value:
+        timeToThresholdSeconds !== null
+          ? formatDuration(timeToThresholdSeconds)
+          : "-",
+      tone: "warning",
+      icon: "timer-outline",
+      sparkline: [0.4, 0.35, 0.32, 0.3, 0.26, 0.22, 0.18, 0.15],
+    },
+    {
+      key: "dropoff",
+      label: "Drop-off %",
+      value: dropOffRate !== null ? `${dropOffRate.toFixed(1)}%` : "-",
+      tone: "danger",
+      icon: "trending-down-outline",
+      sparkline: [0.3, 0.34, 0.28, 0.4, 0.36, 0.42, 0.38, 0.46],
+    },
+  ];
 
   useEffect(() => {
     if (!initialDeal?.id) return;
@@ -129,143 +210,152 @@ export default function DealDetails({ route, navigation }) {
     );
   }
 
+  const headerActions = [
+    {
+      key: "chat",
+      onPress: () => navigation.navigate("DealChat", { deal }),
+      icon: (
+        <Ionicons
+          name="chatbubble-ellipses-outline"
+          size={18}
+          color={theme.colors.onPrimary}
+        />
+      ),
+    },
+    {
+      key: "edit",
+      onPress: () => navigation.navigate("CreateDeal", { deal }),
+      icon: (
+        <Ionicons
+          name={lifecycleStatus === "completed" ? "eye-outline" : "create-outline"}
+          size={18}
+          color={theme.colors.onPrimary}
+        />
+      ),
+    },
+  ];
+
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <ImageHeader
-          imageUri={deal.image}
-          height={280}
-          onBack={() => navigation.goBack()}
-        />
-
-        <View style={styles.content}>
-          <DealDetailsView
-            deal={deal}
-            statusLabel={
-              String(safeGet(deal, "status") || "").toLowerCase() === "completed"
-                ? null
-                : getStatusLabel(safeGet(deal, "status"))
-            }
-            statusColor={accentColor}
-            location={deal.location || "Location"}
-            expiryLabel={expiryLabel}
-            price={safeGet(deal, "discountPrice") ?? safeGet(deal, "dealPrice")}
-            original={safeGet(deal, "originalPrice")}
-            meta={`${joinsCount} joined · Target ${target}`}
-            showDescription={false}
-            onChat={() => navigation.navigate("DealChat", { deal })}
-            onEdit={() => navigation.navigate("CreateDeal", { deal })}
-            editLabel={safeGet(deal, "status") === "completed" ? "View" : "Edit"}
-            editIcon={
-              safeGet(deal, "status") === "completed"
-                ? "eye-outline"
-                : "create-outline"
-            }
-          />
-
-          <StatsGrid
-            items={[
-              {
-                key: "joins",
-                title: "Current Joins",
-                value: <Text style={styles.statValue}>{joinsCount}</Text>,
-              },
-              {
-                key: "target",
-                title: "Target",
-                value: <Text style={styles.statValue}>{target}</Text>,
-              },
-            ]}
-          />
-
-          <View style={styles.insightsSection}>
-            <CardHeader title="Insights" />
-            <MetricsGrid
-              items={[
-                {
-                  key: "views",
-                  label: "Views",
-                  value: viewsCount !== null ? formatNumber(viewsCount) : "—",
-                },
-                {
-                  key: "conversion",
-                  label: "Conversion",
-                  value:
-                    conversionRate !== null
-                      ? `${conversionRate.toFixed(1)}%`
-                      : "—",
-                },
-                {
-                  key: "avgJoin",
-                  label: "Avg Join Time",
-                  value:
-                    avgJoinTimeSeconds !== null
-                      ? formatDuration(avgJoinTimeSeconds)
-                      : "—",
-                },
-                {
-                  key: "threshold",
-                  label: "Time to Threshold",
-                  value:
-                    timeToThresholdSeconds !== null
-                      ? formatDuration(timeToThresholdSeconds)
-                      : "—",
-                },
-                {
-                  key: "dropoff",
-                  label: "Drop-off Rate",
-                  value:
-                    dropOffRate !== null
-                      ? `${dropOffRate.toFixed(1)}%`
-                      : "—",
-                },
-              ]}
-            />
+      <DealDetailsLayout
+        headerTitle="Deal Details"
+        onBack={() => navigation.goBack()}
+        actions={headerActions}
+        title={deal.title || "Deal"}
+        description={deal.description}
+        category={deal.category}
+        location={deal.location}
+        price={priceNumber}
+        original={originalDisplay}
+        discountPercent={discountPercent}
+        expiryLabel={expiryLabel}
+        joinedCount={joinsCount}
+        targetCount={target}
+        progressColor={accentColor}
+        statusLabel={lifecycleStatus === "completed" ? null : statusLabel}
+        statusColor={accentColor}
+        variant="dashboard"
+        contentStyle={styles.scrollContent}
+      >
+        <InfoCard title="Deal Insights" style={styles.insightsCard}>
+          <View style={styles.insightsGrid}>
+            {insights.map((item) => (
+              <View
+                key={item.key}
+                style={[
+                  styles.insightTile,
+                  styles[`insightTile_${item.tone}`],
+                ]}
+              >
+                <View style={styles.insightTileHeader}>
+                  <View
+                    style={[
+                      styles.insightIconWrap,
+                      styles[`insightIconWrap_${item.tone}`],
+                    ]}
+                  >
+                    <Ionicons
+                      name={item.icon}
+                      size={16}
+                      color={styles[`insightIcon_${item.tone}`].color}
+                    />
+                  </View>
+                  <Svg
+                    width={sparklineWidth}
+                    height={sparklineHeight}
+                    style={styles.sparkline}
+                  >
+                    <Path
+                      d={buildSparklinePath(
+                        item.sparkline,
+                        sparklineWidth,
+                        sparklineHeight,
+                      )}
+                      stroke={styles[`insightIcon_${item.tone}`].color}
+                      strokeWidth={2}
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                </View>
+                <Text style={styles.insightValue}>{item.value}</Text>
+                <Text style={styles.insightLabel}>{item.label}</Text>
+              </View>
+            ))}
           </View>
+        </InfoCard>
 
-          <View style={styles.progressSection}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressTitle}>Campaign Progress</Text>
-              <Text style={[styles.progressPercent, { color: accentColor }]}>
-                {Math.round(progress * 100)}%
+        <InfoCard title="Logistics" style={styles.logisticsCard}>
+          <View style={styles.logisticsItem}>
+            <View style={styles.logisticsIconWrap}>
+              <Ionicons
+                name="cube-outline"
+                size={16}
+                color={theme.colors.primary}
+              />
+            </View>
+            <View style={styles.logisticsContent}>
+              <Text style={styles.logisticsLabel}>Delivery mode</Text>
+              <Text style={styles.logisticsValue}>
+                {deliveryModeLabel || "-"}
               </Text>
             </View>
-            <View style={styles.progressBarBg}>
-              <View
-                style={[
-                  styles.progressBarFill,
-                  { width: `${progress * 100}%`, backgroundColor: accentColor },
-                ]}
-              />
-            </View>
-            {countdown && (
-              <DetailRow
-                icon="time-outline"
-                label="Ends"
-                value={countdown}
-                color={accentColor}
-              />
-            )}
-            {expiryLabel && (
-              <DetailRow
-                icon="calendar-outline"
-                label="Expiry"
-                value={expiryLabel}
-                color={accentColor}
-              />
-            )}
           </View>
+          {isPickup ? (
+            <>
+              <View style={styles.logisticsDivider} />
+              <View style={styles.logisticsItem}>
+                <View style={styles.logisticsIconWrap}>
+                  <Ionicons
+                    name="location-outline"
+                    size={16}
+                    color={theme.colors.primary}
+                  />
+                </View>
+                <View style={styles.logisticsContent}>
+                  <Text style={styles.logisticsLabel}>Store address</Text>
+                  <Text style={styles.logisticsValue}>
+                    {storeAddress || "-"}
+                  </Text>
+                </View>
+              </View>
+            </>
+          ) : null}
+        </InfoCard>
 
-          <View style={styles.descriptionSection}>
-            <CardHeader title="Description" />
-            <Text style={styles.descriptionText}>
-              {deal.description || "No description provided for this deal."}
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
+        {countdown ? (
+          <DetailRow
+            icon="time-outline"
+            label="Ends"
+            value={countdown}
+            color={accentColor}
+          />
+        ) : null}
 
-      {safeGet(deal, "status") === "active" && (
+      </DealDetailsLayout>
+
+      {lifecycleStatus === "active" && (
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.endBtn}
@@ -283,35 +373,155 @@ export default function DealDetails({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  content: {
-    padding: 20,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    marginTop: -30,
-    backgroundColor: theme.colors.background,
+  container: { flex: 1, backgroundColor: theme.colors.dashboardBg },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 120,
+    gap: 20,
   },
-  insightsSection: {
-    marginBottom: 24,
+  insightsCard: {
+    backgroundColor: theme.colors.surfaceGlass,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadow.card,
   },
-  statValue: { fontSize: 20, fontWeight: "800", color: theme.colors.text },
-  progressSection: { marginBottom: 30 },
-  progressHeader: {
+  insightsGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  insightTile: {
+    flexBasis: "48%",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    minHeight: 92,
     justifyContent: "space-between",
-    marginBottom: 10,
   },
-  progressTitle: { fontWeight: "700", color: theme.colors.text },
-  progressPercent: { fontWeight: "800", color: theme.colors.text },
-  progressBarBg: {
-    height: 12,
-    backgroundColor: theme.colors.surfaceLight,
-    borderRadius: 6,
-    overflow: "hidden",
+  insightTileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
-  progressBarFill: { height: "100%", backgroundColor: theme.colors.primary },
-  descriptionSection: { marginBottom: 100 },
-  descriptionText: { lineHeight: 22, color: theme.colors.textMuted, fontSize: 15 },
+  sparkline: {
+    opacity: 0.9,
+  },
+  insightIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  insightLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  insightValue: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+  insightTile_info: {
+    backgroundColor: theme.colors.surfaceLighter,
+    borderColor: theme.colors.infoBorder,
+  },
+  insightIconWrap_info: {
+    backgroundColor: theme.colors.infoSoft,
+  },
+  insightIcon_info: {
+    color: theme.colors.primary,
+  },
+  insightTile_accent: {
+    backgroundColor: theme.colors.surfaceLighter,
+    borderColor: theme.colors.purple,
+  },
+  insightIconWrap_accent: {
+    backgroundColor: theme.colors.purpleSoft,
+  },
+  insightIcon_accent: {
+    color: theme.colors.purple,
+  },
+  insightTile_success: {
+    backgroundColor: theme.colors.surfaceLighter,
+    borderColor: theme.colors.success,
+  },
+  insightIconWrap_success: {
+    backgroundColor: theme.colors.successSoft,
+  },
+  insightIcon_success: {
+    color: theme.colors.successDark,
+  },
+  insightTile_warning: {
+    backgroundColor: theme.colors.surfaceLighter,
+    borderColor: theme.colors.amberBorder,
+  },
+  insightIconWrap_warning: {
+    backgroundColor: theme.colors.amberSoft,
+  },
+  insightIcon_warning: {
+    color: theme.colors.amberText,
+  },
+  insightTile_danger: {
+    backgroundColor: theme.colors.surfaceLighter,
+    borderColor: theme.colors.dangerBorder,
+  },
+  insightIconWrap_danger: {
+    backgroundColor: theme.colors.dangerSoftLight,
+  },
+  insightIcon_danger: {
+    color: theme.colors.dangerDark,
+  },
+  logisticsCard: {
+    backgroundColor: theme.colors.background,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadow.card,
+  },
+  logisticsItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 6,
+  },
+  logisticsIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.infoSoft,
+    borderWidth: 1,
+    borderColor: theme.colors.infoBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logisticsContent: {
+    flex: 1,
+    gap: 4,
+  },
+  logisticsDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    opacity: 0.6,
+    marginVertical: 8,
+  },
+  logisticsLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  logisticsValue: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
   footer: {
     position: "absolute",
     bottom: 0,
@@ -351,6 +561,19 @@ function safeGet(obj, key) {
   return obj[key];
 }
 
+function getDealLifecycleStatus(deal) {
+  const approvalStatus = String(deal?.approvalStatus || "").toLowerCase();
+  const approved = deal?.approved === true;
+  const status = String(deal?.status || "").toLowerCase();
+
+  if (status === "completed") return "completed";
+  if (approvalStatus === "rejected" || status === "rejected") return "rejected";
+  if (approvalStatus === "pending") return "pending";
+  if (approvalStatus === "approved") return "active";
+  if (approved || status === "active") return "active";
+  return "pending";
+}
+
 function normalizeDeal(deal) {
   if (!deal) return {};
   const normalized = { ...deal };
@@ -377,3 +600,10 @@ function formatDuration(seconds) {
   return `${mins}m`;
 }
 
+function formatNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0";
+  if (numeric >= 1000000) return `${(numeric / 1000000).toFixed(1)}M`;
+  if (numeric >= 1000) return `${(numeric / 1000).toFixed(1)}K`;
+  return String(Math.round(numeric));
+}

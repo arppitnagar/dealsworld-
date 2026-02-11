@@ -107,9 +107,9 @@ const DealCard = ({
   const dealImage = deal?.imageUrl || deal?.image || null;
   const dealType = getDealType({ isJoined, isFavorite, isViewed, isHot });
   const badgeLabel = deal?.location ? String(deal.location) : null;
-  const vendorLabel = deal?.vendorName || deal?.vendorid || "DealBuddy";
+  const sellerLabel = deal?.vendorName || deal?.sellerId || "Deal Buddy";
   const endsInLabel = formatEndsIn(expiryMs);
-  const showSubtitle = Boolean(vendorLabel || endsInLabel);
+  const showSubtitle = Boolean(sellerLabel || endsInLabel);
 
   return (
     <TouchableOpacity
@@ -122,7 +122,11 @@ const DealCard = ({
           <Image source={{ uri: dealImage }} style={styles.cardImage} />
         ) : (
           <View style={styles.cardImagePlaceholder}>
-            <Ionicons name="image-outline" size={26} color={theme.colors.textMuted} />
+            <Ionicons
+              name="image-outline"
+              size={26}
+              color={theme.colors.textMuted}
+            />
           </View>
         )}
         {discountPercent ? (
@@ -139,12 +143,7 @@ const DealCard = ({
           </View>
         ) : null}
         {badgeLabel ? (
-          <View
-            style={[
-              styles.cardBadge,
-              getDealBadgeStyle(dealType, theme),
-            ]}
-          >
+          <View style={[styles.cardBadge, getDealBadgeStyle(dealType, theme)]}>
             <Text style={styles.cardBadgeText}>{badgeLabel}</Text>
           </View>
         ) : null}
@@ -172,7 +171,7 @@ const DealCard = ({
         {showSubtitle ? (
           <View style={styles.cardSubtitleRow}>
             <Text style={styles.cardSubtitle} numberOfLines={1}>
-              {vendorLabel}
+              {sellerLabel}
             </Text>
             {endsInLabel ? (
               <Text style={styles.cardExpiry} numberOfLines={1}>
@@ -218,7 +217,10 @@ const DealCard = ({
             <View
               style={[
                 styles.progressFill,
-                { width: `${Math.round(progressRatio * 100)}%`, backgroundColor: progressColor },
+                {
+                  width: `${Math.round(progressRatio * 100)}%`,
+                  backgroundColor: progressColor,
+                },
               ]}
             />
           </View>
@@ -227,7 +229,9 @@ const DealCard = ({
         <View style={styles.cardActionRow}>
           <TouchableOpacity
             style={styles.cardActionBtn}
-            onPress={() => navigation.navigate("DealDetails", { dealId: deal.id })}
+            onPress={() =>
+              navigation.navigate("DealDetails", { dealId: deal.id })
+            }
           >
             <Text style={styles.cardActionText}>View Deal</Text>
           </TouchableOpacity>
@@ -254,7 +258,10 @@ const FilterChip = ({
       style={[
         styles.filterChip,
         isSelected ? styles.filterChipActive : styles.filterChipIdle,
-        isSelected && { backgroundColor: accentColor, borderColor: accentColor },
+        isSelected && {
+          backgroundColor: accentColor,
+          borderColor: accentColor,
+        },
       ]}
       onPress={onPress}
       accessibilityRole="button"
@@ -316,6 +323,7 @@ export default function HomeScreen({ navigation }) {
   const dealNotifyRef = useRef(0);
   const dealNotifyBusyRef = useRef(false);
   const prevSearchRef = useRef(searchText);
+  const greetingLabel = getGreetingLabel(now);
 
   const handleToggleFavorite = (dealId) => {
     if (!dealId) return;
@@ -373,12 +381,7 @@ export default function HomeScreen({ navigation }) {
     if (newDeals.length === 0) return;
     dealNotifyBusyRef.current = true;
 
-    const notificationsRef = collection(
-      db,
-      "users",
-      user.uid,
-      "notifications",
-    );
+    const notificationsRef = collection(db, "users", user.uid, "notifications");
 
     const maxCreated = newDeals[newDeals.length - 1].createdMs;
     dealNotifyRef.current = Math.max(dealNotifyRef.current, maxCreated);
@@ -419,8 +422,7 @@ export default function HomeScreen({ navigation }) {
     const isSearching = normalizedQuery.length > 0;
     return deals.filter((deal) => {
       const expiryMs = getExpiryMs(deal);
-      const isExpired =
-        typeof expiryMs === "number" ? expiryMs <= now : true;
+      const isExpired = typeof expiryMs === "number" ? expiryMs <= now : true;
       const isCompleted =
         String(deal?.status || "").toLowerCase() === "completed";
       const isViewed = viewedIds.has(deal.id);
@@ -479,9 +481,7 @@ export default function HomeScreen({ navigation }) {
   })();
 
   if (isLoading || dealStateLoading) {
-    return (
-      <DealBuddyLoadingScreen label="Loading deals..." />
-    );
+    return <DealBuddyLoadingScreen label="Loading deals..." />;
   }
 
   return (
@@ -500,7 +500,7 @@ export default function HomeScreen({ navigation }) {
               <UserCircle size={22} color={theme.colors.onPrimary} />
             </TouchableOpacity>
             <View>
-              <Text style={styles.greetingLabel}>Good morning,</Text>
+              <Text style={styles.greetingLabel}>{greetingLabel}</Text>
               <Text style={styles.greetingName}>
                 {profile?.displayName || "Buyer"}
               </Text>
@@ -569,27 +569,22 @@ export default function HomeScreen({ navigation }) {
                   ? getNewCount(deals, favoriteIds, viewedIds, joinedIds)
                   : filter.key === "hot"
                     ? getHotCount(deals)
-                  : filter.key === "viewed"
-                    ? getViewedCount(
-                        deals,
-                        favoriteIds,
-                        viewedIds,
-                        joinedIds,
-                      )
-                    : filter.key === "favourite"
-                      ? getFavoriteCount(deals, favoriteIds, joinedIds)
-                      : getMyDealsCount(deals, joinedIds);
+                    : filter.key === "viewed"
+                      ? getViewedCount(deals, favoriteIds, viewedIds, joinedIds)
+                      : filter.key === "favourite"
+                        ? getFavoriteCount(deals, favoriteIds, joinedIds)
+                        : getMyDealsCount(deals, joinedIds);
 
               const accentColor =
                 filter.key === "new"
                   ? theme.colors.warningBright
                   : filter.key === "hot"
                     ? theme.colors.purple
-                  : filter.key === "viewed"
-                    ? theme.colors.primary
-                    : filter.key === "favourite"
-                      ? theme.colors.danger
-                      : theme.colors.success;
+                    : filter.key === "viewed"
+                      ? theme.colors.primary
+                      : filter.key === "favourite"
+                        ? theme.colors.danger
+                        : theme.colors.success;
 
               return (
                 <FilterChip
@@ -629,25 +624,25 @@ export default function HomeScreen({ navigation }) {
 
           {filteredDeals?.length > 0 ? (
             filteredDeals.map((deal) => (
-                <DealCard
-                  key={deal.id}
-                  deal={deal}
-                  navigation={navigation}
-                  isFavorite={favoriteIds.has(deal.id)}
-                  isJoined={joinedIds.has(deal.id)}
-                  isViewed={viewedIds.has(deal.id)}
-                  isHot={isHotDeal(deal)}
-                  onToggleFavorite={handleToggleFavorite}
-                  styles={styles}
-                  theme={theme}
-                  accentColor={getDealAccentColor({
-                    isJoined: joinedIds.has(deal.id),
-                    isFavorite: favoriteIds.has(deal.id),
-                    isViewed: viewedIds.has(deal.id),
-                    isHot: isHotDeal(deal),
-                    theme,
-                  })}
-                />
+              <DealCard
+                key={deal.id}
+                deal={deal}
+                navigation={navigation}
+                isFavorite={favoriteIds.has(deal.id)}
+                isJoined={joinedIds.has(deal.id)}
+                isViewed={viewedIds.has(deal.id)}
+                isHot={isHotDeal(deal)}
+                onToggleFavorite={handleToggleFavorite}
+                styles={styles}
+                theme={theme}
+                accentColor={getDealAccentColor({
+                  isJoined: joinedIds.has(deal.id),
+                  isFavorite: favoriteIds.has(deal.id),
+                  isViewed: viewedIds.has(deal.id),
+                  isHot: isHotDeal(deal),
+                  theme,
+                })}
+              />
             ))
           ) : (
             <View style={styles.emptyWrap}>
@@ -918,6 +913,13 @@ function formatCount(value) {
   return `${numeric}`;
 }
 
+function getGreetingLabel(nowMs) {
+  const hour = new Date(nowMs).getHours();
+  if (hour < 12) return "Good morning,";
+  if (hour < 18) return "Good afternoon,";
+  return "Good evening,";
+}
+
 function getDealAccentColor({ isJoined, isFavorite, isViewed, isHot, theme }) {
   if (!theme?.colors) return null;
   if (isJoined) return theme.colors.success;
@@ -929,404 +931,404 @@ function getDealAccentColor({ isJoined, isFavorite, isViewed, isHot, theme }) {
 
 const createStyles = (theme, cardStyles) =>
   StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  header: {
-    paddingTop: 16,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 36,
-    borderBottomRightRadius: 36,
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  greetingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  avatarWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.onPrimarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-  },
-  greetingLabel: {
-    color: theme.colors.onPrimaryMuted,
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  greetingName: {
-    fontWeight: "800",
-    color: theme.colors.onPrimary,
-    marginTop: 2,
-  },
-  headerIconBtn: {
-    backgroundColor: theme.colors.onPrimarySoft,
-    padding: 10,
-    borderRadius: 999,
-    position: "relative",
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-  },
-  badgeDot: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.danger,
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimary,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  searchRow: {
-    marginTop: 16,
-  },
-  searchInputWrap: {
-    position: "relative",
-  },
-  searchInputContainer: {
-    marginTop: 0,
-  },
-  searchInput: {
-    backgroundColor: theme.colors.onPrimarySoft,
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-    color: theme.colors.onPrimary,
-    borderRadius: 18,
-    paddingRight: 36,
-  },
-  clearSearchBtn: {
-    position: "absolute",
-    right: 12,
-    top: "50%",
-    marginTop: -12,
-    width: 24,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  clearSearchCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: theme.colors.onPrimarySoft,
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  debugChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: theme.colors.onPrimarySoft,
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-  },
-  debugChipText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: theme.colors.onPrimary,
-  },
-  filterWrap: {
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    marginRight: 10,
-    borderWidth: 1,
-    minWidth: 56,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterChipActive: {
-    backgroundColor: theme.colors.warningBright,
-    borderColor: theme.colors.warningBright,
-  },
-  filterChipIdle: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-  },
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  filterChipTextActive: {
-    color: theme.colors.onPrimary,
-  },
-  filterChipTextIdle: {
-    color: theme.colors.textMuted,
-  },
-  filterChipIconWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterChipBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-    borderWidth: 1,
-    marginTop: 6,
-  },
-  filterChipBadgeActive: {
-    backgroundColor: theme.colors.onPrimary,
-    borderColor: theme.colors.onPrimary,
-  },
-  filterChipBadgeIdle: {
-    backgroundColor: theme.colors.surfaceLight,
-    borderColor: theme.colors.border,
-  },
-  filterChipBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  filterChipBadgeTextActive: {
-    color: theme.colors.primary,
-  },
-  filterChipBadgeTextIdle: {
-    color: theme.colors.textMuted,
-  },
-  listWrap: {
-    paddingHorizontal: 20,
-    paddingTop: 4,
-    paddingBottom: 32,
-  },
-  seeAllText: {
-    color: theme.colors.primary,
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  emptyWrap: {
-    paddingVertical: 80,
-    alignItems: "center",
-  },
-  card: {
-    marginBottom: 20,
-    overflow: "hidden",
-    backgroundColor: theme.colors.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...cardStyles.shadow,
-  },
-  cardImageWrap: {
-    height: 190,
-    backgroundColor: theme.colors.surfaceLight,
-    overflow: "hidden",
-  },
-  cardImage: {
-    width: "100%",
-    height: "100%",
-  },
-  cardImagePlaceholder: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.surfaceLight,
-  },
-  cardBadge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    backgroundColor: theme.colors.warningBright,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  cardBadgeText: {
-    color: theme.colors.onPrimary,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  cardHeart: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.surfaceGlass,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  discountTagWrap: {
-    position: "absolute",
-    top: -2,
-    right: 56,
-    alignItems: "center",
-  },
-  discountTagString: {
-    width: 2,
-    height: 18,
-    backgroundColor: theme.colors.amberBorder,
-    borderRadius: 1,
-  },
-  discountTag: {
-    minWidth: 86,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: theme.colors.amberChipBg,
-    borderWidth: 1,
-    borderColor: theme.colors.amberBorder,
-    alignItems: "center",
-    transform: [{ rotate: "-3deg" }],
-  },
-  discountTagHole: {
-    position: "absolute",
-    top: 6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.amberBorder,
-  },
-  discountTagLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: theme.colors.amberText,
-    letterSpacing: 0.6,
-  },
-  discountTagValueRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 4,
-    marginTop: 4,
-  },
-  discountTagValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: theme.colors.text,
-  },
-  discountTagOff: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: theme.colors.textMuted,
-  },
-  cardBody: {
-    padding: 16,
-    gap: 8,
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  cardTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "900",
-    color: theme.colors.text,
-  },
-  cardDiscount: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: theme.colors.warningBright,
-  },
-  cardSubtitle: {
-    flex: 1,
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-  cardSubtitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  cardExpiry: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: theme.colors.warningBright,
-  },
-  cardMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  metaChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: theme.colors.surfaceLight,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  metaText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: theme.colors.textMuted,
-  },
-  cardActionRow: {
-    alignItems: "flex-end",
-  },
-  progressWrap: {
-    gap: 6,
-  },
-  progressHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  progressLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: theme.colors.textMuted,
-  },
-  progressPercent: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: theme.colors.textMuted,
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: theme.colors.surfaceLight,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 999,
-  },
-  cardActionBtn: {
-    backgroundColor: theme.colors.text,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  cardActionText: {
-    color: theme.colors.onPrimary,
-    fontSize: 12,
-    fontWeight: "700",
-  },
+    screen: {
+      flex: 1,
+      backgroundColor: theme.colors.surfaceMuted,
+    },
+    header: {
+      paddingTop: 16,
+      paddingBottom: 20,
+      paddingHorizontal: 20,
+      borderBottomLeftRadius: 36,
+      borderBottomRightRadius: 36,
+    },
+    headerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    greetingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    avatarWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.onPrimarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: theme.colors.onPrimaryMuted,
+    },
+    greetingLabel: {
+      color: theme.colors.onPrimaryMuted,
+      fontSize: 11,
+      fontWeight: "600",
+    },
+    greetingName: {
+      fontWeight: "800",
+      color: theme.colors.onPrimary,
+      marginTop: 2,
+    },
+    headerIconBtn: {
+      backgroundColor: theme.colors.onPrimarySoft,
+      padding: 10,
+      borderRadius: 999,
+      position: "relative",
+      borderWidth: 1,
+      borderColor: theme.colors.onPrimaryMuted,
+    },
+    badgeDot: {
+      position: "absolute",
+      top: 6,
+      right: 6,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.colors.danger,
+      borderWidth: 1,
+      borderColor: theme.colors.onPrimary,
+    },
+    headerActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    searchRow: {
+      marginTop: 16,
+    },
+    searchInputWrap: {
+      position: "relative",
+    },
+    searchInputContainer: {
+      marginTop: 0,
+    },
+    searchInput: {
+      backgroundColor: theme.colors.onPrimarySoft,
+      borderWidth: 1,
+      borderColor: theme.colors.onPrimaryMuted,
+      color: theme.colors.onPrimary,
+      borderRadius: 18,
+      paddingRight: 36,
+    },
+    clearSearchBtn: {
+      position: "absolute",
+      right: 12,
+      top: "50%",
+      marginTop: -12,
+      width: 24,
+      height: 24,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    clearSearchCircle: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: theme.colors.onPrimarySoft,
+      borderWidth: 1,
+      borderColor: theme.colors.onPrimaryMuted,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    debugChip: {
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      backgroundColor: theme.colors.onPrimarySoft,
+      borderWidth: 1,
+      borderColor: theme.colors.onPrimaryMuted,
+    },
+    debugChipText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: theme.colors.onPrimary,
+    },
+    filterWrap: {
+      paddingTop: 16,
+      paddingBottom: 8,
+    },
+    filterChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 999,
+      marginRight: 10,
+      borderWidth: 1,
+      minWidth: 56,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    filterChipActive: {
+      backgroundColor: theme.colors.warningBright,
+      borderColor: theme.colors.warningBright,
+    },
+    filterChipIdle: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.border,
+    },
+    filterChipText: {
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    filterChipTextActive: {
+      color: theme.colors.onPrimary,
+    },
+    filterChipTextIdle: {
+      color: theme.colors.textMuted,
+    },
+    filterChipIconWrap: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    filterChipBadge: {
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 4,
+      borderWidth: 1,
+      marginTop: 6,
+    },
+    filterChipBadgeActive: {
+      backgroundColor: theme.colors.onPrimary,
+      borderColor: theme.colors.onPrimary,
+    },
+    filterChipBadgeIdle: {
+      backgroundColor: theme.colors.surfaceLight,
+      borderColor: theme.colors.border,
+    },
+    filterChipBadgeText: {
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    filterChipBadgeTextActive: {
+      color: theme.colors.primary,
+    },
+    filterChipBadgeTextIdle: {
+      color: theme.colors.textMuted,
+    },
+    listWrap: {
+      paddingHorizontal: 20,
+      paddingTop: 4,
+      paddingBottom: 32,
+    },
+    seeAllText: {
+      color: theme.colors.primary,
+      fontWeight: "700",
+      fontSize: 12,
+    },
+    emptyWrap: {
+      paddingVertical: 80,
+      alignItems: "center",
+    },
+    card: {
+      marginBottom: 20,
+      overflow: "hidden",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...cardStyles.shadow,
+    },
+    cardImageWrap: {
+      height: 190,
+      backgroundColor: theme.colors.surfaceLight,
+      overflow: "hidden",
+    },
+    cardImage: {
+      width: "100%",
+      height: "100%",
+    },
+    cardImagePlaceholder: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.colors.surfaceLight,
+    },
+    cardBadge: {
+      position: "absolute",
+      top: 12,
+      left: 12,
+      backgroundColor: theme.colors.warningBright,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    cardBadgeText: {
+      color: theme.colors.onPrimary,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
+    },
+    cardHeart: {
+      position: "absolute",
+      top: 12,
+      right: 12,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.surfaceGlass,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    discountTagWrap: {
+      position: "absolute",
+      top: -2,
+      right: 56,
+      alignItems: "center",
+    },
+    discountTagString: {
+      width: 2,
+      height: 18,
+      backgroundColor: theme.colors.amberBorder,
+      borderRadius: 1,
+    },
+    discountTag: {
+      minWidth: 86,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 12,
+      backgroundColor: theme.colors.amberChipBg,
+      borderWidth: 1,
+      borderColor: theme.colors.amberBorder,
+      alignItems: "center",
+      transform: [{ rotate: "-3deg" }],
+    },
+    discountTagHole: {
+      position: "absolute",
+      top: 6,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.amberBorder,
+    },
+    discountTagLabel: {
+      fontSize: 9,
+      fontWeight: "700",
+      color: theme.colors.amberText,
+      letterSpacing: 0.6,
+    },
+    discountTagValueRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      gap: 4,
+      marginTop: 4,
+    },
+    discountTagValue: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: theme.colors.text,
+    },
+    discountTagOff: {
+      fontSize: 10,
+      fontWeight: "800",
+      color: theme.colors.textMuted,
+    },
+    cardBody: {
+      padding: 16,
+      gap: 8,
+    },
+    cardTitleRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 10,
+    },
+    cardTitle: {
+      flex: 1,
+      fontSize: 18,
+      fontWeight: "900",
+      color: theme.colors.text,
+    },
+    cardDiscount: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: theme.colors.warningBright,
+    },
+    cardSubtitle: {
+      flex: 1,
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    cardSubtitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    cardExpiry: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: theme.colors.warningBright,
+    },
+    cardMetaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      flexWrap: "wrap",
+    },
+    metaChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: theme.colors.surfaceLight,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+    },
+    metaText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: theme.colors.textMuted,
+    },
+    cardActionRow: {
+      alignItems: "flex-end",
+    },
+    progressWrap: {
+      gap: 6,
+    },
+    progressHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    progressLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: theme.colors.textMuted,
+    },
+    progressPercent: {
+      fontSize: 11,
+      fontWeight: "800",
+      color: theme.colors.textMuted,
+    },
+    progressTrack: {
+      height: 8,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surfaceLight,
+      overflow: "hidden",
+    },
+    progressFill: {
+      height: "100%",
+      borderRadius: 999,
+    },
+    cardActionBtn: {
+      backgroundColor: theme.colors.text,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+    },
+    cardActionText: {
+      color: theme.colors.onPrimary,
+      fontSize: 12,
+      fontWeight: "700",
+    },
   });

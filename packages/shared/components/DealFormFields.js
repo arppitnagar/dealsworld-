@@ -19,6 +19,10 @@ export default function DealFormFields({
   isReadOnly = false,
   isExpiryLocked = false,
   showImage = true,
+  showTitle = true,
+  showDescription = true,
+  showPricing = true,
+  showLogistics = true,
   onPickImage,
   onFieldChange,
   onPriceChange,
@@ -109,185 +113,193 @@ export default function DealFormFields({
           </TouchableOpacity>
         ) : null}
 
-        <AppInput
-          label="Deal Title"
-          placeholder="e.g. iPhone 15 Pro Max"
-          value={form.title}
-          editable={!isReadOnly}
-          onChangeText={(value) => handleFieldChange("title", value)}
-          error={errors.title}
-        />
-
-        <AppInput
-          label="Description"
-          placeholder="Describe the deal"
-          multiline
-          value={form.description}
-          editable={!isReadOnly}
-          onChangeText={(value) => handleFieldChange("description", value)}
-          error={errors.description}
-        />
-      </FormSection>
-
-      <FormSection title="Pricing">
-        <View style={styles.row}>
+        {showTitle ? (
           <AppInput
-            containerStyle={styles.half}
-            label="Original Price"
-            keyboardType="decimal-pad"
-            placeholder="Rs 0.00"
-            value={form.originalPrice}
+            label="Deal Title"
+            placeholder="e.g. iPhone 15 Pro Max"
+            value={form.title}
             editable={!isReadOnly}
-            onChangeText={(value) => onPriceChange?.("originalPrice", value)}
-            onBlur={() => onBlurPrice?.("originalPrice")}
-          />
-
-          <AppInput
-            containerStyle={styles.half}
-            label="Deal Price"
-            keyboardType="decimal-pad"
-            placeholder="Rs 0.00"
-            value={form.discountPrice}
-            editable={!isReadOnly}
-            onChangeText={(value) => onPriceChange?.("discountPrice", value)}
-            onBlur={() => onBlurPrice?.("discountPrice")}
-            error={errors.discountPrice}
-          />
-        </View>
-
-        <AppInput
-          label="Minimum Buyers"
-          keyboardType="numeric"
-          placeholder="Minimum 2 buyers"
-          value={form.minGroupSize}
-          editable={!isReadOnly}
-          onChangeText={(value) => onMinBuyersChange?.(value)}
-          error={errors.minGroupSize}
-        />
-      </FormSection>
-
-      <FormSection title="Logistics">
-        <Text style={[styles.label, errors.category && styles.labelError]}>
-          Category
-        </Text>
-
-        <TouchableOpacity
-          style={[
-            styles.input,
-            errors.category && styles.inputError,
-            isReadOnly && styles.readOnlyInput,
-          ]}
-          disabled={isReadOnly}
-          onPress={onCategoryPress}
-        >
-          <Text
-            style={
-              isReadOnly
-                ? { color: theme.colors.textMuted }
-                : { color: theme.colors.text }
-            }
-          >
-            {form.category || "Select category"}
-          </Text>
-        </TouchableOpacity>
-
-        {errors.category ? (
-          <Text style={styles.error}>{errors.category}</Text>
-        ) : null}
-
-        {showCategoryOther ? (
-          <AppInput
-            label="Other Category"
-            placeholder="e.g. Home Appliances"
-            value={form.categoryOther}
-            editable={!isReadOnly}
-            onChangeText={(value) => handleFieldChange("categoryOther", value)}
-            error={errors.categoryOther}
+            onChangeText={(value) => handleFieldChange("title", value)}
+            error={errors.title}
           />
         ) : null}
 
-        <Text style={[styles.label, errors.expiresAt && styles.labelError]}>
-          Expires At
-        </Text>
-
-        <TouchableOpacity
-          style={[
-            styles.input,
-            errors.expiresAt && styles.inputError,
-            isExpiryLocked && styles.readOnlyInput,
-          ]}
-          disabled={isExpiryLocked}
-          onPress={onExpiresAtPress}
-        >
-          <Text
-            style={
-              isExpiryLocked
-                ? { color: theme.colors.textMuted }
-                : { color: theme.colors.text }
-            }
-          >
-            {expiryLabel}
-          </Text>
-        </TouchableOpacity>
-
-        {errors.expiresAt ? (
-          <Text style={styles.error}>{errors.expiresAt}</Text>
-        ) : null}
-
-        <AppInput
-          label="Location"
-          placeholder="e.g. Mumbai, Andheri"
-          value={form.location}
-          editable={!isReadOnly}
-          onChangeText={(value) => handleFieldChange("location", value)}
-          error={errors.location}
-        />
-
-        <Text style={[styles.label, errors.deliveryMode && styles.labelError]}>
-          Delivery Mode
-        </Text>
-
-        <TouchableOpacity
-          style={[
-            styles.input,
-            errors.deliveryMode && styles.inputError,
-            isReadOnly && styles.readOnlyInput,
-          ]}
-          disabled={isReadOnly}
-          onPress={onDeliveryModePress}
-        >
-          <Text
-            style={
-              isReadOnly
-                ? { color: theme.colors.textMuted }
-                : { color: theme.colors.text }
-            }
-          >
-            {form.deliveryMode || "Select delivery mode"}
-          </Text>
-        </TouchableOpacity>
-
-        {errors.deliveryMode ? (
-          <Text style={styles.error}>{errors.deliveryMode}</Text>
-        ) : null}
-
-        {showDeliveryCharge ? (
+        {showDescription ? (
           <AppInput
-            label="Delivery Charge"
-            keyboardType="decimal-pad"
-            placeholder="Rs 0.00"
-            value={form.deliveryCharge}
+            label="Description"
+            placeholder="Describe the deal"
+            multiline
+            value={form.description}
             editable={!isReadOnly}
-            onChangeText={(value) =>
-              onDeliveryChargeChange
-                ? onDeliveryChargeChange(value)
-                : handleFieldChange("deliveryCharge", value)
-            }
-            onBlur={() => onBlurDeliveryCharge?.()}
-            error={errors.deliveryCharge}
+            onChangeText={(value) => handleFieldChange("description", value)}
+            error={errors.description}
           />
         ) : null}
       </FormSection>
+
+      {showPricing ? (
+        <FormSection title="Pricing">
+          <View style={styles.row}>
+            <AppInput
+              containerStyle={styles.half}
+              label="Original Price"
+              keyboardType="decimal-pad"
+              placeholder="Rs 0.00"
+              value={form.originalPrice}
+              editable={!isReadOnly}
+              onChangeText={(value) => onPriceChange?.("originalPrice", value)}
+              onBlur={() => onBlurPrice?.("originalPrice")}
+            />
+
+            <AppInput
+              containerStyle={styles.half}
+              label="Deal Price"
+              keyboardType="decimal-pad"
+              placeholder="Rs 0.00"
+              value={form.discountPrice}
+              editable={!isReadOnly}
+              onChangeText={(value) => onPriceChange?.("discountPrice", value)}
+              onBlur={() => onBlurPrice?.("discountPrice")}
+              error={errors.discountPrice}
+            />
+          </View>
+
+          <AppInput
+            label="Minimum Buyers"
+            keyboardType="numeric"
+            placeholder="Minimum 2 buyers"
+            value={form.minGroupSize}
+            editable={!isReadOnly}
+            onChangeText={(value) => onMinBuyersChange?.(value)}
+            error={errors.minGroupSize}
+          />
+        </FormSection>
+      ) : null}
+
+      {showLogistics ? (
+        <FormSection title="Logistics">
+          <Text style={[styles.label, errors.category && styles.labelError]}>
+            Category
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.input,
+              errors.category && styles.inputError,
+              isReadOnly && styles.readOnlyInput,
+            ]}
+            disabled={isReadOnly}
+            onPress={onCategoryPress}
+          >
+            <Text
+              style={
+                isReadOnly
+                  ? { color: theme.colors.textMuted }
+                  : { color: theme.colors.text }
+              }
+            >
+              {form.category || "Select category"}
+            </Text>
+          </TouchableOpacity>
+
+          {errors.category ? (
+            <Text style={styles.error}>{errors.category}</Text>
+          ) : null}
+
+          {showCategoryOther ? (
+            <AppInput
+              label="Other Category"
+              placeholder="e.g. Home Appliances"
+              value={form.categoryOther}
+              editable={!isReadOnly}
+              onChangeText={(value) => handleFieldChange("categoryOther", value)}
+              error={errors.categoryOther}
+            />
+          ) : null}
+
+          <Text style={[styles.label, errors.expiresAt && styles.labelError]}>
+            Expires At
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.input,
+              errors.expiresAt && styles.inputError,
+              isExpiryLocked && styles.readOnlyInput,
+            ]}
+            disabled={isExpiryLocked}
+            onPress={onExpiresAtPress}
+          >
+            <Text
+              style={
+                isExpiryLocked
+                  ? { color: theme.colors.textMuted }
+                  : { color: theme.colors.text }
+              }
+            >
+              {expiryLabel}
+            </Text>
+          </TouchableOpacity>
+
+          {errors.expiresAt ? (
+            <Text style={styles.error}>{errors.expiresAt}</Text>
+          ) : null}
+
+          <AppInput
+            label="Location"
+            placeholder="e.g. Mumbai, Andheri"
+            value={form.location}
+            editable={!isReadOnly}
+            onChangeText={(value) => handleFieldChange("location", value)}
+            error={errors.location}
+          />
+
+          <Text style={[styles.label, errors.deliveryMode && styles.labelError]}>
+            Delivery Mode
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.input,
+              errors.deliveryMode && styles.inputError,
+              isReadOnly && styles.readOnlyInput,
+            ]}
+            disabled={isReadOnly}
+            onPress={onDeliveryModePress}
+          >
+            <Text
+              style={
+                isReadOnly
+                  ? { color: theme.colors.textMuted }
+                  : { color: theme.colors.text }
+              }
+            >
+              {form.deliveryMode || "Select delivery mode"}
+            </Text>
+          </TouchableOpacity>
+
+          {errors.deliveryMode ? (
+            <Text style={styles.error}>{errors.deliveryMode}</Text>
+          ) : null}
+
+          {showDeliveryCharge ? (
+            <AppInput
+              label="Delivery Charge"
+              keyboardType="decimal-pad"
+              placeholder="Rs 0.00"
+              value={form.deliveryCharge}
+              editable={!isReadOnly}
+              onChangeText={(value) =>
+                onDeliveryChargeChange
+                  ? onDeliveryChargeChange(value)
+                  : handleFieldChange("deliveryCharge", value)
+              }
+              onBlur={() => onBlurDeliveryCharge?.()}
+              error={errors.deliveryCharge}
+            />
+          ) : null}
+        </FormSection>
+      ) : null}
     </>
   );
 }

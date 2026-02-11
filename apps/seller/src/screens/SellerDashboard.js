@@ -17,14 +17,12 @@ import {
   query,
   where,
   onSnapshot,
-  orderBy,
   doc,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import {
   getCardStyles,
-  PrimaryBanner,
   EmptyState,
   DealCard as SharedDealCard,
   AppInput,
@@ -73,11 +71,12 @@ export default function SellerDashboard({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [searchQuery, setSearchQuery] = useState("");
+  const greetingLabel = getGreetingLabel(now);
 
   // Track selected filter: null (all), 'active', or 'pending'
   const [selectedFilter, setSelectedFilter] = useState(null);
 
-  const vendorid = "vendor_001";
+  const sellerId = "vendor_001";
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -90,8 +89,7 @@ export default function SellerDashboard({ navigation }) {
     const dealsRef = collection(db, "deals");
     const q = query(
       dealsRef,
-      where("vendorid", "==", vendorid),
-      orderBy("createdAt", "desc"),
+      where("sellerId", "==", sellerId),
     );
 
     const unsubscribe = onSnapshot(
@@ -106,7 +104,7 @@ export default function SellerDashboard({ navigation }) {
           const data = doc.data();
           const expiryDate = toDate(data.expiresAt);
           const isExpired = expiryDate && expiryDate.getTime() <= nowMs;
-          const status = String(data.status || "").toLowerCase();
+          const status = getDealLifecycleStatus(data);
 
           const currentJoins = data.currentJoins ?? data.joinedUsers ?? 0;
           const minGroupSize = data.minGroupSize ?? 1;
@@ -145,6 +143,13 @@ export default function SellerDashboard({ navigation }) {
           active: activeCount,
           scheduled: scheduledCount,
         });
+        dealsList.sort((a, b) => {
+          const aDate = toDate(a.createdAt);
+          const bDate = toDate(b.createdAt);
+          const aMs = aDate instanceof Date && !Number.isNaN(aDate.getTime()) ? aDate.getTime() : 0;
+          const bMs = bDate instanceof Date && !Number.isNaN(bDate.getTime()) ? bDate.getTime() : 0;
+          return bMs - aMs;
+        });
         setDeals(dealsList);
         setLoading(false);
       },
@@ -155,7 +160,7 @@ export default function SellerDashboard({ navigation }) {
     );
 
     return () => unsubscribe();
-  }, [vendorid]);
+  }, [sellerId]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -169,7 +174,7 @@ export default function SellerDashboard({ navigation }) {
   const queryTokens = normalizedQuery ? normalizedQuery.split(/\s+/) : [];
 
   const filteredDeals = deals.filter((deal) => {
-    const status = String(deal.status || "").toLowerCase();
+    const status = getDealLifecycleStatus(deal);
     const expiryDate = toDate(deal.expiresAt);
     const isExpired = expiryDate && expiryDate.getTime() <= now;
     const isCompleted = status === "completed";
@@ -232,7 +237,7 @@ export default function SellerDashboard({ navigation }) {
                 />
               </View>
               <View>
-                <Text style={styles.greetingLabel}>Good morning,</Text>
+                <Text style={styles.greetingLabel}>{greetingLabel}</Text>
                 <Text style={styles.greetingName}>Seller</Text>
               </View>
             </View>
@@ -317,12 +322,35 @@ export default function SellerDashboard({ navigation }) {
           </ScrollView>
         </View>
 
-        <PrimaryBanner
-          title="Create New Deal"
-          subtitle="Boost your sales today"
+        <TouchableOpacity
+          activeOpacity={0.9}
           onPress={() => navigation.navigate("CreateDeal")}
-          style={styles.createBtn}
-        />
+          style={styles.createDealCta}
+        >
+          <LinearGradient
+            colors={[theme.colors.primary, theme.colors.purple]}
+            style={styles.createDealGradient}
+          >
+            <View style={styles.createDealLeft}>
+              <View style={styles.createDealIconWrap}>
+                <Ionicons
+                  name="add"
+                  size={20}
+                  color={theme.colors.onPrimary}
+                />
+              </View>
+              <View>
+                <Text style={styles.createDealTitle}>Create New Deal</Text>
+                <Text style={styles.createDealSubtitle}>Boost your sales today</Text>
+              </View>
+            </View>
+            <Ionicons
+              name="arrow-forward"
+              size={20}
+              color={theme.colors.onPrimaryMuted}
+            />
+          </LinearGradient>
+        </TouchableOpacity>
 
         <View style={styles.section}>
           <CardHeader
@@ -343,10 +371,11 @@ export default function SellerDashboard({ navigation }) {
           ) : (
             filteredDeals.map((deal) => {
               const joins = deal.joinedUsers || 0;
-              const accentColor = getStatusColor(deal.status);
+              const lifecycleStatus = getDealLifecycleStatus(deal);
+              const accentColor = getStatusColor(lifecycleStatus);
               const expiryDate = toDate(deal.expiresAt);
               const countdown =
-                deal.status === "active" && expiryDate
+                lifecycleStatus === "active" && expiryDate
                   ? formatCountdown(expiryDate.getTime() - now)
                   : null;
               const expiryLabel = expiryDate
@@ -361,7 +390,7 @@ export default function SellerDashboard({ navigation }) {
                   image={deal.image}
                   joins={joins}
                   accentColor={accentColor}
-                  statusLabel={getStatusLabel(deal.status)}
+                  statusLabel={getStatusLabel(lifecycleStatus)}
                   viewsCount={deal.viewsCount ?? deal.views ?? 0}
                   favoritesCount={
                     deal.favoritesCount ?? deal.favouritesCount ?? 0
@@ -460,7 +489,7 @@ function buildSearchText(deal) {
     deal.location,
     deal.deliveryMode,
     deal.status,
-    deal.vendorid,
+    deal.sellerId,
     deal.originalPrice,
     deal.discountPrice,
     deal.minGroupSize,
@@ -482,6 +511,28 @@ function buildSearchText(deal) {
     })
     .join(" ")
     .toLowerCase();
+}
+
+function getGreetingLabel(nowMs) {
+  const hour = new Date(nowMs).getHours();
+  if (hour < 12) return "Good morning,";
+  if (hour < 18) return "Good afternoon,";
+  return "Good evening,";
+}
+
+function getDealLifecycleStatus(deal) {
+  const approvalStatus = String(deal?.approvalStatus || "").toLowerCase();
+  const approved = deal?.approved === true;
+  const status = String(deal?.status || "").toLowerCase();
+
+  if (status === "completed") return "completed";
+  if (approvalStatus === "rejected" || status === "rejected") {
+    return "rejected";
+  }
+  if (approvalStatus === "pending") return "pending";
+  if (approvalStatus === "approved") return "active";
+  if (approved || status === "active") return "active";
+  return "pending";
 }
 
 const styles = StyleSheet.create({
@@ -621,10 +672,44 @@ const styles = StyleSheet.create({
   filterChipTextIdle: {
     color: theme.colors.textMuted,
   },
-  createBtn: {
+  createDealCta: {
     marginHorizontal: SPACING,
     marginBottom: 30,
     ...cardStyles.shadow,
+  },
+  createDealGradient: {
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  createDealLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  createDealIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createDealTitle: {
+    color: theme.colors.onPrimary,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  createDealSubtitle: {
+    marginTop: 2,
+    color: theme.colors.onPrimaryMuted,
+    fontSize: 12,
+    fontWeight: "600",
   },
   section: { paddingHorizontal: SPACING, marginBottom: 15 },
   emptyContainer: { alignItems: "center", marginTop: 40 },

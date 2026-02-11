@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, toDate, formatDate } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
+import { getProfileBaseStyles } from "../styles/profileStyles";
 
 export default function ProfileScreen({ navigation }) {
   const { theme } = useTheme();
@@ -210,38 +211,10 @@ const stylesRow = (theme, danger) => ({
     : theme.colors.surfaceMuted,
 });
 
-const createStyles = (theme) =>
-  StyleSheet.create({
-    screen: {
-      flex: 1,
-      backgroundColor: theme.colors.dashboardBg,
-    },
-    headerBar: {
-      backgroundColor: theme.colors.primary,
-      paddingHorizontal: 16,
-      paddingBottom: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.onPrimarySoft,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
-    backButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: theme.colors.onPrimarySoft,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 0,
-    },
-    headerTitle: {
-      flex: 1,
-      textAlign: "center",
-      fontSize: 20,
-      fontWeight: "800",
-      color: theme.colors.onPrimary,
-    },
+const createStyles = (theme) => {
+  const base = getProfileBaseStyles(theme);
+  return StyleSheet.create({
+    ...base,
     scrollContent: {
       paddingHorizontal: 20,
       paddingTop: 20,
@@ -249,18 +222,11 @@ const createStyles = (theme) =>
       gap: 18,
     },
     heroCard: {
-      backgroundColor: theme.colors.primary,
-      borderRadius: 24,
+      ...base.heroCard,
       padding: 20,
-      overflow: "hidden",
-      ...theme.shadow.card,
     },
     heroAccent: {
-      width: 56,
-      height: 6,
-      borderRadius: 999,
-      backgroundColor: theme.colors.onPrimary,
-      opacity: 0.7,
+      ...base.heroAccent,
       marginBottom: 12,
     },
     heroRow: {
@@ -325,13 +291,8 @@ const createStyles = (theme) =>
       fontWeight: "600",
     },
     menuCard: {
-      backgroundColor: theme.colors.background,
-      borderRadius: 20,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+      ...base.card,
       gap: 6,
-      ...theme.shadow.card,
     },
     menuCardDanger: {
       backgroundColor: theme.colors.dangerSoft,
@@ -350,3 +311,4 @@ const createStyles = (theme) =>
       marginBottom: 6,
     },
   });
+};

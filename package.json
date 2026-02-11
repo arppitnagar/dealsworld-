@@ -7,7 +7,8 @@
     "lint:typography": "node scripts/check-typography.js",
     "lint:ui": "npm run lint:colors && npm run lint:spacing && npm run lint:typography",
     "hooks:install": "node scripts/install-git-hooks.js",
-    "setup:ui": "npm run hooks:install && npm run lint:ui"
+    "setup:ui": "npm run hooks:install && npm run lint:ui",
+    "admin:web": "npm --workspace apps/admin run web"
   },
   "workspaces": [
     "apps/*",

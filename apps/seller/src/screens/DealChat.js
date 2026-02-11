@@ -149,7 +149,7 @@ export default function DealChat({ route, navigation }) {
       text: trimmed,
       createdAt: serverTimestamp(),
       senderRole: "seller",
-      senderId: deal?.vendorid || "seller",
+      senderId: deal?.sellerId || "seller",
       senderName: "Seller",
     });
   };

@@ -1,0 +1,20 @@
+{
+  "name": "adminbuddy",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "web": "expo start --web",
+    "admin:web": "expo start --web"
+  },
+  "dependencies": {
+    "@dealsworld/shared": "file:../../packages/shared",
+    "axios": "^1.13.4",
+    "expo": "^54.0.32",
+    "firebase": "^12.8.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-web": "^0.21.0"
+  }
+}

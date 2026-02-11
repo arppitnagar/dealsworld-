@@ -36,6 +36,7 @@ export { getMetricsStyles } from "./styles/metrics";
 export { default as ImageHeader } from "./components/ImageHeader";
 export { default as ComponentGallery } from "./components/ComponentGallery";
 export { default as DealDetailsView } from "./components/DealDetailsView";
+export { default as DealDetailsLayout } from "./components/DealDetailsLayout";
 export { default as DealFormFields } from "./components/DealFormFields";
 export { default as AuthScreen } from "./components/AuthScreen.js";
 export { default as DealBuddyLoader } from "./components/DealBuddyLoader";

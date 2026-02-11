@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   Platform,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Save } from "lucide-react-native";
@@ -155,7 +156,7 @@ export default function CreateDealScreen({ route, navigation }) {
         ? new Date(deal.expiresAt)
         : null,
     location: deal?.location || "",
-    vendorid: deal?.vendorid || "vendor_001",
+    sellerId: deal?.sellerId || "vendor_001",
   });
 
   const [image, setImage] = useState(null);
@@ -316,7 +317,10 @@ export default function CreateDealScreen({ route, navigation }) {
           createdAt: serverTimestamp(),
           currentJoins: 0,
           joinedUsers: 0,
-          status: "active",
+          approvalStatus: "pending",
+          lifecycleStatus: "pending",
+          status: "pending",
+          approved: false,
           viewsCount: 0,
           leftCount: 0,
           joinEventsCount: 0,
@@ -339,6 +343,35 @@ export default function CreateDealScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.screen}>
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.purple]}
+        style={styles.header}
+      >
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.headerBack}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons
+              name="chevron-back"
+              size={20}
+              color={theme.colors.onPrimary}
+            />
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerTitle}>
+              {isReadOnly
+                ? "View Deal"
+                : isEditMode
+                  ? "Edit Deal"
+                  : "Create New Deal"}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              Manage your deal details quickly
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
       {/* READ-ONLY BANNER */}
       {/* READ-ONLY BANNER */}
       {isCompleted && (
@@ -451,13 +484,7 @@ export default function CreateDealScreen({ route, navigation }) {
         </View>
       )}
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.heading}>
-          {isReadOnly
-            ? "View Deal"
-            : isEditMode
-              ? "Edit Deal"
-              : "Create New Deal"}
-        </Text>
+        <View style={styles.formCard}>
         <DealFormFields
           form={form}
           errors={errors}
@@ -507,16 +534,17 @@ export default function CreateDealScreen({ route, navigation }) {
 
         {/* SUBMIT */}
         {/* Only show the button if NOT in Read Only mode */}
-        {!isReadOnly && (
-          <AppButton
-            title="Publish Deal"
-            onPress={handleSubmit}
-            loading={loading}
-            disabled={loading || !!errors.discountPrice}
-            leftIcon={<Save color={theme.colors.onPrimary} size={18} />}
-            style={{ marginTop: 30 }}
-          />
-        )}
+          {!isReadOnly && (
+            <AppButton
+              title="Submit for Approval"
+              onPress={handleSubmit}
+              loading={loading}
+              disabled={loading || !!errors.discountPrice}
+              leftIcon={<Save color={theme.colors.onPrimary} size={18} />}
+              style={{ marginTop: 30 }}
+            />
+          )}
+        </View>
       </ScrollView>
 
       {/* CATEGORY MODAL */}
@@ -585,7 +613,7 @@ export default function CreateDealScreen({ route, navigation }) {
                   navigation.goBack();
                 }}
               />
-              <Text style={styles.successText}>Deal Published!</Text>
+              <Text style={styles.successText}>Deal submitted for approval!</Text>
             </View>
           </View>
         </Modal>
@@ -598,19 +626,56 @@ export default function CreateDealScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.dashboardBg,
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 44,
+    paddingTop: 20,
     paddingBottom: Platform.OS === "android" ? 96 : 40,
   },
-  heading: {
-    ...formStyles.heading,
-    fontSize: 28,
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 18,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerBack: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: theme.colors.onPrimarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+  },
+  headerTitle: {
+    color: theme.colors.onPrimary,
+    fontSize: 20,
     fontWeight: "800",
-    marginBottom: 18,
-    letterSpacing: 0.3,
+  },
+  headerSubtitle: {
+    color: theme.colors.onPrimaryMuted,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  formCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    shadowColor: theme.colors.text,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   label: formStyles.label,
   input: {
