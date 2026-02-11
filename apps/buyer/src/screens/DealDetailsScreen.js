@@ -540,8 +540,8 @@ export default function DealDetailsScreen({ route, navigation }) {
     </TouchableOpacity>
   );
 
-  const headerActionContent = (
-    <>
+  const headerBelowContent = (
+    <View style={styles.headerBelowRow}>
       <View style={styles.headerActionItem}>
         <GradientIconButton
           onPress={handleToggleJoin}
@@ -549,6 +549,12 @@ export default function DealDetailsScreen({ route, navigation }) {
         >
           {joining || leaving ? (
             <ActivityIndicator color={theme.colors.onPrimary} size="small" />
+          ) : !hasJoined && thresholdReached ? (
+            <Ionicons
+              name="lock-closed-outline"
+              size={16}
+              color={theme.colors.onPrimary}
+            />
           ) : (
             <Ionicons
               name={hasJoined ? "exit-outline" : "person-add-outline"}
@@ -558,29 +564,40 @@ export default function DealDetailsScreen({ route, navigation }) {
           )}
         </GradientIconButton>
         <Text style={styles.headerActionLabel}>
-          {hasJoined ? "Leave" : "Join"}
+          {hasJoined ? "Leave" : thresholdReached ? "Locked" : "Join"}
         </Text>
       </View>
-      <GradientIconButton onPress={handleShareDeal}>
-        <Ionicons
-          name="share-social-outline"
-          size={16}
-          color={theme.colors.onPrimary}
-        />
-      </GradientIconButton>
-      <GradientIconButton
-        onPress={() => navigation.navigate("DealChat", { dealId: deal.id, deal })}
-      >
-        <MessageCircle size={16} color={theme.colors.onPrimary} />
-      </GradientIconButton>
-      <GradientIconButton onPress={handleToggleFavorite}>
-        <Heart
-          size={16}
-          color={isFavorite ? theme.colors.danger : theme.colors.onPrimary}
-          fill={isFavorite ? theme.colors.danger : "transparent"}
-        />
-      </GradientIconButton>
-    </>
+      <View style={styles.headerActionItem}>
+        <GradientIconButton onPress={handleShareDeal}>
+          <Ionicons
+            name="share-social-outline"
+            size={16}
+            color={theme.colors.onPrimary}
+          />
+        </GradientIconButton>
+        <Text style={styles.headerActionLabel}>Share</Text>
+      </View>
+      <View style={styles.headerActionItem}>
+        <GradientIconButton
+          onPress={() =>
+            navigation.navigate("DealChat", { dealId: deal.id, deal })
+          }
+        >
+          <MessageCircle size={16} color={theme.colors.onPrimary} />
+        </GradientIconButton>
+        <Text style={styles.headerActionLabel}>Chat</Text>
+      </View>
+      <View style={styles.headerActionItem}>
+        <GradientIconButton onPress={handleToggleFavorite}>
+          <Heart
+            size={16}
+            color={isFavorite ? theme.colors.danger : theme.colors.onPrimary}
+            fill={isFavorite ? theme.colors.danger : "transparent"}
+          />
+        </GradientIconButton>
+        <Text style={styles.headerActionLabel}>Liked</Text>
+      </View>
+    </View>
   );
 
   return (
@@ -588,7 +605,8 @@ export default function DealDetailsScreen({ route, navigation }) {
       <DealDetailsLayout
         headerTitle="Deal Details"
         onBack={() => navigation.goBack()}
-        actions={headerActionContent}
+        actions={null}
+        headerBelow={headerBelowContent}
         title={deal.title || "Deal"}
         description={deal.description}
         category={deal.category}
@@ -1049,6 +1067,12 @@ const createStyles = (theme) =>
     fontSize: 9,
     fontWeight: "700",
     color: theme.colors.onPrimaryMuted,
+  },
+  headerBelowRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 12,
   },
   insightsCard: {
     backgroundColor: theme.colors.surfaceGlass,

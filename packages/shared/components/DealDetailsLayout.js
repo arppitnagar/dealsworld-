@@ -30,6 +30,7 @@ export default function DealDetailsLayout({
   headerTitle = "Deal Details",
   onBack,
   actions,
+  headerBelow,
   title,
   description,
   category,
@@ -95,6 +96,10 @@ export default function DealDetailsLayout({
           flexDirection: "row",
           alignItems: "center",
           gap: 8,
+        },
+        headerBelowWrap: {
+          marginTop: 12,
+          alignItems: "center",
         },
         actionButton: {
           width: 36,
@@ -304,10 +309,18 @@ export default function DealDetailsLayout({
           <View style={[styles.headerBar, { backgroundColor: "transparent" }]}>
             {headerContent}
           </View>
+          {headerBelow ? (
+            <View style={styles.headerBelowWrap}>{headerBelow}</View>
+          ) : null}
         </LinearGradient>
       ) : (
-        <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 12) }]}>
-          {headerContent}
+        <View style={{ backgroundColor: theme.colors.primary }}>
+          <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 12) }]}>
+            {headerContent}
+          </View>
+          {headerBelow ? (
+            <View style={styles.headerBelowWrap}>{headerBelow}</View>
+          ) : null}
         </View>
       )}
 

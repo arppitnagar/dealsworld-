@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   Alert,
   Dimensions,
+  Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path } from "react-native-svg";
 import { db } from "../config/firebase";
 import { doc, updateDoc, onSnapshot } from "firebase/firestore";
@@ -19,6 +21,7 @@ import {
   toDate,
   formatExpiryLabel,
   formatCountdown,
+  formatINR,
   theme,
   SkeletonBlock,
   DealDetailsLayout,
@@ -92,6 +95,10 @@ export default function DealDetails({ route, navigation }) {
     deal?.storeAddress || deal?.pickupAddress || deal?.location || null;
   const sparklineWidth = 56;
   const sparklineHeight = 18;
+  const SHARE_BASE_URL = "https://dealbuddy.app/deal";
+  const APP_STORE_URL = "https://apps.apple.com/app/id0000000000";
+  const PLAY_STORE_URL =
+    "https://play.google.com/store/apps/details?id=com.dealbuddy";
   const buildSparklinePath = (points, width, height) => {
     if (!points || points.length === 0) return "";
     const step = width / Math.max(points.length - 1, 1);
@@ -191,6 +198,50 @@ export default function DealDetails({ route, navigation }) {
     );
   };
 
+  const handleShareDeal = async () => {
+    if (!deal) return;
+    const expiryText = expiryDate ? formatExpiryLabel(expiryDate, now) : null;
+    const originalValue = Number(deal?.originalPrice);
+    const discountValue = Number(
+      deal?.discountPrice ?? deal?.dealPrice ?? deal?.price,
+    );
+    const hasOriginal = Number.isFinite(originalValue) && originalValue > 0;
+    const hasDiscount = Number.isFinite(discountValue) && discountValue > 0;
+    const percentOff =
+      hasOriginal && hasDiscount && originalValue > discountValue
+        ? Math.round(((originalValue - discountValue) / originalValue) * 100)
+        : null;
+    const headline = percentOff
+      ? `Save ${percentOff}% on ${deal.title || "this deal"}`
+      : deal.title || "Deal Details";
+    const priceLine = hasOriginal
+      ? `Deal Price: ${formatINR(discountValue)} | MRP ${formatINR(originalValue)}`
+      : hasDiscount
+        ? `Deal Price: ${formatINR(discountValue)}`
+        : null;
+    const shareUrl =
+      deal.shareUrl || deal.link || `${SHARE_BASE_URL}/${deal.id}`;
+    const storeLinks = `Install DealBuddy: iOS ${APP_STORE_URL} | Android ${PLAY_STORE_URL}`;
+    const message = [
+      "Check out this DealBuddy offer:",
+      headline,
+      priceLine,
+      deal.category ? `Category: ${deal.category}` : null,
+      deal.location ? `Location: ${deal.location}` : null,
+      expiryText ? `Expiry: ${expiryText}` : null,
+      shareUrl ? `View: ${shareUrl}` : null,
+      storeLinks,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    try {
+      await Share.share({ message });
+    } catch (error) {
+      // no-op
+    }
+  };
+
   if (isDealLoading) {
     return (
       <View style={styles.container}>
@@ -210,37 +261,63 @@ export default function DealDetails({ route, navigation }) {
     );
   }
 
-  const headerActions = [
-    {
-      key: "chat",
-      onPress: () => navigation.navigate("DealChat", { deal }),
-      icon: (
-        <Ionicons
-          name="chatbubble-ellipses-outline"
-          size={18}
-          color={theme.colors.onPrimary}
-        />
-      ),
-    },
-    {
-      key: "edit",
-      onPress: () => navigation.navigate("CreateDeal", { deal }),
-      icon: (
-        <Ionicons
-          name={lifecycleStatus === "completed" ? "eye-outline" : "create-outline"}
-          size={18}
-          color={theme.colors.onPrimary}
-        />
-      ),
-    },
-  ];
+  const editLabel = lifecycleStatus === "completed" ? "View" : "Edit";
+  const editIcon =
+    lifecycleStatus === "completed" ? "eye-outline" : "create-outline";
+
+  const GradientIconButton = ({ onPress, children }) => (
+    <TouchableOpacity onPress={onPress} style={styles.headerIconButton}>
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.purple]}
+        style={styles.headerIconGradient}
+      >
+        <View style={styles.headerIconInner}>{children}</View>
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+
+  const headerBelowContent = (
+    <View style={styles.headerBelowRow}>
+      <View style={styles.headerActionItem}>
+        <GradientIconButton onPress={handleShareDeal}>
+          <Ionicons
+            name="share-social-outline"
+            size={16}
+            color={theme.colors.onPrimary}
+          />
+        </GradientIconButton>
+        <Text style={styles.headerActionLabel}>Share</Text>
+      </View>
+      <View style={styles.headerActionItem}>
+        <GradientIconButton onPress={() => navigation.navigate("DealChat", { deal })}>
+          <Ionicons
+            name="chatbubble-ellipses-outline"
+            size={16}
+            color={theme.colors.onPrimary}
+          />
+        </GradientIconButton>
+        <Text style={styles.headerActionLabel}>Chat</Text>
+      </View>
+      <View style={styles.headerActionItem}>
+        <GradientIconButton onPress={() => navigation.navigate("CreateDeal", { deal })}>
+          <Ionicons
+            name={editIcon}
+            size={16}
+            color={theme.colors.onPrimary}
+          />
+        </GradientIconButton>
+        <Text style={styles.headerActionLabel}>{editLabel}</Text>
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       <DealDetailsLayout
         headerTitle="Deal Details"
         onBack={() => navigation.goBack()}
-        actions={headerActions}
+        actions={null}
+        headerBelow={headerBelowContent}
         title={deal.title || "Deal"}
         description={deal.description}
         category={deal.category}
@@ -379,6 +456,42 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 120,
     gap: 20,
+  },
+  headerBelowRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 12,
+  },
+  headerActionItem: {
+    alignItems: "center",
+    gap: 4,
+  },
+  headerActionLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: theme.colors.onPrimaryMuted,
+  },
+  headerIconButton: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  headerIconGradient: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerIconInner: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
   },
   insightsCard: {
     backgroundColor: theme.colors.surfaceGlass,
