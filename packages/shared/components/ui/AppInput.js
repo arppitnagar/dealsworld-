@@ -17,6 +17,9 @@ export function AppInput({
   labelStyle,
   errorStyle,
   multiline,
+  leftElement,
+  onLeftPress,
+  leftContainerStyle,
   rightElement,
   onRightPress,
   rightContainerStyle,
@@ -47,11 +50,25 @@ export function AppInput({
           backgroundColor: theme.colors.surface,
           color: theme.colors.text,
         },
+        inputWithLeft: {
+          paddingLeft: 44,
+        },
         inputWithRight: {
           paddingRight: 44,
         },
         inputWrap: {
           position: "relative",
+          justifyContent: "center",
+        },
+        leftIcon: {
+          position: "absolute",
+          left: 12,
+          top: "50%",
+          marginTop: -10,
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          alignItems: "center",
           justifyContent: "center",
         },
         rightIcon: {
@@ -96,6 +113,7 @@ export function AppInput({
         <TextInput
           style={[
             styles.input,
+            leftElement && styles.inputWithLeft,
             rightElement && styles.inputWithRight,
             multiline && styles.inputMultiline,
             !editable && styles.inputDisabled,
@@ -107,6 +125,21 @@ export function AppInput({
           multiline={multiline}
           {...props}
         />
+        {leftElement ? (
+          onLeftPress ? (
+            <TouchableOpacity
+              onPress={onLeftPress}
+              style={[styles.leftIcon, leftContainerStyle]}
+              accessibilityRole="button"
+            >
+              {leftElement}
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.leftIcon, leftContainerStyle]}>
+              {leftElement}
+            </View>
+          )
+        ) : null}
         {rightElement ? (
           onRightPress ? (
             <TouchableOpacity

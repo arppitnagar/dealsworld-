@@ -38,6 +38,8 @@ export { default as ComponentGallery } from "./components/ComponentGallery";
 export { default as DealDetailsView } from "./components/DealDetailsView";
 export { default as DealFormFields } from "./components/DealFormFields";
 export { default as AuthScreen } from "./components/AuthScreen.js";
+export { default as DealBuddyLoader } from "./components/DealBuddyLoader";
+export { default as DealBuddyLoadingScreen } from "./components/DealBuddyLoadingScreen";
 export {
   toDate,
   formatDate,

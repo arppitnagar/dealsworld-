@@ -5,16 +5,20 @@ import {
   StyleSheet,
   Alert,
   TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
   ImageBackground,
 } from "react-native";
 import { Eye, EyeOff } from "lucide-react-native";
+import { Ionicons } from "@expo/vector-icons";
 import AppButton from "./ui/AppButton";
 import AppInput from "./ui/AppInput";
 import { useTheme } from "../theme/ThemeProvider";
 import { validatePassword } from "../utils/passwordPolicy";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const DEFAULT_HERO_IMAGE = require("./ui/DealBuddy Splash Screen Dark Mode 1080x1920.png");
-const DEFAULT_BG_IMAGE = require("./ui/DealBuddy Splash Screen Dark Mode 1080x1920.png");
+const DEFAULT_BG_IMAGE = null;
 
 const getAuthErrorMessage = (error, mode) => {
   const code = error?.code || "";
@@ -51,14 +55,19 @@ const getAuthErrorMessage = (error, mode) => {
 };
 
 export default function AuthScreen({
-  heroImage = DEFAULT_HERO_IMAGE,
   backgroundImage = DEFAULT_BG_IMAGE,
-  title = "Welcome To DealBuddy",
+  title = "Welcome To Deal Buddy",
   signupTitle,
   subtitle = "Sign in to continue",
   signupSubtitle = "Create your account",
+  brandTitle = "Deal Buddy",
+  brandTagline = "Together, We Can Save More",
   onLogin,
   onRegister,
+  onForgotPassword,
+  onGoogleLogin,
+  onAppleLogin,
+  showSocialButtons = true,
   allowSignup = true,
   signInLabel = "Sign In",
   signUpLabel = "Create Account",
@@ -67,6 +76,7 @@ export default function AuthScreen({
 }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
   const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -125,93 +135,232 @@ export default function AuthScreen({
   const displayTitle = isSignup ? signupTitle || title : title;
   const displaySubtitle = isSignup ? signupSubtitle : subtitle;
 
+  const handleForgotPassword = () => {
+    if (typeof onForgotPassword === "function") {
+      onForgotPassword(email.trim());
+      return;
+    }
+    Alert.alert("Forgot password", "Password reset is not configured yet.");
+  };
+
+  const handleSocialLogin = (provider) => {
+    if (provider === "google" && typeof onGoogleLogin === "function") {
+      onGoogleLogin();
+      return;
+    }
+    if (provider === "apple" && typeof onAppleLogin === "function") {
+      onAppleLogin();
+      return;
+    }
+    Alert.alert("Coming soon", "Social login is not available yet.");
+  };
+
+  const Wrapper = backgroundImage ? ImageBackground : View;
+  const wrapperProps = backgroundImage
+    ? { source: backgroundImage, resizeMode: "cover" }
+    : {};
+
   return (
-    <ImageBackground
-      source={backgroundImage}
-      style={styles.screen}
-      imageStyle={styles.screenImage}
-      resizeMode="cover"
-    >
-      <View style={styles.backdrop} />
-      <View style={styles.content}>
-        <View style={styles.card}>
-        <Text style={styles.title}>{displayTitle}</Text>
-        <Text style={styles.subtitle}>{displaySubtitle}</Text>
-        <AppInput
-          label="Email"
-          placeholder="Email address"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          containerStyle={styles.inputSpacing}
-        />
-        <AppInput
-          label="Password"
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry={!showPassword}
-          rightElement={
-            showPassword ? (
-              <EyeOff size={18} color={theme.colors.primary} />
-            ) : (
-              <Eye size={18} color={theme.colors.textMuted} />
-            )
-          }
-          onRightPress={() => setShowPassword((prev) => !prev)}
-        />
-        {showSignup && isSignup ? (
-          <AppInput
-            label="Confirm Password"
-            placeholder="Confirm password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry={!showPassword}
-            rightElement={
-              showPassword ? (
-                <EyeOff size={18} color={theme.colors.primary} />
-              ) : (
-                <Eye size={18} color={theme.colors.textMuted} />
-              )
-            }
-            onRightPress={() => setShowPassword((prev) => !prev)}
-          />
-        ) : null}
-        {showSignup && isSignup ? (
-          <Text style={styles.hint}>
-            Minimum 8 chars with upper case, lower case, number, and special
-            character.
-          </Text>
-        ) : null}
-        <AppButton
-          title={
-            loading
-              ? isSignup
-                ? "Creating..."
-                : "Signing in..."
-              : isSignup
-                ? signUpLabel
-                : signInLabel
-          }
-          onPress={isSignup ? handleSignup : handleLogin}
-          loading={loading}
-          style={styles.submit}
-        />
-        {showSignup ? (
-          <AppButton
-            title={isSignup ? toggleToSigninLabel : toggleToSignupLabel}
-            onPress={() => {
-              setIsSignup((prev) => !prev);
-              setConfirmPassword("");
-            }}
-            variant="secondary"
-            style={styles.secondary}
-          />
-        ) : null}
-        </View>
+    <Wrapper style={styles.screen} {...wrapperProps}>
+      <View style={styles.meshBackground}>
+        <View style={styles.meshOrbPrimary} />
+        <View style={styles.meshOrbAccent} />
+        <View style={styles.meshOrbSoft} />
       </View>
-    </ImageBackground>
+
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: Math.max(insets.top, 24),
+              paddingBottom: Math.max(insets.bottom, 24),
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.brandBlock}>
+            <View style={styles.brandLogo}>
+              <Ionicons
+                name="bag-handle"
+                size={28}
+                color={theme.colors.primary}
+              />
+            </View>
+            <Text style={styles.brandTitle}>{brandTitle}</Text>
+            <Text style={styles.brandTagline}>{brandTagline}</Text>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.title}>{displayTitle}</Text>
+              <Text style={styles.subtitle}>{displaySubtitle}</Text>
+            </View>
+
+            <AppInput
+              label="Email Address"
+              placeholder="hello@dealbuddy.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              containerStyle={styles.inputSpacing}
+              labelStyle={styles.inputLabel}
+              inputStyle={styles.input}
+              leftElement={
+                <Ionicons
+                  name="mail-outline"
+                  size={18}
+                  color={theme.colors.textMuted}
+                />
+              }
+            />
+
+            <AppInput
+              label="Password"
+              placeholder="••••••••"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              labelStyle={styles.inputLabel}
+              inputStyle={styles.input}
+              leftElement={
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={theme.colors.textMuted}
+                />
+              }
+              rightElement={
+                showPassword ? (
+                  <EyeOff size={18} color={theme.colors.primary} />
+                ) : (
+                  <Eye size={18} color={theme.colors.textMuted} />
+                )
+              }
+              onRightPress={() => setShowPassword((prev) => !prev)}
+              rightContainerStyle={styles.eyeButton}
+            />
+
+            {showSignup && isSignup ? (
+              <AppInput
+                label="Confirm Password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showPassword}
+                labelStyle={styles.inputLabel}
+                inputStyle={styles.input}
+                leftElement={
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={18}
+                    color={theme.colors.textMuted}
+                  />
+                }
+                rightElement={
+                  showPassword ? (
+                    <EyeOff size={18} color={theme.colors.primary} />
+                  ) : (
+                    <Eye size={18} color={theme.colors.textMuted} />
+                  )
+                }
+                onRightPress={() => setShowPassword((prev) => !prev)}
+                rightContainerStyle={styles.eyeButton}
+              />
+            ) : null}
+
+            {showSignup && isSignup ? (
+              <Text style={styles.hint}>
+                Minimum 8 chars with upper case, lower case, number, and special
+                character.
+              </Text>
+            ) : null}
+
+            {!isSignup ? (
+              <TouchableOpacity
+                onPress={handleForgotPassword}
+                style={styles.forgotWrap}
+              >
+                <Text style={styles.forgotText}>Forgot Password?</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <AppButton
+              title={
+                loading
+                  ? isSignup
+                    ? "Creating..."
+                    : "Signing in..."
+                  : isSignup
+                    ? signUpLabel
+                    : signInLabel
+              }
+              onPress={isSignup ? handleSignup : handleLogin}
+              loading={loading}
+              style={styles.submit}
+              textStyle={styles.submitText}
+            />
+
+            {showSocialButtons ? (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>Or connect with</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                <View style={styles.socialRow}>
+                  <TouchableOpacity
+                    style={styles.socialButtonLight}
+                    onPress={() => handleSocialLogin("google")}
+                  >
+                    <Ionicons
+                      name="logo-google"
+                      size={18}
+                      color={theme.colors.text}
+                    />
+                    <Text style={styles.socialTextDark}>Google</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.socialButtonDark}
+                    onPress={() => handleSocialLogin("apple")}
+                  >
+                    <Ionicons
+                      name="logo-apple"
+                      size={18}
+                      color={theme.colors.onPrimary}
+                    />
+                    <Text style={styles.socialTextLight}>Apple</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : null}
+          </View>
+
+          {showSignup ? (
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>
+                {isSignup ? "Already have an account?" : "New to Deal Buddy?"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsSignup((prev) => !prev);
+                  setConfirmPassword("");
+                }}
+              >
+                <Text style={styles.footerLink}>
+                  {isSignup ? toggleToSigninLabel : toggleToSignupLabel}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Wrapper>
   );
 }
 
@@ -219,57 +368,218 @@ const createStyles = (theme) =>
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor: theme.colors.dashboardBg,
+      backgroundColor: theme.colors.primary,
     },
-    screenImage: {
-      width: "100%",
-      height: "100%",
-      opacity: 0.95,
-    },
-    backdrop: {
+    meshBackground: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: theme.colors.overlaySoft,
+    },
+    meshOrbPrimary: {
+      position: "absolute",
+      top: -80,
+      left: -60,
+      width: 220,
+      height: 220,
+      borderRadius: 120,
+      backgroundColor: theme.colors.onPrimary,
+      opacity: 0.18,
+    },
+    meshOrbAccent: {
+      position: "absolute",
+      bottom: -100,
+      right: -80,
+      width: 260,
+      height: 260,
+      borderRadius: 160,
+      backgroundColor: theme.colors.purple,
+      opacity: 0.25,
+    },
+    meshOrbSoft: {
+      position: "absolute",
+      top: "35%",
+      right: -60,
+      width: 180,
+      height: 180,
+      borderRadius: 120,
+      backgroundColor: theme.colors.primary,
+      opacity: 0.2,
+    },
+    keyboardWrap: {
+      flex: 1,
     },
     content: {
-      flex: 1,
-      padding: 24,
+      flexGrow: 1,
+      paddingHorizontal: 24,
+      paddingBottom: 32,
       justifyContent: "center",
+      gap: 20,
+    },
+    brandBlock: {
+      alignItems: "center",
+      gap: 6,
+    },
+    brandLogo: {
+      width: 70,
+      height: 70,
+      borderRadius: 35,
+      backgroundColor: theme.colors.onPrimary,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: theme.colors.text,
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 4,
+    },
+    brandTitle: {
+      fontSize: 26,
+      fontWeight: "800",
+      color: theme.colors.onPrimary,
+      letterSpacing: 0.4,
+    },
+    brandTagline: {
+      fontSize: 12,
+      color: theme.colors.onPrimaryMuted,
+      fontWeight: "600",
     },
     card: {
-      backgroundColor: "transparent",
+      backgroundColor: theme.colors.surfaceGlassStrong,
       borderRadius: 24,
       padding: 24,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.onPrimarySoft,
       ...theme.shadow.card,
+      gap: 8,
     },
-    heroImage: {
-      width: "100%",
-      height: 140,
-      marginBottom: 12,
+    cardHeader: {
+      marginBottom: 6,
     },
     title: {
-      fontSize: 24,
+      fontSize: 22,
       fontWeight: "800",
       color: theme.colors.text,
     },
     subtitle: {
-      marginTop: 6,
+      marginTop: 4,
       color: theme.colors.textMuted,
       fontSize: 13,
-      marginBottom: 12,
     },
     inputSpacing: {
       marginTop: 0,
     },
-    submit: {
-      marginTop: 16,
+    inputLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      color: theme.colors.textMuted,
+      marginLeft: 6,
     },
-    secondary: {
+    input: {
+      backgroundColor: theme.colors.surfaceGlass,
+      borderWidth: 0,
+      borderRadius: 999,
+      paddingVertical: 14,
+      paddingLeft: 44,
+      color: theme.colors.text,
+    },
+    eyeButton: {
+      backgroundColor: theme.colors.surfaceLight,
+    },
+    forgotWrap: {
+      alignItems: "flex-end",
+      marginTop: 4,
+    },
+    forgotText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: theme.colors.primary,
+    },
+    submit: {
       marginTop: 12,
+      borderRadius: 999,
+      paddingVertical: 14,
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+      shadowColor: theme.colors.primary,
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    submitText: {
+      fontWeight: "800",
+    },
+    dividerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginTop: 18,
+      marginBottom: 12,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: theme.colors.border,
+    },
+    dividerText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: theme.colors.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+    },
+    socialRow: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    socialButtonLight: {
+      flex: 1,
+      borderRadius: 999,
+      paddingVertical: 12,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    socialButtonDark: {
+      flex: 1,
+      borderRadius: 999,
+      paddingVertical: 12,
+      backgroundColor: theme.colors.text,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    socialTextDark: {
+      color: theme.colors.text,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    socialTextLight: {
+      color: theme.colors.onPrimary,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    footerRow: {
+      alignItems: "center",
+      gap: 6,
+    },
+    footerText: {
+      color: theme.colors.onPrimaryMuted,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    footerLink: {
+      color: theme.colors.onPrimary,
+      fontSize: 12,
+      fontWeight: "800",
+      textDecorationLine: "underline",
     },
     hint: {
-      marginTop: 8,
+      marginTop: 6,
       fontSize: 11,
       color: theme.colors.textMuted,
     },

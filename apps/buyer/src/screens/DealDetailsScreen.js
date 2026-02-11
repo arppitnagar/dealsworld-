@@ -10,6 +10,7 @@ import {
   Animated,
   Easing,
   StyleSheet,
+  TextInput,
 } from "react-native";
 import { Heart, MessageCircle } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +33,9 @@ import {
 } from "../hooks/useDeals";
 import { useDealState } from "../hooks/useDealState";
 import { useAddresses } from "../hooks/useAddresses";
+import { useDealReviews } from "../hooks/useDealReviews";
+import { useAuth } from "../context/AuthContext";
+import { useUserProfile } from "../hooks/useUserProfile";
 
 const IST_OFFSET_MINUTES = 330;
 const MONTHS_SHORT = [
@@ -66,6 +70,16 @@ function formatCityLine(city, state, pincode) {
   return parts.join(", ");
 }
 
+function formatReviewDate(value) {
+  const date = toDate(value);
+  if (!date) return "";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function DealDetailsScreen({ route, navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -79,6 +93,14 @@ export default function DealDetailsScreen({ route, navigation }) {
   const { mutate: joinDeal, isLoading: joining } = useJoinDeal();
   const { mutate: leaveDeal, isLoading: leaving } = useLeaveDeal();
   const { addresses, loading: addressesLoading } = useAddresses();
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
+  const {
+    reviews,
+    myReview,
+    loading: reviewsLoading,
+    submitReview,
+  } = useDealReviews(dealId);
   const {
     dealStates,
     viewedIds,
@@ -95,9 +117,14 @@ export default function DealDetailsScreen({ route, navigation }) {
   const [showJoinSuccess, setShowJoinSuccess] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
+  const [ratingValue, setRatingValue] = useState(0);
+  const [commentText, setCommentText] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
   const insets = useSafeAreaInsets();
   const successScale = useRef(new Animated.Value(0.9)).current;
   const successOpacity = useRef(new Animated.Value(0)).current;
+  const reviewPrefilledRef = useRef(false);
+  const isBuyer = profile?.role ? profile.role === "buyer" : true;
 
   const deal = useMemo(
     () => deals?.find((d) => d.id === dealId),
@@ -217,6 +244,14 @@ export default function DealDetailsScreen({ route, navigation }) {
     });
   }, [addresses, dealState?.deliveryAddressId, showAddressModal]);
 
+  useEffect(() => {
+    if (!myReview || reviewPrefilledRef.current) return;
+    const nextRating = Number(myReview.rating) || 0;
+    setRatingValue(nextRating);
+    setCommentText(myReview.comment || "");
+    reviewPrefilledRef.current = true;
+  }, [myReview]);
+
   const handleToggleFavorite = () => {
     if (!dealId) return;
     toggleFavorite(dealId);
@@ -314,6 +349,35 @@ export default function DealDetailsScreen({ route, navigation }) {
     }
   };
 
+  const handleSubmitReview = async () => {
+    if (!dealId) return;
+    if (!isBuyer) {
+      Alert.alert("Not allowed", "Only buyers can submit reviews.");
+      return;
+    }
+    if (!user?.uid) {
+      Alert.alert("Login required", "Please sign in to leave a review.");
+      return;
+    }
+    if (submittingReview) return;
+
+    try {
+      setSubmittingReview(true);
+      await submitReview({
+        rating: ratingValue,
+        comment: commentText,
+        displayName: profile?.displayName || user?.displayName,
+      });
+      Alert.alert("Thanks!", "Your rating has been saved.");
+    } catch (error) {
+      const message =
+        error?.message || "We could not save your review. Please try again.";
+      Alert.alert("Review failed", message);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={styles.loadingScreen}>
@@ -375,6 +439,16 @@ export default function DealDetailsScreen({ route, navigation }) {
       : null;
   const primaryPrice =
     hasDiscount ? discountValue : hasOriginal ? originalValue : null;
+  const ratingCountRaw = deal?.ratingCount ?? 0;
+  const ratingCount = Number.isFinite(Number(ratingCountRaw))
+    ? Number(ratingCountRaw)
+    : 0;
+  const ratingAvgRaw = deal?.ratingAvg ?? deal?.rating ?? null;
+  const ratingAvg = Number.isFinite(Number(ratingAvgRaw))
+    ? Number(ratingAvgRaw)
+    : null;
+  const ratingLabel =
+    ratingCount > 0 && ratingAvg !== null ? ratingAvg.toFixed(1) : "0.0";
 
   const handleToggleJoin = () => {
     if (!dealId) return;
@@ -502,6 +576,114 @@ export default function DealDetailsScreen({ route, navigation }) {
             showImage={Boolean(dealImage)}
           />
         </View>
+
+        <InfoCard title="Ratings & Reviews" style={styles.reviewCard}>
+          <View style={styles.reviewSummaryRow}>
+            <View>
+              <Text style={styles.reviewSummaryValue}>{ratingLabel}</Text>
+              <Text style={styles.reviewSummarySub}>
+                {ratingCount > 0
+                  ? `${ratingCount} rating${ratingCount === 1 ? "" : "s"}`
+                  : "No ratings yet"}
+              </Text>
+            </View>
+            <View style={styles.reviewStars}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[
+                    styles.reviewStarButton,
+                    !isBuyer && styles.reviewStarButtonDisabled,
+                  ]}
+                  onPress={() => isBuyer && setRatingValue(value)}
+                  disabled={!isBuyer}
+                >
+                  <Ionicons
+                    name={value <= ratingValue ? "star" : "star-outline"}
+                    size={22}
+                    color={
+                      value <= ratingValue
+                        ? theme.colors.warningBright
+                        : theme.colors.textMuted
+                    }
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {isBuyer ? (
+            <View style={styles.reviewInputWrap}>
+              <Text style={styles.reviewInputLabel}>
+                {myReview ? "Update your review" : "Leave a review"}
+              </Text>
+              <TextInput
+                value={commentText}
+                onChangeText={setCommentText}
+                placeholder="Share your experience..."
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.reviewInput}
+                multiline
+              />
+              <AppButton
+                title={
+                  submittingReview
+                    ? "Saving..."
+                    : myReview
+                      ? "Update Review"
+                      : "Submit Review"
+                }
+                onPress={handleSubmitReview}
+                disabled={submittingReview}
+                style={styles.reviewSubmitButton}
+              />
+            </View>
+          ) : (
+            <Text style={styles.reviewEmptyText}>
+              Only buyers can leave reviews.
+            </Text>
+          )}
+
+          <View style={styles.reviewList}>
+            {reviewsLoading ? (
+              <Text style={styles.reviewEmptyText}>Loading reviews...</Text>
+            ) : reviews?.length ? (
+              reviews.map((item) => (
+                <View key={item.id} style={styles.reviewItem}>
+                  <View style={styles.reviewItemHeader}>
+                    <Text style={styles.reviewUser}>
+                      {item.userName || "Buyer"}
+                    </Text>
+                    <Text style={styles.reviewDate}>
+                      {formatReviewDate(item.createdAt || item.updatedAt)}
+                    </Text>
+                  </View>
+                  <View style={styles.reviewRatingRow}>
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <Ionicons
+                        key={value}
+                        name={value <= Number(item.rating) ? "star" : "star-outline"}
+                        size={16}
+                        color={
+                          value <= Number(item.rating)
+                            ? theme.colors.warningBright
+                            : theme.colors.textMuted
+                        }
+                      />
+                    ))}
+                  </View>
+                  {item.comment ? (
+                    <Text style={styles.reviewComment}>{item.comment}</Text>
+                  ) : null}
+                </View>
+              ))
+            ) : (
+              <Text style={styles.reviewEmptyText}>
+                Be the first to rate this deal.
+              </Text>
+            )}
+          </View>
+        </InfoCard>
 
         <InfoCard title="Participation" style={styles.actionCard}>
           <AppButton
@@ -889,6 +1071,106 @@ const createStyles = (theme) =>
     borderWidth: 1,
     borderColor: theme.colors.border,
     ...theme.shadow.card,
+  },
+  reviewCard: {
+    backgroundColor: theme.colors.background,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadow.card,
+  },
+  reviewSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  reviewSummaryValue: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+  reviewSummarySub: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+  },
+  reviewStars: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  reviewStarButton: {
+    padding: 2,
+  },
+  reviewStarButtonDisabled: {
+    opacity: 0.5,
+  },
+  reviewInputWrap: {
+    marginTop: 12,
+    gap: 10,
+  },
+  reviewInputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  reviewInput: {
+    minHeight: 88,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: theme.colors.text,
+    backgroundColor: theme.colors.surface,
+    textAlignVertical: "top",
+  },
+  reviewSubmitButton: {
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  reviewList: {
+    marginTop: 16,
+    gap: 12,
+  },
+  reviewItem: {
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  reviewItemHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  reviewUser: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  reviewDate: {
+    fontSize: 10,
+    color: theme.colors.textMuted,
+  },
+  reviewRatingRow: {
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 6,
+  },
+  reviewComment: {
+    marginTop: 6,
+    fontSize: 12,
+    color: theme.colors.text,
+  },
+  reviewEmptyText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
   },
   loadingScreen: {
     flex: 1,

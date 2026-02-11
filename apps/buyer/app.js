@@ -1,9 +1,12 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
-import { ActivityIndicator, View } from "react-native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider, useTheme } from "@dealsworld/shared";
+import {
+  DealBuddyLoadingScreen,
+  ThemeProvider,
+  useTheme,
+} from "@dealsworld/shared";
 import HomeScreen from "./src/screens/HomeScreen";
 import DealDetailsScreen from "./src/screens/DealDetailsScreen";
 import DealChatScreen from "./src/screens/DealChatScreen";
@@ -28,21 +31,7 @@ const Stack = createStackNavigator();
 const queryClient = new QueryClient();
 
 function LoadingScreen() {
-  const { theme } = useTheme();
-  const styles = useMemo(
-    () => ({
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: theme.colors.dashboardBg,
-    }),
-    [theme],
-  );
-  return (
-    <View style={styles}>
-      <ActivityIndicator size="large" color={theme.colors.primary} />
-    </View>
-  );
+  return <DealBuddyLoadingScreen label="Checking your account..." />;
 }
 
 function AppNavigator() {

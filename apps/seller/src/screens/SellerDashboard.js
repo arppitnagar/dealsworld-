@@ -5,13 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   StatusBar,
-  Image,
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { db } from "../config/firebase";
 import {
   collection,
@@ -28,9 +27,8 @@ import {
   PrimaryBanner,
   EmptyState,
   DealCard as SharedDealCard,
-  SearchBar,
-  StatsCard,
-  HeaderBar,
+  AppInput,
+  DealBuddyLoadingScreen,
   getStatusColor,
   getStatusLabel,
   toDate,
@@ -38,14 +36,35 @@ import {
   formatExpiryLabel,
   formatCountdown,
   theme,
-  SkeletonList,
   CardHeader,
-  SkeletonStatsRow,
 } from "@dealsworld/shared";
 
-const { width } = Dimensions.get("window");
 const SPACING = 20;
 const cardStyles = getCardStyles(theme);
+const STATUS_FILTERS = [
+  { key: "active", label: "Active" },
+  { key: "pending", label: "Pending" },
+];
+
+const FilterChip = ({ label, count, isSelected, onPress, accentColor }) => (
+  <TouchableOpacity
+    style={[
+      styles.filterChip,
+      isSelected ? styles.filterChipActive : styles.filterChipIdle,
+      isSelected && { backgroundColor: accentColor, borderColor: accentColor },
+    ]}
+    onPress={onPress}
+  >
+    <Text
+      style={[
+        styles.filterChipText,
+        isSelected ? styles.filterChipTextActive : styles.filterChipTextIdle,
+      ]}
+    >
+      {count !== null && count !== undefined ? `${label} (${count})` : label}
+    </Text>
+  </TouchableOpacity>
+);
 
 export default function SellerDashboard({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -181,16 +200,13 @@ export default function SellerDashboard({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <SkeletonStatsRow />
-        <SkeletonList count={3} />
-      </View>
+      <DealBuddyLoadingScreen label="Loading deals..." />
     );
   }
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -202,15 +218,24 @@ export default function SellerDashboard({ navigation }) {
           />
         }
       >
-        <HeaderBar
-          title="Dashboard"
-          subtitle={
-            selectedFilter
-              ? `Showing ${selectedFilter} items`
-              : "Real-time performance"
-          }
-          onTitleLongPress={() => navigation.navigate("StyleGuide")}
-          right={
+        <LinearGradient
+          colors={[theme.colors.primary, theme.colors.purple]}
+          style={[styles.header, { paddingTop: 16 }]}
+        >
+          <View style={styles.headerRow}>
+            <View style={styles.greetingRow}>
+              <View style={styles.avatarWrap}>
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color={theme.colors.onPrimary}
+                />
+              </View>
+              <View>
+                <Text style={styles.greetingLabel}>Good morning,</Text>
+                <Text style={styles.greetingName}>Seller</Text>
+              </View>
+            </View>
             <View style={styles.headerActions}>
               {__DEV__ && (
                 <TouchableOpacity
@@ -220,46 +245,76 @@ export default function SellerDashboard({ navigation }) {
                   <Text style={styles.debugChipText}>Style</Text>
                 </TouchableOpacity>
               )}
-              {selectedFilter ? (
-                <TouchableOpacity onPress={() => setSelectedFilter(null)}>
-                  <Text style={styles.clearText}>Show All</Text>
-                </TouchableOpacity>
-              ) : null}
+              <TouchableOpacity style={styles.headerIconBtn}>
+                <Ionicons
+                  name="notifications-outline"
+                  size={20}
+                  color={theme.colors.onPrimary}
+                />
+              </TouchableOpacity>
             </View>
-          }
-          style={styles.header}
-        />
+          </View>
 
-        <SearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onClear={() => setSearchQuery("")}
-          placeholder="Smart search by any value..."
-          style={styles.searchBar}
-        />
+          <View style={styles.searchRow}>
+            <View style={styles.searchInputWrap}>
+              <AppInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search for deals..."
+                containerStyle={styles.searchInputContainer}
+                inputStyle={styles.searchInput}
+                placeholderTextColor={theme.colors.onPrimaryMuted}
+                leftElement={
+                  <Ionicons
+                    name="search"
+                    size={18}
+                    color={theme.colors.onPrimaryMuted}
+                  />
+                }
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearSearchBtn}
+                  onPress={() => setSearchQuery("")}
+                >
+                  <View style={styles.clearSearchCircle}>
+                    <Ionicons
+                      name="close"
+                      size={14}
+                      color={theme.colors.onPrimaryMuted}
+                    />
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </LinearGradient>
 
-        {/* Interactive Stats Cards */}
-        <View style={styles.statsContainer}>
-          <StatsCard
-            title="Active"
-            count={stats.active}
-            color={theme.colors.danger}
-            bgColor={theme.colors.dangerSoft}
-            icon="flame"
-            isSelected={selectedFilter === "active"}
-            onPress={() => handleFilterPress("active")}
-            style={styles.statCard}
-          />
-          <StatsCard
-            title="pending"
-            count={stats.scheduled}
-            color={theme.colors.purple}
-            bgColor={theme.colors.purpleSoft}
-            icon="calendar"
-            isSelected={selectedFilter === "pending"}
-            onPress={() => handleFilterPress("pending")}
-            style={styles.statCard}
-          />
+        <View style={styles.filterWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingLeft: 20, paddingRight: 12 }}
+          >
+            {STATUS_FILTERS.map((filter) => {
+              const count =
+                filter.key === "active" ? stats.active : stats.scheduled;
+              const accentColor =
+                filter.key === "active"
+                  ? theme.colors.warningBright
+                  : theme.colors.purple;
+              return (
+                <FilterChip
+                  key={filter.key}
+                  label={filter.label}
+                  count={count}
+                  isSelected={selectedFilter === filter.key}
+                  onPress={() => handleFilterPress(filter.key)}
+                  accentColor={accentColor}
+                />
+              );
+            })}
+          </ScrollView>
         </View>
 
         <PrimaryBanner
@@ -288,8 +343,6 @@ export default function SellerDashboard({ navigation }) {
           ) : (
             filteredDeals.map((deal) => {
               const joins = deal.joinedUsers || 0;
-              const target = deal.minGroupSize || 1;
-              const progress = Math.min(joins / target, 1);
               const accentColor = getStatusColor(deal.status);
               const expiryDate = toDate(deal.expiresAt);
               const countdown =
@@ -307,13 +360,16 @@ export default function SellerDashboard({ navigation }) {
                   category={deal.category}
                   image={deal.image}
                   joins={joins}
-                  target={target}
-                  progress={progress}
                   accentColor={accentColor}
                   statusLabel={getStatusLabel(deal.status)}
-                  statusColor={accentColor}
+                  viewsCount={deal.viewsCount ?? deal.views ?? 0}
+                  favoritesCount={
+                    deal.favoritesCount ?? deal.favouritesCount ?? 0
+                  }
                   countdown={countdown}
                   expiryLabel={expiryLabel}
+                  actionLabel="View Deal"
+                  onActionPress={() => navigation.navigate("DealDetails", { deal })}
                   onPress={() => navigation.navigate("DealDetails", { deal })}
                 />
               );
@@ -440,40 +496,130 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 40 },
   header: {
     paddingHorizontal: SPACING,
-    paddingTop: 20,
-    marginBottom: 25,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
   },
-  clearText: { color: theme.colors.purple, fontWeight: "800", fontSize: 13 },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  greetingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  avatarWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.onPrimarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+  },
+  greetingLabel: {
+    color: theme.colors.onPrimaryMuted,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  greetingName: {
+    fontWeight: "800",
+    color: theme.colors.onPrimary,
+    marginTop: 2,
+  },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
+  headerIconBtn: {
+    backgroundColor: theme.colors.onPrimarySoft,
+    padding: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+  },
+  searchRow: {
+    marginTop: 16,
+  },
+  searchInputWrap: {
+    position: "relative",
+  },
+  searchInputContainer: {
+    marginTop: 0,
+  },
+  searchInput: {
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    color: theme.colors.onPrimary,
+    borderRadius: 18,
+    paddingRight: 36,
+  },
+  clearSearchBtn: {
+    position: "absolute",
+    right: 12,
+    top: "50%",
+    marginTop: -12,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearSearchCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   debugChip: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.onPrimarySoft,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.onPrimaryMuted,
   },
   debugChipText: {
     fontSize: 11,
     fontWeight: "700",
+    color: theme.colors.onPrimary,
+  },
+  filterWrap: {
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    marginRight: 10,
+    borderWidth: 1,
+  },
+  filterChipActive: {
+    backgroundColor: theme.colors.warningBright,
+    borderColor: theme.colors.warningBright,
+  },
+  filterChipIdle: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  filterChipTextActive: {
+    color: theme.colors.onPrimary,
+  },
+  filterChipTextIdle: {
     color: theme.colors.textMuted,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING,
-    marginBottom: 25,
-  },
-  searchBar: {
-    marginHorizontal: SPACING,
-    marginBottom: 20,
-  },
-  statCard: {
-    width: (width - 60) / 2,
   },
   createBtn: {
     marginHorizontal: SPACING,

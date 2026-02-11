@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   onSnapshot,
+  runTransaction,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
@@ -91,17 +92,55 @@ export const useDealState = () => {
 
   const toggleFavorite = useCallback(
     async (dealId) => {
-      if (!dealId) return false;
-      const current = stateMap.get(dealId)?.favorite;
-      const nextValue = !current;
-      await setDealState(
-        dealId,
-        { favorite: nextValue },
-        { favoriteAt: serverTimestamp() },
-      );
+      if (!user?.uid || !dealId) return false;
+      let nextValue = false;
+      await runTransaction(db, async (tx) => {
+        const stateRef = doc(
+          db,
+          "users",
+          user.uid,
+          DEAL_STATE_COLLECTION,
+          dealId,
+        );
+        const dealRef = doc(db, "deals", dealId);
+        const stateSnap = await tx.get(stateRef);
+        const dealSnap = await tx.get(dealRef);
+        const prevValue = stateSnap.exists()
+          ? Boolean(stateSnap.data()?.favorite)
+          : false;
+        nextValue = !prevValue;
+
+        tx.set(
+          stateRef,
+          {
+            favorite: nextValue,
+            favoriteAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+
+        if (dealSnap.exists()) {
+          const dealData = dealSnap.data() || {};
+          const currentCount = Number.isFinite(
+            Number(dealData.favoritesCount),
+          )
+            ? Number(dealData.favoritesCount)
+            : 0;
+          const updatedCount = Math.max(
+            0,
+            currentCount + (nextValue ? 1 : -1),
+          );
+          tx.update(dealRef, {
+            favoritesCount: updatedCount,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      });
+      applyLocalUpdate(dealId, { favorite: nextValue });
       return nextValue;
     },
-    [setDealState, stateMap],
+    [applyLocalUpdate, user?.uid],
   );
 
   const setDeliveryAddress = useCallback(

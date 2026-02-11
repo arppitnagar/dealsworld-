@@ -3,167 +3,202 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { getCardStyles } from "../styles/cards";
 import { useTheme } from "../theme/ThemeProvider";
-import StatusPill from "./StatusPill";
-import MetricRow from "./MetricRow";
 
 export default function DealCard({
   title,
   category,
   image,
   joins,
-  target,
-  progress,
   accentColor,
+  viewsCount,
+  favoritesCount,
   countdown,
   expiryLabel,
   statusLabel,
-  statusColor,
   onPress,
+  actionLabel,
+  onActionPress,
 }) {
   const { theme } = useTheme();
   const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
+  const subtitleLine = [category, expiryLabel || countdown]
+    .filter(Boolean)
+    .join(" • ");
+  const formatCount = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "0";
+    if (numeric >= 1000000) {
+      return `${(numeric / 1000000).toFixed(1)}m`;
+    }
+    if (numeric >= 1000) {
+      return `${(numeric / 1000).toFixed(numeric >= 10000 ? 0 : 1)}k`;
+    }
+    return `${numeric}`;
+  };
   const styles = useMemo(
     () =>
       StyleSheet.create({
         card: {
-          flexDirection: "row",
-          marginBottom: 16,
+          marginBottom: 20,
           overflow: "hidden",
-          ...cardStyles.base,
+          backgroundColor: theme.colors.surface,
+          borderRadius: 24,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
           ...cardStyles.shadow,
         },
-        accentStrip: { width: 6 },
-        content: { flex: 1, padding: 16 },
-        topRow: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
-        pillRow: {
+        imageWrap: {
+          height: 190,
+          backgroundColor: theme.colors.surfaceLight,
+          overflow: "hidden",
+        },
+        image: { width: "100%", height: "100%" },
+        imagePlaceholder: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        badge: {
+          position: "absolute",
+          top: 12,
+          left: 12,
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          borderRadius: 999,
+          backgroundColor: accentColor || theme.colors.warningBright,
+        },
+        badgeText: {
+          color: theme.colors.onPrimary,
+          fontSize: 10,
+          fontWeight: "800",
+          textTransform: "uppercase",
+          letterSpacing: 0.6,
+        },
+        heartBadge: {
+          position: "absolute",
+          top: 12,
+          right: 12,
+          paddingHorizontal: 10,
+          paddingVertical: 6,
+          borderRadius: 999,
+          backgroundColor: theme.colors.surfaceGlass,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+        },
+        heartText: {
+          fontSize: 10,
+          fontWeight: "700",
+          color: theme.colors.textMuted,
+        },
+        body: {
+          padding: 16,
+          gap: 8,
+        },
+        titleRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 10,
+        },
+        title: { flex: 1, fontSize: 16, fontWeight: "800", color: theme.colors.text },
+        subtitle: { fontSize: 12, color: theme.colors.textMuted },
+        metaRow: {
           flexDirection: "row",
           alignItems: "center",
           gap: 8,
-          flexWrap: "wrap",
-          marginBottom: 4,
         },
-        imagePlaceholder: {
-          width: 50,
-          height: 50,
-          borderRadius: 15,
-          justifyContent: "center",
-          alignItems: "center",
-          marginRight: 12,
-        },
-        image: { width: "100%", height: "100%", borderRadius: 15 },
-        categoryBadge: {
-          alignSelf: "flex-start",
-          paddingHorizontal: 8,
-          paddingVertical: 3,
-          borderRadius: 8,
-          marginBottom: 4,
-        },
-        categoryText: { fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
-        title: { fontSize: 17, fontWeight: "700", color: theme.colors.text },
-        progressSection: {
-          borderTopWidth: 1,
-          borderTopColor: theme.colors.surfaceLighter,
-          paddingTop: 12,
-        },
-        progressInfo: {
+        metaChip: {
           flexDirection: "row",
-          justifyContent: "space-between",
-          marginBottom: 8,
-        },
-        progressLabel: {
-          fontSize: 12,
-          color: theme.colors.textMuted,
-          fontWeight: "600",
-        },
-        progressPercent: {
-          fontSize: 13,
-          color: theme.colors.text,
-          fontWeight: "800",
-        },
-        progressBarBg: {
-          height: 8,
+          alignItems: "center",
+          gap: 6,
           backgroundColor: theme.colors.surfaceLight,
-          borderRadius: 4,
-          overflow: "hidden",
-          marginBottom: 8,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: 8,
         },
-        progressBarFill: { height: "100%" },
-        joinCount: { fontSize: 12, color: theme.colors.textMuted, marginBottom: 6 },
-        metricRow: { marginBottom: 4 },
+        metaText: {
+          fontSize: 10,
+          fontWeight: "700",
+          color: theme.colors.textMuted,
+        },
+        actionRow: {
+          alignItems: "flex-end",
+        },
+        actionButton: {
+          backgroundColor: theme.colors.text,
+          borderRadius: 12,
+          paddingHorizontal: 14,
+          paddingVertical: 8,
+        },
+        actionText: {
+          color: theme.colors.onPrimary,
+          fontSize: 12,
+          fontWeight: "700",
+        },
       }),
-    [cardStyles, theme],
+    [accentColor, cardStyles, theme],
   );
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
-      <View style={[styles.accentStrip, { backgroundColor: accentColor }]} />
-      <View style={styles.content}>
-        <View style={styles.topRow}>
-          <View style={[styles.imagePlaceholder, { backgroundColor: accentColor + "10" }]}>
-            {image ? (
-              <Image source={{ uri: image }} style={styles.image} />
-            ) : (
-              <Ionicons name="pricetag" size={20} color={accentColor} />
-            )}
+      <View style={styles.imageWrap}>
+        {image ? (
+          <Image source={{ uri: image }} style={styles.image} />
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <Ionicons name="image-outline" size={24} color={theme.colors.textMuted} />
           </View>
-          <View style={{ flex: 1 }}>
-            <View style={styles.pillRow}>
-              <View
-                style={[
-                  styles.categoryBadge,
-                  { backgroundColor: accentColor + "15" },
-                ]}
-              >
-                <Text style={[styles.categoryText, { color: accentColor }]}>
-                  {category || "General"}
-                </Text>
-              </View>
-              {statusLabel ? (
-                <StatusPill
-                  label={statusLabel}
-                  color={statusColor || accentColor}
-                />
-              ) : null}
+        )}
+        {statusLabel ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{statusLabel}</Text>
+          </View>
+        ) : null}
+          {Number.isFinite(Number(favoritesCount)) ? (
+            <View style={styles.heartBadge}>
+              <Ionicons name="heart" size={12} color={theme.colors.danger} />
+              <Text style={styles.heartText}>
+                {formatCount(favoritesCount)}
+              </Text>
             </View>
-            <Text style={styles.title} numberOfLines={1}>
-              {title}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.progressSection}>
-          <View style={styles.progressInfo}>
-            <Text style={styles.progressLabel}>Progress</Text>
-            <Text style={styles.progressPercent}>
-              {Math.round(progress * 100)}%
-            </Text>
-          </View>
-          <View style={styles.progressBarBg}>
-            <View
-              style={[
-                styles.progressBarFill,
-                { width: `${progress * 100}%`, backgroundColor: accentColor },
-              ]}
-            />
-          </View>
-          <Text style={styles.joinCount}>
-            {joins} / {target} Joined
+          ) : null}
+      </View>
+
+      <View style={styles.body}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={2}>
+            {title}
           </Text>
-          {countdown ? (
-            <MetricRow
-              icon="time-outline"
-              value={countdown}
-              color={accentColor}
-              style={styles.metricRow}
-            />
+        </View>
+        {subtitleLine ? (
+          <Text style={styles.subtitle}>{subtitleLine}</Text>
+        ) : null}
+        <View style={styles.metaRow}>
+          {Number.isFinite(Number(viewsCount)) ? (
+            <View style={styles.metaChip}>
+              <Ionicons name="eye-outline" size={14} color={theme.colors.textMuted} />
+              <Text style={styles.metaText}>{formatCount(viewsCount)}</Text>
+            </View>
           ) : null}
-          {expiryLabel ? (
-            <MetricRow
-              icon="calendar-outline"
-              value={expiryLabel}
-              color={accentColor}
-              style={styles.metricRow}
-            />
+          {Number.isFinite(Number(joins)) ? (
+            <View style={styles.metaChip}>
+              <Ionicons name="people-outline" size={14} color={theme.colors.textMuted} />
+              <Text style={styles.metaText}>{formatCount(joins)}</Text>
+            </View>
           ) : null}
         </View>
+        {actionLabel ? (
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              onPress={onActionPress}
+              style={styles.actionButton}
+            >
+              <Text style={styles.actionText}>{actionLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
