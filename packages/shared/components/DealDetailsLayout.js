@@ -46,6 +46,7 @@ export default function DealDetailsLayout({
   progressColor,
   statusLabel,
   statusColor,
+  statusInline = false,
   showPricing = true,
   variant = "default",
   children,
@@ -184,6 +185,17 @@ export default function DealDetailsLayout({
           fontSize: 12,
           fontWeight: "600",
         },
+        heroStatusChip: {
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          borderRadius: 999,
+          backgroundColor: statusColor || theme.colors.primary,
+        },
+        heroStatusChipText: {
+          color: theme.colors.onPrimary,
+          fontSize: 12,
+          fontWeight: "700",
+        },
         heroPriceRow: {
           flexDirection: "row",
           alignItems: "center",
@@ -256,7 +268,7 @@ export default function DealDetailsLayout({
           marginTop: 10,
         },
       }),
-    [isDashboard, theme],
+    [isDashboard, statusColor, theme],
   );
 
   const formattedPrice = formatMoney(price);
@@ -271,7 +283,10 @@ export default function DealDetailsLayout({
       : null;
   const percentOff =
     typeof discountPercent === "number" ? discountPercent : computedPercent;
-  const showMeta = Boolean(category) || Boolean(location);
+  const showMeta =
+    Boolean(category) ||
+    Boolean(location) ||
+    (statusInline && Boolean(statusLabel));
   const joinedValue = toNumber(joinedCount) ?? 0;
   const targetValue = toNumber(targetCount);
   const showProgress = targetValue !== null && targetValue > 0;
@@ -342,13 +357,18 @@ export default function DealDetailsLayout({
               {description}
             </Text>
           ) : null}
-          {statusLabel ? (
+          {statusLabel && !statusInline ? (
             <View style={styles.statusWrap}>
               <StatusPill label={statusLabel} color={statusColor} />
             </View>
           ) : null}
           {showMeta ? (
             <View style={styles.heroMetaRow}>
+              {statusInline && statusLabel ? (
+                <View style={styles.heroStatusChip}>
+                  <Text style={styles.heroStatusChipText}>{statusLabel}</Text>
+                </View>
+              ) : null}
               {category ? (
                 <View style={styles.heroChip}>
                   <Text style={styles.heroChipText}>{category}</Text>

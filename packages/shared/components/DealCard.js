@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { getCardStyles } from "../styles/cards";
 import { useTheme } from "../theme/ThemeProvider";
 
@@ -128,15 +129,21 @@ export default function DealCard({
           alignItems: "flex-end",
         },
         actionButton: {
-          backgroundColor: theme.colors.text,
-          borderRadius: 12,
-          paddingHorizontal: 14,
-          paddingVertical: 8,
+          borderRadius: 14,
+          overflow: "hidden",
+          ...theme.shadow.card,
+        },
+        actionButtonGradient: {
+          borderRadius: 14,
+          paddingHorizontal: 16,
+          paddingVertical: 9,
+          alignItems: "center",
+          justifyContent: "center",
         },
         actionText: {
           color: theme.colors.onPrimary,
-          fontSize: 12,
-          fontWeight: "700",
+          fontSize: 13,
+          fontWeight: "800",
         },
       }),
     [accentColor, cardStyles, theme],
@@ -195,7 +202,12 @@ export default function DealCard({
               onPress={onActionPress}
               style={styles.actionButton}
             >
-              <Text style={styles.actionText}>{actionLabel}</Text>
+              <LinearGradient
+                colors={[theme.colors.primary, theme.colors.purple]}
+                style={styles.actionButtonGradient}
+              >
+                <Text style={styles.actionText}>{actionLabel}</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         ) : null}

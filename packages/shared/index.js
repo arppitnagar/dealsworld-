@@ -43,6 +43,10 @@ export { default as AuthScreen } from "./components/AuthScreen.js";
 export { default as DealBuddyLoader } from "./components/DealBuddyLoader";
 export { default as DealBuddyLoadingScreen } from "./components/DealBuddyLoadingScreen";
 export {
+  DealSortModal,
+  DealFilterModal,
+} from "./components/DealSortFilterModal";
+export {
   toDate,
   formatDate,
   formatExpiryLabel,
@@ -51,3 +55,13 @@ export {
 } from "./utils/dateTime";
 export { formatINR } from "./utils/formatters";
 export { validatePassword } from "./utils/passwordPolicy";
+export {
+  DEAL_SORT_FIELDS,
+  DEAL_FILTER_FIELDS,
+  normalizeDealFilterText,
+  getDealFieldLabel,
+  compareDealsByField,
+  passesDealFieldFilter,
+  applyDealFieldFilters,
+  sortDealsByField,
+} from "./utils/dealSortFilter";

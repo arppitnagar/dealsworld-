@@ -26,6 +26,7 @@ import {
   DealDetailsLayout,
   useTheme,
   EmptyState,
+  AppButton,
 } from "@dealsworld/shared";
 import {
   useDeals,
@@ -391,7 +392,7 @@ export default function DealDetailsScreen({ route, navigation }) {
     return (
       <View style={styles.notFoundScreen}>
         <Text style={styles.notFoundText}>Deal not found.</Text>
-        <GradientButton
+        <AppButton
           title="Go Back"
           onPress={() => navigation.goBack()}
           style={{ borderRadius: theme.radii.md }}
@@ -484,46 +485,6 @@ export default function DealDetailsScreen({ route, navigation }) {
 
     handleJoin();
   };
-
-  const GradientButton = ({
-    title,
-    onPress,
-    loading,
-    disabled,
-    leftIcon,
-    rightIcon,
-    style,
-    textStyle,
-  }) => (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled || loading}
-      style={[
-        styles.gradientButtonWrap,
-        style,
-        (disabled || loading) && styles.gradientButtonDisabled,
-      ]}
-    >
-      <LinearGradient
-        colors={[theme.colors.primary, theme.colors.purple]}
-        style={styles.gradientButton}
-      >
-        {loading ? (
-          <ActivityIndicator color={theme.colors.onPrimary} />
-        ) : (
-          <View style={styles.gradientButtonContent}>
-            {leftIcon ? (
-              <View style={styles.gradientButtonIconWrap}>{leftIcon}</View>
-            ) : null}
-            <Text style={[styles.gradientButtonText, textStyle]}>{title}</Text>
-            {rightIcon ? (
-              <View style={styles.gradientButtonIcon}>{rightIcon}</View>
-            ) : null}
-          </View>
-        )}
-      </LinearGradient>
-    </TouchableOpacity>
-  );
 
   const GradientIconButton = ({ onPress, children, disabled }) => (
     <TouchableOpacity
@@ -725,7 +686,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                 style={styles.reviewInput}
                 multiline
               />
-              <GradientButton
+              <AppButton
                 title={
                   submittingReview
                     ? "Saving..."
@@ -735,6 +696,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                 }
                 onPress={handleSubmitReview}
                 disabled={submittingReview}
+                loading={submittingReview}
                 style={styles.reviewSubmitButton}
               />
             </View>
@@ -823,7 +785,7 @@ export default function DealDetailsScreen({ route, navigation }) {
             )}
 
             <View style={styles.deliveryActions}>
-              <GradientButton
+              <AppButton
                 title={deliveryAddress ? "Change Address" : "Add Address"}
                 onPress={() => {
                   if (!addressesLoading && (!addresses || addresses.length === 0)) {
@@ -945,7 +907,7 @@ export default function DealDetailsScreen({ route, navigation }) {
               )}
 
               <View style={styles.addressActions}>
-                <GradientButton
+                <AppButton
                   title="Add Address"
                   onPress={() => {
                     setShowAddressModal(false);
@@ -953,7 +915,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                   }}
                   style={styles.addressActionButton}
                 />
-                <GradientButton
+                <AppButton
                   title="Use Selected Address"
                   onPress={handleConfirmAddress}
                   disabled={!selectedAddressId}
@@ -998,45 +960,6 @@ const createStyles = (theme) =>
     paddingTop: 20,
     paddingBottom: 56,
     gap: 20,
-  },
-  gradientButtonWrap: {
-    borderRadius: 20,
-    overflow: "hidden",
-    ...theme.shadow.card,
-  },
-  gradientButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gradientButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-  },
-  gradientButtonText: {
-    color: theme.colors.onPrimary,
-    fontWeight: "800",
-    fontSize: 16,
-  },
-  gradientButtonIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: theme.colors.onPrimarySoft,
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gradientButtonIcon: {
-    marginHorizontal: 6,
-  },
-  gradientButtonDisabled: {
-    opacity: 0.65,
   },
   headerIconButton: {
     borderRadius: 14,

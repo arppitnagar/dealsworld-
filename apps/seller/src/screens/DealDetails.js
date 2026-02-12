@@ -331,6 +331,7 @@ export default function DealDetails({ route, navigation }) {
         progressColor={accentColor}
         statusLabel={lifecycleStatus === "completed" ? null : statusLabel}
         statusColor={accentColor}
+        statusInline
         variant="dashboard"
         contentStyle={styles.scrollContent}
       >

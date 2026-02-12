@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Image,
   StatusBar,
-  Modal,
 } from "react-native";
 import {
   Search,
@@ -44,6 +43,13 @@ import {
   toDate,
   DealBuddyLoadingScreen,
   TopPageHeader,
+  DEAL_SORT_FIELDS,
+  DEAL_FILTER_FIELDS,
+  normalizeDealFilterText,
+  applyDealFieldFilters,
+  sortDealsByField,
+  DealSortModal,
+  DealFilterModal,
 } from "@dealsworld/shared";
 
 const STATUS_FILTERS = [
@@ -54,17 +60,8 @@ const STATUS_FILTERS = [
   { key: "my", label: "Joined", icon: Users },
 ];
 
-const SORT_FIELDS = [
-  { key: "title", label: "Deal title" },
-  { key: "price", label: "Deal price" },
-  { key: "location", label: "Location" },
-  { key: "vendor", label: "Vendor" },
-  { key: "category", label: "Deal category" },
-  { key: "deliveryMode", label: "Delivery mode" },
-  { key: "expiration", label: "Expiration" },
-  { key: "joinedUsers", label: "Joined users" },
-  { key: "requiredUsers", label: "Required users" },
-];
+const SORT_FIELDS = DEAL_SORT_FIELDS;
+const FILTER_FIELDS = DEAL_FILTER_FIELDS;
 
 const DealCard = ({
   deal,
@@ -246,7 +243,12 @@ const DealCard = ({
               navigation.navigate("DealDetails", { dealId: deal.id })
             }
           >
-            <Text style={styles.cardActionText}>View Deal</Text>
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.purple]}
+              style={styles.cardActionGradient}
+            >
+              <Text style={styles.cardActionText}>View Deal</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
@@ -342,6 +344,10 @@ export default function HomeScreen({ navigation }) {
   const [isSortVisible, setIsSortVisible] = useState(false);
   const [sortField, setSortField] = useState(null);
   const [sortOrder, setSortOrder] = useState("asc");
+  const [isFilterVisible, setIsFilterVisible] = useState(false);
+  const [filterRules, setFilterRules] = useState([]);
+  const [filterField, setFilterField] = useState(null);
+  const [filterQuery, setFilterQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("new");
   const {
     viewedIds,
@@ -376,6 +382,46 @@ export default function HomeScreen({ navigation }) {
   const handleSelectSortField = (field) => {
     setSortField(field);
     setIsSortVisible(false);
+  };
+
+  const handleSelectFilterField = (field) => {
+    setFilterField(field);
+  };
+
+  const canAddFilterRule = Boolean(filterField && filterQuery.trim().length > 0);
+  const hasFieldFilter = filterRules.length > 0;
+
+  const handleAddFilterRule = () => {
+    if (!canAddFilterRule) return;
+    const normalizedQuery = filterQuery.trim();
+    const nextRule = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      field: filterField,
+      query: normalizedQuery,
+      mode: "contains",
+    };
+    setFilterRules((prev) => {
+      const duplicate = prev.some(
+        (rule) =>
+          rule.field === nextRule.field &&
+          rule.mode === nextRule.mode &&
+          normalizeDealFilterText(rule.query) ===
+            normalizeDealFilterText(nextRule.query),
+      );
+      return duplicate ? prev : [...prev, nextRule];
+    });
+    setFilterQuery("");
+  };
+
+  const handleRemoveFilterRule = (ruleId) => {
+    setFilterRules((prev) => prev.filter((rule) => rule.id !== ruleId));
+  };
+
+  const handleApplyFilters = () => {
+    if (canAddFilterRule) {
+      handleAddFilterRule();
+    }
+    setIsFilterVisible(false);
   };
 
   const HeaderActionButton = ({ label, onPress, icon, showBadge = false }) => (
@@ -530,13 +576,15 @@ export default function HomeScreen({ navigation }) {
     now,
   ]);
 
+  const fieldFilteredDeals = useMemo(() => {
+    if (!filteredDeals?.length || !filterRules.length) return filteredDeals;
+    return applyDealFieldFilters(filteredDeals, filterRules);
+  }, [filteredDeals, filterRules]);
+
   const sortedDeals = useMemo(() => {
-    if (!filteredDeals?.length || !sortField) return filteredDeals;
-    const direction = sortOrder === "desc" ? -1 : 1;
-    const list = [...filteredDeals];
-    list.sort((a, b) => compareDealSort(a, b, sortField, direction));
-    return list;
-  }, [filteredDeals, sortField, sortOrder]);
+    if (!fieldFilteredDeals?.length || !sortField) return fieldFilteredDeals;
+    return sortDealsByField(fieldFilteredDeals, sortField, sortOrder);
+  }, [fieldFilteredDeals, sortField, sortOrder]);
 
   const dealsHeaderTitle = (() => {
     switch (selectedFilter) {
@@ -609,6 +657,21 @@ export default function HomeScreen({ navigation }) {
                     size={16}
                     color={
                       sortField ? theme.colors.warningBright : theme.colors.onPrimary
+                    }
+                  />
+                }
+              />
+              <HeaderActionButton
+                label="Filter"
+                onPress={() => setIsFilterVisible(true)}
+                icon={
+                  <Ionicons
+                    name="options-outline"
+                    size={16}
+                    color={
+                      hasFieldFilter
+                        ? theme.colors.warningBright
+                        : theme.colors.onPrimary
                     }
                   />
                 }
@@ -766,103 +829,42 @@ export default function HomeScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      <Modal
-        transparent
-        animationType="fade"
+      <DealSortModal
         visible={isSortVisible}
-        onRequestClose={() => setIsSortVisible(false)}
-      >
-        <View style={styles.sortOverlay}>
-          <TouchableOpacity
-            style={styles.sortBackdrop}
-            activeOpacity={1}
-            onPress={() => setIsSortVisible(false)}
-          />
-          <View style={styles.sortSheet}>
-            <Text style={styles.sortTitle}>Sort Deals</Text>
-            <View style={styles.sortOrderRow}>
-              <TouchableOpacity
-                style={[
-                  styles.sortOrderChip,
-                  sortOrder === "asc" && styles.sortOrderChipActive,
-                ]}
-                onPress={() => setSortOrder("asc")}
-              >
-                <Text
-                  style={[
-                    styles.sortOrderText,
-                    sortOrder === "asc" && styles.sortOrderTextActive,
-                  ]}
-                >
-                  Ascending
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.sortOrderChip,
-                  sortOrder === "desc" && styles.sortOrderChipActive,
-                ]}
-                onPress={() => setSortOrder("desc")}
-              >
-                <Text
-                  style={[
-                    styles.sortOrderText,
-                    sortOrder === "desc" && styles.sortOrderTextActive,
-                  ]}
-                >
-                  Descending
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.sortFieldList}>
-              {SORT_FIELDS.map((field) => (
-                <TouchableOpacity
-                  key={field.key}
-                  style={[
-                    styles.sortFieldRow,
-                    sortField === field.key && styles.sortFieldRowActive,
-                  ]}
-                  onPress={() => handleSelectSortField(field.key)}
-                >
-                  <Text
-                    style={[
-                      styles.sortFieldText,
-                      sortField === field.key && styles.sortFieldTextActive,
-                    ]}
-                  >
-                    {field.label}
-                  </Text>
-                  {sortField === field.key ? (
-                    <Ionicons
-                      name="checkmark"
-                      size={16}
-                      color={theme.colors.primary}
-                    />
-                  ) : null}
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.sortFooterRow}>
-              <TouchableOpacity
-                style={styles.sortClearButton}
-                onPress={() => {
-                  setSortField(null);
-                  setSortOrder("asc");
-                  setIsSortVisible(false);
-                }}
-              >
-                <Text style={styles.sortClearText}>Clear sort</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.sortCloseButton}
-                onPress={() => setIsSortVisible(false)}
-              >
-                <Text style={styles.sortCloseText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setIsSortVisible(false)}
+        fields={SORT_FIELDS}
+        selectedField={sortField}
+        onSelectField={handleSelectSortField}
+        sortOrder={sortOrder}
+        onSortOrderChange={setSortOrder}
+        onClear={() => {
+          setSortField(null);
+          setSortOrder("asc");
+          setIsSortVisible(false);
+        }}
+      />
+
+      <DealFilterModal
+        visible={isFilterVisible}
+        onClose={() => setIsFilterVisible(false)}
+        fields={FILTER_FIELDS}
+        selectedField={filterField}
+        onSelectField={handleSelectFilterField}
+        filterQuery={filterQuery}
+        onFilterQueryChange={setFilterQuery}
+        canAddRule={canAddFilterRule}
+        onAddRule={handleAddFilterRule}
+        rules={filterRules}
+        onRemoveRule={handleRemoveFilterRule}
+        onClearAll={() => {
+          setFilterRules([]);
+          setFilterField(null);
+          setFilterQuery("");
+          setIsFilterVisible(false);
+        }}
+        onApply={handleApplyFilters}
+        resultCount={sortedDeals?.length || 0}
+      />
     </SafeAreaView>
   );
 }
@@ -1133,50 +1135,6 @@ function getDealAccentColor({ isJoined, isFavorite, isViewed, isHot, theme }) {
   return theme.colors.warningBright;
 }
 
-function getSortNumeric(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : 0;
-}
-
-function getSortText(value) {
-  return String(value || "").toLowerCase().trim();
-}
-
-function getDealSortValue(deal, field) {
-  switch (field) {
-    case "title":
-      return getSortText(deal?.title);
-    case "price":
-      return getSortNumeric(deal?.discountPrice ?? deal?.price);
-    case "location":
-      return getSortText(deal?.location);
-    case "vendor":
-      return getSortText(deal?.vendorName || deal?.sellerId || deal?.vendorid);
-    case "category":
-      return getSortText(deal?.category);
-    case "deliveryMode":
-      return getSortText(deal?.deliveryMode);
-    case "expiration":
-      return getSortNumeric(getExpiryMs(deal));
-    case "joinedUsers":
-      return getSortNumeric(getJoinCount(deal));
-    case "requiredUsers":
-      return getSortNumeric(getMinGroupSize(deal));
-    default:
-      return null;
-  }
-}
-
-function compareDealSort(a, b, field, direction) {
-  const aValue = getDealSortValue(a, field);
-  const bValue = getDealSortValue(b, field);
-
-  if (typeof aValue === "number" || typeof bValue === "number") {
-    return (getSortNumeric(aValue) - getSortNumeric(bValue)) * direction;
-  }
-  return getSortText(aValue).localeCompare(getSortText(bValue)) * direction;
-}
-
 const createStyles = (theme, cardStyles) =>
   StyleSheet.create({
     screen: {
@@ -1425,6 +1383,50 @@ const createStyles = (theme, cardStyles) =>
       fontSize: 12,
       fontWeight: "700",
       color: theme.colors.onPrimary,
+    },
+    sortButtonDisabled: {
+      opacity: 0.5,
+    },
+    activeFilterList: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 12,
+      backgroundColor: theme.colors.surfaceMuted,
+      maxHeight: 150,
+    },
+    activeFilterEmptyText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    activeFilterRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+      gap: 10,
+    },
+    activeFilterText: {
+      flex: 1,
+      fontSize: 12,
+      color: theme.colors.text,
+      fontWeight: "600",
+    },
+    filterInputWrap: {
+      marginTop: 2,
+    },
+    filterInputContainer: {
+      marginTop: 0,
+    },
+    filterInput: {
+      backgroundColor: theme.colors.surfaceMuted,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      color: theme.colors.text,
     },
     filterWrap: {
       paddingTop: 16,
@@ -1711,14 +1713,20 @@ const createStyles = (theme, cardStyles) =>
       borderRadius: 999,
     },
     cardActionBtn: {
-      backgroundColor: theme.colors.text,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 8,
+      borderRadius: 14,
+      overflow: "hidden",
+      ...cardStyles.shadow,
+    },
+    cardActionGradient: {
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      alignItems: "center",
+      justifyContent: "center",
     },
     cardActionText: {
       color: theme.colors.onPrimary,
-      fontSize: 12,
-      fontWeight: "700",
+      fontSize: 13,
+      fontWeight: "800",
     },
   });
