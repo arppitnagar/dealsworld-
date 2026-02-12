@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Image,
   StatusBar,
+  Modal,
 } from "react-native";
 import {
   Search,
@@ -51,6 +52,18 @@ const STATUS_FILTERS = [
   { key: "viewed", label: "Viewed", icon: Eye },
   { key: "favourite", label: "Favourite", icon: Heart },
   { key: "my", label: "Joined", icon: Users },
+];
+
+const SORT_FIELDS = [
+  { key: "title", label: "Deal title" },
+  { key: "price", label: "Deal price" },
+  { key: "location", label: "Location" },
+  { key: "vendor", label: "Vendor" },
+  { key: "category", label: "Deal category" },
+  { key: "deliveryMode", label: "Delivery mode" },
+  { key: "expiration", label: "Expiration" },
+  { key: "joinedUsers", label: "Joined users" },
+  { key: "requiredUsers", label: "Required users" },
 ];
 
 const DealCard = ({
@@ -326,6 +339,9 @@ export default function HomeScreen({ navigation }) {
   const [now, setNow] = useState(Date.now());
   const [searchText, setSearchText] = useState("");
   const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [isSortVisible, setIsSortVisible] = useState(false);
+  const [sortField, setSortField] = useState(null);
+  const [sortOrder, setSortOrder] = useState("asc");
   const [selectedFilter, setSelectedFilter] = useState("new");
   const {
     viewedIds,
@@ -355,6 +371,11 @@ export default function HomeScreen({ navigation }) {
       }
       return next;
     });
+  };
+
+  const handleSelectSortField = (field) => {
+    setSortField(field);
+    setIsSortVisible(false);
   };
 
   const HeaderActionButton = ({ label, onPress, icon, showBadge = false }) => (
@@ -509,6 +530,14 @@ export default function HomeScreen({ navigation }) {
     now,
   ]);
 
+  const sortedDeals = useMemo(() => {
+    if (!filteredDeals?.length || !sortField) return filteredDeals;
+    const direction = sortOrder === "desc" ? -1 : 1;
+    const list = [...filteredDeals];
+    list.sort((a, b) => compareDealSort(a, b, sortField, direction));
+    return list;
+  }, [filteredDeals, sortField, sortOrder]);
+
   const dealsHeaderTitle = (() => {
     switch (selectedFilter) {
       case "new":
@@ -567,6 +596,19 @@ export default function HomeScreen({ navigation }) {
                       isSearchVisible
                         ? theme.colors.warningBright
                         : theme.colors.onPrimary
+                    }
+                  />
+                }
+              />
+              <HeaderActionButton
+                label="Sort"
+                onPress={() => setIsSortVisible(true)}
+                icon={
+                  <Ionicons
+                    name="swap-vertical"
+                    size={16}
+                    color={
+                      sortField ? theme.colors.warningBright : theme.colors.onPrimary
                     }
                   />
                 }
@@ -686,8 +728,8 @@ export default function HomeScreen({ navigation }) {
             }
           />
 
-          {filteredDeals?.length > 0 ? (
-            filteredDeals.map((deal) => (
+          {sortedDeals?.length > 0 ? (
+            sortedDeals.map((deal) => (
               <DealCard
                 key={deal.id}
                 deal={deal}
@@ -723,6 +765,104 @@ export default function HomeScreen({ navigation }) {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={isSortVisible}
+        onRequestClose={() => setIsSortVisible(false)}
+      >
+        <View style={styles.sortOverlay}>
+          <TouchableOpacity
+            style={styles.sortBackdrop}
+            activeOpacity={1}
+            onPress={() => setIsSortVisible(false)}
+          />
+          <View style={styles.sortSheet}>
+            <Text style={styles.sortTitle}>Sort Deals</Text>
+            <View style={styles.sortOrderRow}>
+              <TouchableOpacity
+                style={[
+                  styles.sortOrderChip,
+                  sortOrder === "asc" && styles.sortOrderChipActive,
+                ]}
+                onPress={() => setSortOrder("asc")}
+              >
+                <Text
+                  style={[
+                    styles.sortOrderText,
+                    sortOrder === "asc" && styles.sortOrderTextActive,
+                  ]}
+                >
+                  Ascending
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.sortOrderChip,
+                  sortOrder === "desc" && styles.sortOrderChipActive,
+                ]}
+                onPress={() => setSortOrder("desc")}
+              >
+                <Text
+                  style={[
+                    styles.sortOrderText,
+                    sortOrder === "desc" && styles.sortOrderTextActive,
+                  ]}
+                >
+                  Descending
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.sortFieldList}>
+              {SORT_FIELDS.map((field) => (
+                <TouchableOpacity
+                  key={field.key}
+                  style={[
+                    styles.sortFieldRow,
+                    sortField === field.key && styles.sortFieldRowActive,
+                  ]}
+                  onPress={() => handleSelectSortField(field.key)}
+                >
+                  <Text
+                    style={[
+                      styles.sortFieldText,
+                      sortField === field.key && styles.sortFieldTextActive,
+                    ]}
+                  >
+                    {field.label}
+                  </Text>
+                  {sortField === field.key ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={16}
+                      color={theme.colors.primary}
+                    />
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.sortFooterRow}>
+              <TouchableOpacity
+                style={styles.sortClearButton}
+                onPress={() => {
+                  setSortField(null);
+                  setSortOrder("asc");
+                  setIsSortVisible(false);
+                }}
+              >
+                <Text style={styles.sortClearText}>Clear sort</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sortCloseButton}
+                onPress={() => setIsSortVisible(false)}
+              >
+                <Text style={styles.sortCloseText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -993,6 +1133,50 @@ function getDealAccentColor({ isJoined, isFavorite, isViewed, isHot, theme }) {
   return theme.colors.warningBright;
 }
 
+function getSortNumeric(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function getSortText(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function getDealSortValue(deal, field) {
+  switch (field) {
+    case "title":
+      return getSortText(deal?.title);
+    case "price":
+      return getSortNumeric(deal?.discountPrice ?? deal?.price);
+    case "location":
+      return getSortText(deal?.location);
+    case "vendor":
+      return getSortText(deal?.vendorName || deal?.sellerId || deal?.vendorid);
+    case "category":
+      return getSortText(deal?.category);
+    case "deliveryMode":
+      return getSortText(deal?.deliveryMode);
+    case "expiration":
+      return getSortNumeric(getExpiryMs(deal));
+    case "joinedUsers":
+      return getSortNumeric(getJoinCount(deal));
+    case "requiredUsers":
+      return getSortNumeric(getMinGroupSize(deal));
+    default:
+      return null;
+  }
+}
+
+function compareDealSort(a, b, field, direction) {
+  const aValue = getDealSortValue(a, field);
+  const bValue = getDealSortValue(b, field);
+
+  if (typeof aValue === "number" || typeof bValue === "number") {
+    return (getSortNumeric(aValue) - getSortNumeric(bValue)) * direction;
+  }
+  return getSortText(aValue).localeCompare(getSortText(bValue)) * direction;
+}
+
 const createStyles = (theme, cardStyles) =>
   StyleSheet.create({
     screen: {
@@ -1128,6 +1312,117 @@ const createStyles = (theme, cardStyles) =>
     },
     debugChipText: {
       fontSize: 11,
+      fontWeight: "700",
+      color: theme.colors.onPrimary,
+    },
+    sortOverlay: {
+      flex: 1,
+      justifyContent: "flex-end",
+    },
+    sortBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.colors.overlay,
+    },
+    sortSheet: {
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingHorizontal: 18,
+      paddingTop: 16,
+      paddingBottom: 20,
+      borderTopWidth: 1,
+      borderColor: theme.colors.border,
+      gap: 12,
+    },
+    sortTitle: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: theme.colors.text,
+    },
+    sortOrderRow: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    sortOrderChip: {
+      flex: 1,
+      borderRadius: 12,
+      paddingVertical: 10,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceMuted,
+    },
+    sortOrderChipActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.infoSoft,
+    },
+    sortOrderText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: theme.colors.textMuted,
+    },
+    sortOrderTextActive: {
+      color: theme.colors.primary,
+    },
+    sortFieldList: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 14,
+      overflow: "hidden",
+    },
+    sortFieldRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    sortFieldRowActive: {
+      backgroundColor: theme.colors.infoSoft,
+    },
+    sortFieldText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    sortFieldTextActive: {
+      color: theme.colors.primary,
+      fontWeight: "700",
+    },
+    sortFooterRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 10,
+      marginTop: 2,
+    },
+    sortClearButton: {
+      flex: 1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceMuted,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 11,
+    },
+    sortClearText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: theme.colors.textMuted,
+    },
+    sortCloseButton: {
+      flex: 1,
+      borderRadius: 12,
+      backgroundColor: theme.colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 11,
+    },
+    sortCloseText: {
+      fontSize: 12,
       fontWeight: "700",
       color: theme.colors.onPrimary,
     },

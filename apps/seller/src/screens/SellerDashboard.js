@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StatusBar,
   RefreshControl,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -45,6 +46,18 @@ const STATUS_FILTERS = [
   { key: "pending", label: "Pending" },
 ];
 
+const SORT_FIELDS = [
+  { key: "title", label: "Deal title" },
+  { key: "price", label: "Deal price" },
+  { key: "location", label: "Location" },
+  { key: "vendor", label: "Vendor" },
+  { key: "category", label: "Deal category" },
+  { key: "deliveryMode", label: "Delivery mode" },
+  { key: "expiration", label: "Expiration" },
+  { key: "joinedUsers", label: "Joined users" },
+  { key: "requiredUsers", label: "Required users" },
+];
+
 const FilterChip = ({ label, count, isSelected, onPress, accentColor }) => (
   <TouchableOpacity
     style={[
@@ -72,6 +85,10 @@ export default function SellerDashboard({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [isSortVisible, setIsSortVisible] = useState(false);
+  const [sortField, setSortField] = useState(null);
+  const [sortOrder, setSortOrder] = useState("asc");
   const greetingLabel = getGreetingLabel(now);
 
   // Track selected filter: null (all), 'active', or 'pending'
@@ -200,9 +217,48 @@ export default function SellerDashboard({ navigation }) {
     );
   });
 
+  const sortedDeals = useMemo(() => {
+    if (!filteredDeals?.length || !sortField) return filteredDeals;
+    const direction = sortOrder === "desc" ? -1 : 1;
+    const list = [...filteredDeals];
+    list.sort((a, b) => compareDealSort(a, b, sortField, direction));
+    return list;
+  }, [filteredDeals, sortField, sortOrder]);
+
   const handleFilterPress = (status) => {
     setSelectedFilter((prev) => (prev === status ? null : status));
   };
+
+  const handleToggleSearch = () => {
+    setIsSearchVisible((prev) => {
+      const next = !prev;
+      if (!next) setSearchQuery("");
+      return next;
+    });
+  };
+
+  const handleSelectSortField = (field) => {
+    setSortField(field);
+    setIsSortVisible(false);
+  };
+
+  const HeaderActionButton = ({ label, onPress, icon }) => (
+    <View style={styles.headerActionItem}>
+      <TouchableOpacity
+        onPress={onPress}
+        style={styles.headerIconButton}
+        activeOpacity={0.9}
+      >
+        <LinearGradient
+          colors={[theme.colors.primary, theme.colors.purple]}
+          style={styles.headerIconGradient}
+        >
+          <View style={styles.headerIconInner}>{icon}</View>
+        </LinearGradient>
+      </TouchableOpacity>
+      <Text style={styles.headerActionLabel}>{label}</Text>
+    </View>
+  );
 
   if (loading) {
     return (
@@ -229,25 +285,12 @@ export default function SellerDashboard({ navigation }) {
           rounded
           style={styles.header}
           customRow={
-            <View style={styles.headerRow}>
-              <TouchableOpacity
-                style={styles.greetingRow}
-                onPress={() => navigation.navigate("Profile")}
-                activeOpacity={0.8}
-              >
-                <View style={styles.avatarWrap}>
-                  <Ionicons
-                    name="person-outline"
-                    size={20}
-                    color={theme.colors.onPrimary}
-                  />
-                </View>
+            <View style={styles.headerContent}>
+              <View style={styles.headerRow}>
                 <View>
                   <Text style={styles.greetingLabel}>{greetingLabel}</Text>
                   <Text style={styles.greetingName}>Seller</Text>
                 </View>
-              </TouchableOpacity>
-              <View style={styles.headerActions}>
                 {__DEV__ && (
                   <TouchableOpacity
                     onPress={() => navigation.navigate("StyleGuide")}
@@ -256,50 +299,100 @@ export default function SellerDashboard({ navigation }) {
                     <Text style={styles.debugChipText}>Style</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity style={styles.headerIconBtn}>
-                  <Ionicons
-                    name="notifications-outline"
-                    size={20}
-                    color={theme.colors.onPrimary}
-                  />
-                </TouchableOpacity>
+              </View>
+              <View style={styles.headerDivider} />
+              <View style={styles.headerActions}>
+                <HeaderActionButton
+                  label="Search"
+                  onPress={handleToggleSearch}
+                  icon={
+                    <Ionicons
+                      name="search"
+                      size={16}
+                      color={
+                        isSearchVisible
+                          ? theme.colors.warningBright
+                          : theme.colors.onPrimary
+                      }
+                    />
+                  }
+                />
+                <HeaderActionButton
+                  label="Sort"
+                  onPress={() => setIsSortVisible(true)}
+                  icon={
+                    <Ionicons
+                      name="swap-vertical"
+                      size={16}
+                      color={
+                        sortField
+                          ? theme.colors.warningBright
+                          : theme.colors.onPrimary
+                      }
+                    />
+                  }
+                />
+                <HeaderActionButton
+                  label="Alerts"
+                  onPress={() => {}}
+                  icon={
+                    <Ionicons
+                      name="notifications-outline"
+                      size={16}
+                      color={theme.colors.onPrimary}
+                    />
+                  }
+                />
+                <HeaderActionButton
+                  label="Profile"
+                  onPress={() => navigation.navigate("Profile")}
+                  icon={
+                    <Ionicons
+                      name="person-outline"
+                      size={16}
+                      color={theme.colors.onPrimary}
+                    />
+                  }
+                />
               </View>
             </View>
           }
         >
-          <View style={styles.searchRow}>
-            <View style={styles.searchInputWrap}>
-              <AppInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search for deals..."
-                containerStyle={styles.searchInputContainer}
-                inputStyle={styles.searchInput}
-                placeholderTextColor={theme.colors.onPrimaryMuted}
-                leftElement={
-                  <Ionicons
-                    name="search"
-                    size={18}
-                    color={theme.colors.onPrimaryMuted}
-                  />
-                }
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity
-                  style={styles.clearSearchBtn}
-                  onPress={() => setSearchQuery("")}
-                >
-                  <View style={styles.clearSearchCircle}>
+          {isSearchVisible ? (
+            <View style={styles.searchRow}>
+              <View style={styles.searchInputWrap}>
+                <AppInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search for deals..."
+                  containerStyle={styles.searchInputContainer}
+                  inputStyle={styles.searchInput}
+                  placeholderTextColor={theme.colors.onPrimaryMuted}
+                  leftElement={
                     <Ionicons
-                      name="close"
-                      size={14}
+                      name="search"
+                      size={18}
                       color={theme.colors.onPrimaryMuted}
                     />
-                  </View>
-                </TouchableOpacity>
-              )}
+                  }
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.clearSearchBtn}
+                    onPress={() => setSearchQuery("")}
+                  >
+                    <View style={styles.clearSearchCircle}>
+                      <Ionicons
+                        name="close"
+                        size={14}
+                        color={theme.colors.onPrimaryMuted}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
+          ) : null}
         </TopPageHeader>
 
         <View style={styles.filterWrap}>
@@ -368,7 +461,7 @@ export default function SellerDashboard({ navigation }) {
             }
           />
 
-          {filteredDeals.length === 0 ? (
+          {sortedDeals.length === 0 ? (
             <View style={styles.emptyContainer}>
               <EmptyState
                 title="No matching deals found."
@@ -376,7 +469,7 @@ export default function SellerDashboard({ navigation }) {
               />
             </View>
           ) : (
-            filteredDeals.map((deal) => {
+            sortedDeals.map((deal) => {
               const joins = deal.joinedUsers || 0;
               const lifecycleStatus = getDealLifecycleStatus(deal);
               const accentColor = getStatusColor(lifecycleStatus);
@@ -413,6 +506,104 @@ export default function SellerDashboard({ navigation }) {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={isSortVisible}
+        onRequestClose={() => setIsSortVisible(false)}
+      >
+        <View style={styles.sortOverlay}>
+          <TouchableOpacity
+            style={styles.sortBackdrop}
+            activeOpacity={1}
+            onPress={() => setIsSortVisible(false)}
+          />
+          <View style={styles.sortSheet}>
+            <Text style={styles.sortTitle}>Sort Deals</Text>
+            <View style={styles.sortOrderRow}>
+              <TouchableOpacity
+                style={[
+                  styles.sortOrderChip,
+                  sortOrder === "asc" && styles.sortOrderChipActive,
+                ]}
+                onPress={() => setSortOrder("asc")}
+              >
+                <Text
+                  style={[
+                    styles.sortOrderText,
+                    sortOrder === "asc" && styles.sortOrderTextActive,
+                  ]}
+                >
+                  Ascending
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.sortOrderChip,
+                  sortOrder === "desc" && styles.sortOrderChipActive,
+                ]}
+                onPress={() => setSortOrder("desc")}
+              >
+                <Text
+                  style={[
+                    styles.sortOrderText,
+                    sortOrder === "desc" && styles.sortOrderTextActive,
+                  ]}
+                >
+                  Descending
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.sortFieldList}>
+              {SORT_FIELDS.map((field) => (
+                <TouchableOpacity
+                  key={field.key}
+                  style={[
+                    styles.sortFieldRow,
+                    sortField === field.key && styles.sortFieldRowActive,
+                  ]}
+                  onPress={() => handleSelectSortField(field.key)}
+                >
+                  <Text
+                    style={[
+                      styles.sortFieldText,
+                      sortField === field.key && styles.sortFieldTextActive,
+                    ]}
+                  >
+                    {field.label}
+                  </Text>
+                  {sortField === field.key ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={16}
+                      color={theme.colors.primary}
+                    />
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.sortFooterRow}>
+              <TouchableOpacity
+                style={styles.sortClearButton}
+                onPress={() => {
+                  setSortField(null);
+                  setSortOrder("asc");
+                  setIsSortVisible(false);
+                }}
+              >
+                <Text style={styles.sortClearText}>Clear sort</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sortCloseButton}
+                onPress={() => setIsSortVisible(false)}
+              >
+                <Text style={styles.sortCloseText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -520,6 +711,53 @@ function buildSearchText(deal) {
     .toLowerCase();
 }
 
+function getSortNumeric(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function getSortText(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function getDealSortValue(deal, field) {
+  switch (field) {
+    case "title":
+      return getSortText(deal?.title);
+    case "price":
+      return getSortNumeric(deal?.discountPrice ?? deal?.price);
+    case "location":
+      return getSortText(deal?.location);
+    case "vendor":
+      return getSortText(deal?.sellerId || deal?.vendorId || deal?.vendorid);
+    case "category":
+      return getSortText(deal?.category);
+    case "deliveryMode":
+      return getSortText(deal?.deliveryMode);
+    case "expiration": {
+      const expiryDate = toDate(deal?.expiresAt);
+      return expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
+        ? expiryDate.getTime()
+        : 0;
+    }
+    case "joinedUsers":
+      return getSortNumeric(deal?.currentJoins ?? deal?.joinedUsers);
+    case "requiredUsers":
+      return getSortNumeric(deal?.minGroupSize ?? deal?.minThreshold);
+    default:
+      return null;
+  }
+}
+
+function compareDealSort(a, b, field, direction) {
+  const aValue = getDealSortValue(a, field);
+  const bValue = getDealSortValue(b, field);
+  if (typeof aValue === "number" || typeof bValue === "number") {
+    return (getSortNumeric(aValue) - getSortNumeric(bValue)) * direction;
+  }
+  return getSortText(aValue).localeCompare(getSortText(bValue)) * direction;
+}
+
 function getGreetingLabel(nowMs) {
   const hour = new Date(nowMs).getHours();
   if (hour < 12) return "Good morning,";
@@ -559,25 +797,21 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,
   },
+  headerContent: {
+    width: "100%",
+    gap: 10,
+  },
   headerRow: {
+    width: "100%",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  greetingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  avatarWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  headerDivider: {
+    height: 1,
+    width: "100%",
     backgroundColor: theme.colors.onPrimarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
+    marginTop: 2,
   },
   greetingLabel: {
     color: theme.colors.onPrimaryMuted,
@@ -589,17 +823,43 @@ const styles = StyleSheet.create({
     color: theme.colors.onPrimary,
     marginTop: 2,
   },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+  headerIconButton: {
+    borderRadius: 14,
+    overflow: "hidden",
   },
-  headerIconBtn: {
+  headerIconGradient: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  headerIconInner: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
     backgroundColor: theme.colors.onPrimarySoft,
-    padding: 10,
-    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: theme.colors.onPrimaryMuted,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    alignSelf: "center",
+    gap: 12,
+  },
+  headerActionItem: {
+    alignItems: "center",
+    gap: 4,
+  },
+  headerActionLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: theme.colors.onPrimaryMuted,
   },
   searchRow: {
     marginTop: 16,
@@ -648,6 +908,117 @@ const styles = StyleSheet.create({
   },
   debugChipText: {
     fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.onPrimary,
+  },
+  sortOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  sortBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: theme.colors.overlay,
+  },
+  sortSheet: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderColor: theme.colors.border,
+    gap: 12,
+  },
+  sortTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+  sortOrderRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  sortOrderChip: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  sortOrderChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.infoSoft,
+  },
+  sortOrderText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  sortOrderTextActive: {
+    color: theme.colors.primary,
+  },
+  sortFieldList: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  sortFieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  sortFieldRowActive: {
+    backgroundColor: theme.colors.infoSoft,
+  },
+  sortFieldText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  sortFieldTextActive: {
+    color: theme.colors.primary,
+    fontWeight: "700",
+  },
+  sortFooterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 2,
+  },
+  sortClearButton: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 11,
+  },
+  sortClearText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  sortCloseButton: {
+    flex: 1,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 11,
+  },
+  sortCloseText: {
+    fontSize: 12,
     fontWeight: "700",
     color: theme.colors.onPrimary,
   },
