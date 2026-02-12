@@ -13,6 +13,7 @@ import {
   AppInput,
   useTheme,
   validatePassword,
+  TopPageHeader,
 } from "@dealsworld/shared";
 import { auth } from "../config/firebase";
 import {
@@ -20,13 +21,11 @@ import {
   reauthenticateWithCredential,
   updatePassword,
 } from "firebase/auth";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getProfileBaseStyles } from "../styles/profileStyles";
 
 export default function ChangePasswordScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const insets = useSafeAreaInsets();
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -73,24 +72,11 @@ export default function ChangePasswordScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <View
-        style={[
-          styles.headerBar,
-          { paddingTop: Math.max(insets.top, 12) },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color={theme.colors.onPrimary}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Change Password</Text>
-      </View>
+      <TopPageHeader
+        title="Change Password"
+        onBack={() => navigation.goBack()}
+        rounded
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}

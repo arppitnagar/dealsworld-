@@ -7,16 +7,14 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@dealsworld/shared";
+import { useTheme, TopPageHeader } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { setStoredThemeMode } from "../utils/themeStorage";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getProfileBaseStyles } from "../styles/profileStyles";
 
 export default function ThemeSettingsScreen({ navigation }) {
   const { theme, mode, setMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const insets = useSafeAreaInsets();
   const { updateProfile } = useUserProfile();
 
   const handleSelect = async (nextMode) => {
@@ -27,24 +25,11 @@ export default function ThemeSettingsScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <View
-        style={[
-          styles.headerBar,
-          { paddingTop: Math.max(insets.top, 12) },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color={theme.colors.onPrimary}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Change Theme</Text>
-      </View>
+      <TopPageHeader
+        title="Change Theme"
+        onBack={() => navigation.goBack()}
+        rounded
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}

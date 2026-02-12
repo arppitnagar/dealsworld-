@@ -8,8 +8,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTheme, toDate, formatDate } from "@dealsworld/shared";
+import { useTheme, toDate, formatDate, TopPageHeader } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -17,7 +16,6 @@ import { getProfileBaseStyles } from "../styles/profileStyles";
 export default function ProfileScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const { profile } = useUserProfile();
   const memberSince = useMemo(() => {
@@ -38,19 +36,11 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 12) }]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color={theme.colors.onPrimary}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-      </View>
+      <TopPageHeader
+        title="Profile"
+        onBack={() => navigation.goBack()}
+        rounded
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

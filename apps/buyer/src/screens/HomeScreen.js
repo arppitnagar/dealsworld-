@@ -21,8 +21,8 @@ import {
   Zap,
   Star,
 } from "lucide-react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useDeals } from "../hooks/useDeals";
 import { useDealState } from "../hooks/useDealState";
 import { useNotifications } from "../hooks/useNotifications";
@@ -32,7 +32,6 @@ import { db } from "../config/firebase";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import {
   SafeAreaView,
-  useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import {
   useTheme,
@@ -43,6 +42,7 @@ import {
   AppInput,
   toDate,
   DealBuddyLoadingScreen,
+  TopPageHeader,
 } from "@dealsworld/shared";
 
 const STATUS_FILTERS = [
@@ -255,44 +255,61 @@ const FilterChip = ({
     typeof count === "number" && Number.isFinite(count) ? count : 0;
   return (
     <TouchableOpacity
-      style={[
-        styles.filterChip,
-        isSelected ? styles.filterChipActive : styles.filterChipIdle,
-        isSelected && {
-          backgroundColor: accentColor,
-          borderColor: accentColor,
-        },
-      ]}
+      style={styles.filterChip}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${label} deals, ${displayCount}`}
     >
-      <View style={styles.filterChipIconWrap}>
-        <Icon
-          size={18}
-          color={isSelected ? theme.colors.onPrimary : theme.colors.textMuted}
-        />
-        {displayCount > 0 ? (
-          <View
-            style={[
-              styles.filterChipBadge,
-              isSelected
-                ? styles.filterChipBadgeActive
-                : styles.filterChipBadgeIdle,
-            ]}
-          >
-            <Text
-              style={[
-                styles.filterChipBadgeText,
-                isSelected
-                  ? styles.filterChipBadgeTextActive
-                  : styles.filterChipBadgeTextIdle,
-              ]}
-            >
-              {formatCount(displayCount)}
-            </Text>
-          </View>
-        ) : null}
+      <LinearGradient
+        colors={
+          isSelected
+            ? [theme.colors.primary, theme.colors.purple]
+            : [accentColor, accentColor]
+        }
+        style={styles.filterChipGradient}
+      >
+        <View
+          style={[
+            styles.filterChipIconWrap,
+            isSelected
+              ? styles.filterChipIconWrapActive
+              : styles.filterChipIconWrapIdle,
+            !isSelected && { borderColor: accentColor },
+          ]}
+        >
+          <Icon
+            size={18}
+            color={accentColor}
+          />
+        </View>
+      </LinearGradient>
+      <Text
+        style={[
+          styles.filterChipLabel,
+          isSelected ? styles.filterChipLabelActive : styles.filterChipLabelIdle,
+          !isSelected && { color: accentColor },
+        ]}
+      >
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.filterChipBadge,
+          isSelected ? styles.filterChipBadgeActive : styles.filterChipBadgeIdle,
+          !isSelected && { borderColor: accentColor },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipBadgeText,
+            isSelected
+              ? styles.filterChipBadgeTextActive
+              : styles.filterChipBadgeTextIdle,
+            !isSelected && { color: accentColor },
+          ]}
+        >
+          {formatCount(displayCount)}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -306,9 +323,9 @@ export default function HomeScreen({ navigation }) {
     () => createStyles(theme, cardStyles),
     [theme, cardStyles],
   );
-  const insets = useSafeAreaInsets();
   const [now, setNow] = useState(Date.now());
   const [searchText, setSearchText] = useState("");
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState("new");
   const {
     viewedIds,
@@ -329,6 +346,35 @@ export default function HomeScreen({ navigation }) {
     if (!dealId) return;
     toggleFavoriteDeal(dealId);
   };
+
+  const handleToggleSearch = () => {
+    setIsSearchVisible((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSearchText("");
+      }
+      return next;
+    });
+  };
+
+  const HeaderActionButton = ({ label, onPress, icon, showBadge = false }) => (
+    <View style={styles.headerActionItem}>
+      <TouchableOpacity
+        onPress={onPress}
+        style={styles.headerIconButton}
+        activeOpacity={0.9}
+      >
+        <LinearGradient
+          colors={[theme.colors.primary, theme.colors.purple]}
+          style={styles.headerIconGradient}
+        >
+          <View style={styles.headerIconInner}>{icon}</View>
+          {showBadge ? <View style={styles.badgeDot} /> : null}
+        </LinearGradient>
+      </TouchableOpacity>
+      <Text style={styles.headerActionLabel}>{label}</Text>
+    </View>
+  );
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -487,69 +533,87 @@ export default function HomeScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient
-        colors={[theme.colors.primary, theme.colors.purple]}
-        style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}
-      >
-        <View style={styles.headerRow}>
-          <View style={styles.greetingRow}>
-            <TouchableOpacity
-              style={styles.avatarWrap}
-              onPress={() => navigation.navigate("Profile")}
-            >
-              <UserCircle size={22} color={theme.colors.onPrimary} />
-            </TouchableOpacity>
-            <View>
-              <Text style={styles.greetingLabel}>{greetingLabel}</Text>
-              <Text style={styles.greetingName}>
-                {profile?.displayName || "Buyer"}
-              </Text>
+      <TopPageHeader
+        includeSafeArea={false}
+        rounded
+        style={styles.header}
+        customRow={
+          <View style={styles.headerContent}>
+            <View style={styles.headerRow}>
+              <View>
+                <Text style={styles.greetingLabel}>{greetingLabel}</Text>
+                <Text style={styles.greetingName}>
+                  {profile?.displayName || "Buyer"}
+                </Text>
+              </View>
+              {__DEV__ && (
+                <TouchableOpacity
+                  style={styles.debugChip}
+                  onPress={() => navigation.navigate("StyleGuide")}
+                >
+                  <Text style={styles.debugChipText}>Style</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.headerDivider} />
+            <View style={styles.headerActions}>
+              <HeaderActionButton
+                label="Search"
+                onPress={handleToggleSearch}
+                icon={
+                  <Search
+                    size={16}
+                    color={
+                      isSearchVisible
+                        ? theme.colors.warningBright
+                        : theme.colors.onPrimary
+                    }
+                  />
+                }
+              />
+              <HeaderActionButton
+                label="Alerts"
+                onPress={() => navigation.navigate("Notifications")}
+                icon={<Bell size={16} color={theme.colors.onPrimary} />}
+                showBadge={unreadCount > 0}
+              />
+              <HeaderActionButton
+                label="Profile"
+                onPress={() => navigation.navigate("Profile")}
+                icon={<UserCircle size={16} color={theme.colors.onPrimary} />}
+              />
             </View>
           </View>
-          <View style={styles.headerActions}>
-            {__DEV__ && (
-              <TouchableOpacity
-                style={styles.debugChip}
-                onPress={() => navigation.navigate("StyleGuide")}
-              >
-                <Text style={styles.debugChipText}>Style</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.headerIconBtn}
-              onPress={() => navigation.navigate("Notifications")}
-            >
-              <Bell size={20} color={theme.colors.onPrimary} />
-              {unreadCount > 0 ? <View style={styles.badgeDot} /> : null}
-            </TouchableOpacity>
+        }
+      >
+        {isSearchVisible ? (
+          <View style={styles.searchRow}>
+            <View style={styles.searchInputWrap}>
+              <AppInput
+                value={searchText}
+                onChangeText={setSearchText}
+                placeholder="Search for deals..."
+                containerStyle={styles.searchInputContainer}
+                inputStyle={styles.searchInput}
+                placeholderTextColor={theme.colors.onPrimaryMuted}
+                leftElement={
+                  <Search size={18} color={theme.colors.onPrimaryMuted} />
+                }
+              />
+              {searchText.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearSearchBtn}
+                  onPress={() => setSearchText("")}
+                >
+                  <View style={styles.clearSearchCircle}>
+                    <X size={14} color={theme.colors.onPrimaryMuted} />
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-        </View>
-        <View style={styles.searchRow}>
-          <View style={styles.searchInputWrap}>
-            <AppInput
-              value={searchText}
-              onChangeText={setSearchText}
-              placeholder="Search for deals..."
-              containerStyle={styles.searchInputContainer}
-              inputStyle={styles.searchInput}
-              placeholderTextColor={theme.colors.onPrimaryMuted}
-              leftElement={
-                <Search size={18} color={theme.colors.onPrimaryMuted} />
-              }
-            />
-            {searchText.length > 0 && (
-              <TouchableOpacity
-                style={styles.clearSearchBtn}
-                onPress={() => setSearchText("")}
-              >
-                <View style={styles.clearSearchCircle}>
-                  <X size={14} color={theme.colors.onPrimaryMuted} />
-                </View>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </LinearGradient>
+        ) : null}
+      </TopPageHeader>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -942,25 +1006,21 @@ const createStyles = (theme, cardStyles) =>
       borderBottomLeftRadius: 36,
       borderBottomRightRadius: 36,
     },
+    headerContent: {
+      width: "100%",
+      gap: 10,
+    },
     headerRow: {
+      width: "100%",
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
     },
-    greetingRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-    },
-    avatarWrap: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+    headerDivider: {
+      height: 1,
+      width: "100%",
       backgroundColor: theme.colors.onPrimarySoft,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1,
-      borderColor: theme.colors.onPrimaryMuted,
+      marginTop: 2,
     },
     greetingLabel: {
       color: theme.colors.onPrimaryMuted,
@@ -972,11 +1032,25 @@ const createStyles = (theme, cardStyles) =>
       color: theme.colors.onPrimary,
       marginTop: 2,
     },
-    headerIconBtn: {
-      backgroundColor: theme.colors.onPrimarySoft,
-      padding: 10,
-      borderRadius: 999,
+    headerIconButton: {
+      borderRadius: 14,
+      overflow: "hidden",
+    },
+    headerIconGradient: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
       position: "relative",
+    },
+    headerIconInner: {
+      width: 30,
+      height: 30,
+      borderRadius: 10,
+      backgroundColor: theme.colors.onPrimarySoft,
+      alignItems: "center",
+      justifyContent: "center",
       borderWidth: 1,
       borderColor: theme.colors.onPrimaryMuted,
     },
@@ -993,8 +1067,19 @@ const createStyles = (theme, cardStyles) =>
     },
     headerActions: {
       flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "center",
+      alignSelf: "center",
+      gap: 12,
+    },
+    headerActionItem: {
       alignItems: "center",
-      gap: 10,
+      gap: 4,
+    },
+    headerActionLabel: {
+      fontSize: 9,
+      fontWeight: "700",
+      color: theme.colors.onPrimaryMuted,
     },
     searchRow: {
       marginTop: 16,
@@ -1051,61 +1136,71 @@ const createStyles = (theme, cardStyles) =>
       paddingBottom: 8,
     },
     filterChip: {
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 999,
-      marginRight: 10,
-      borderWidth: 1,
-      minWidth: 56,
+      marginRight: 12,
+      minWidth: 64,
       alignItems: "center",
       justifyContent: "center",
     },
-    filterChipActive: {
-      backgroundColor: theme.colors.warningBright,
-      borderColor: theme.colors.warningBright,
-    },
-    filterChipIdle: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    filterChipText: {
-      fontSize: 12,
-      fontWeight: "700",
-    },
-    filterChipTextActive: {
-      color: theme.colors.onPrimary,
-    },
-    filterChipTextIdle: {
-      color: theme.colors.textMuted,
+    filterChipGradient: {
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 1,
     },
     filterChipIconWrap: {
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    filterChipBadge: {
-      minWidth: 20,
-      height: 20,
+      width: 34,
+      height: 34,
       borderRadius: 10,
       alignItems: "center",
       justifyContent: "center",
-      paddingHorizontal: 4,
+    },
+    filterChipIconWrapActive: {
+      backgroundColor: theme.colors.onPrimarySoft,
       borderWidth: 1,
+      borderColor: theme.colors.onPrimaryMuted,
+    },
+    filterChipIconWrapIdle: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    filterChipLabel: {
       marginTop: 6,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    filterChipLabelActive: {
+      color: theme.colors.text,
+    },
+    filterChipLabelIdle: {
+      color: theme.colors.textMuted,
+    },
+    filterChipBadge: {
+      minWidth: 28,
+      height: 18,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 6,
+      borderWidth: 1,
+      marginTop: 4,
     },
     filterChipBadgeActive: {
-      backgroundColor: theme.colors.onPrimary,
-      borderColor: theme.colors.onPrimary,
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.border,
     },
     filterChipBadgeIdle: {
-      backgroundColor: theme.colors.surfaceLight,
+      backgroundColor: theme.colors.surfaceMuted,
       borderColor: theme.colors.border,
     },
     filterChipBadgeText: {
-      fontSize: 10,
+      fontSize: 9,
       fontWeight: "800",
     },
     filterChipBadgeTextActive: {
-      color: theme.colors.primary,
+      color: theme.colors.text,
     },
     filterChipBadgeTextIdle: {
       color: theme.colors.textMuted,

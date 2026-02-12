@@ -8,7 +8,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -27,7 +26,7 @@ import {
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { theme, ChatSkeleton } from "@dealsworld/shared";
+import { theme, ChatSkeleton, TopPageHeader } from "@dealsworld/shared";
 
 export default function DealChat({ route, navigation }) {
   const deal = route?.params?.deal;
@@ -40,8 +39,6 @@ export default function DealChat({ route, navigation }) {
   const typingTimeoutRef = useRef(null);
   const insets = useSafeAreaInsets();
 
-  const topInset =
-    Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : insets.top;
   const bottomInset =
     Platform.OS === "android"
       ? insets.bottom > 0
@@ -189,23 +186,14 @@ export default function DealChat({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.screen} edges={[]}>
-      <View style={[styles.headerSpacer, { height: topInset }]} />
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerIcon}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="chevron-back" size={20} color={theme.colors.onPrimary} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleWrap}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {deal?.title || "Deal Chat"}
-          </Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {deal?.category || "Deal"}
-          </Text>
-        </View>
-      </View>
+      <TopPageHeader
+        title={deal?.title || "Deal Chat"}
+        subtitle={deal?.category || "Deal"}
+        onBack={() => navigation.goBack()}
+        style={styles.header}
+        titleStyle={styles.headerTitle}
+        subtitleStyle={styles.headerSubtitle}
+      />
 
       <KeyboardAvoidingView
         style={styles.chatBody}
@@ -324,33 +312,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.chatBg,
   },
-  headerSpacer: {
-    width: "100%",
-    backgroundColor: theme.colors.chatHeader,
-  },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 12,
-    height: 52,
+    paddingBottom: 8,
     backgroundColor: theme.colors.chatHeader,
-  },
-  headerIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 0,
-    backgroundColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-  },
-  headerTitleWrap: {
-    flex: 1,
   },
   headerTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: theme.colors.onPrimary,
   },
   headerSubtitle: {
     fontSize: 10,

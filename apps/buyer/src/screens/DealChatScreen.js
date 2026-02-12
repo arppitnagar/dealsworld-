@@ -7,11 +7,15 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppInput, ChatSkeleton, useTheme } from "@dealsworld/shared";
+import {
+  AppInput,
+  ChatSkeleton,
+  useTheme,
+  TopPageHeader,
+} from "@dealsworld/shared";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -41,8 +45,6 @@ export default function DealChatScreen({ route, navigation }) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const topInset =
-    Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : insets.top;
   const bottomInset =
     Platform.OS === "android"
       ? insets.bottom > 0
@@ -239,23 +241,14 @@ export default function DealChatScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.screen} edges={[]}>
-      <View style={[styles.headerSpacer, { height: topInset }]} />
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerIcon}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="chevron-back" size={20} color={theme.colors.onPrimary} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleWrap}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {deal?.title || "Deal Chat"}
-          </Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {deal?.category || "Deal"}
-          </Text>
-        </View>
-      </View>
+      <TopPageHeader
+        title={deal?.title || "Deal Chat"}
+        subtitle={deal?.category || "Deal"}
+        onBack={() => navigation.goBack()}
+        style={styles.header}
+        titleStyle={styles.headerTitle}
+        subtitleStyle={styles.headerSubtitle}
+      />
 
       <KeyboardAvoidingView
         style={styles.chatBody}
@@ -375,33 +368,14 @@ const createStyles = (theme) =>
     flex: 1,
     backgroundColor: theme.colors.chatBg,
   },
-  headerSpacer: {
-    width: "100%",
-    backgroundColor: theme.colors.chatHeader,
-  },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 12,
-    height: 52,
+    paddingBottom: 8,
     backgroundColor: theme.colors.chatHeader,
-  },
-  headerIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
-    backgroundColor: theme.colors.onPrimarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 6,
-  },
-  headerTitleWrap: {
-    flex: 1,
   },
   headerTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: theme.colors.onPrimary,
   },
   headerSubtitle: {
     fontSize: 10,

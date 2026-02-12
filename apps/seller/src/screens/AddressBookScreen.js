@@ -8,7 +8,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AppButton, EmptyState, useTheme } from "@dealsworld/shared";
+import { AppButton, EmptyState, useTheme, TopPageHeader } from "@dealsworld/shared";
 import { useAddresses } from "../hooks/useAddresses";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -91,24 +91,11 @@ export default function AddressBookScreen({ navigation }) {
 
   const headerContent = (
     <View>
-      <View
-        style={[
-          styles.headerBar,
-          { paddingTop: Math.max(insets.top, 12) },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color={theme.colors.onPrimary}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Addresses</Text>
-      </View>
+      <TopPageHeader
+        title="Addresses"
+        onBack={() => navigation.goBack()}
+        rounded
+      />
       <View style={styles.heroCard}>
         <View style={styles.heroAccent} />
         <Text style={styles.heroTitle}>Manage your addresses</Text>

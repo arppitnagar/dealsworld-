@@ -10,7 +10,6 @@ import {
   SafeAreaView,
   Platform,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Save } from "lucide-react-native";
@@ -30,6 +29,7 @@ import {
   theme,
   getFormStyles,
   DealFormFields,
+  TopPageHeader,
 } from "@dealsworld/shared";
 const formStyles = getFormStyles(theme);
 /* ---------- CATEGORY OPTIONS ---------- */
@@ -343,35 +343,22 @@ export default function CreateDealScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <LinearGradient
-        colors={[theme.colors.primary, theme.colors.purple]}
+      <TopPageHeader
+        title={
+          isReadOnly
+            ? "View Deal"
+            : isEditMode
+              ? "Edit Deal"
+              : "Create New Deal"
+        }
+        subtitle="Manage your deal details quickly"
+        onBack={() => navigation.goBack()}
         style={styles.header}
-      >
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.headerBack}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons
-              name="chevron-back"
-              size={20}
-              color={theme.colors.onPrimary}
-            />
-          </TouchableOpacity>
-          <View>
-            <Text style={styles.headerTitle}>
-              {isReadOnly
-                ? "View Deal"
-                : isEditMode
-                  ? "Edit Deal"
-                  : "Create New Deal"}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              Manage your deal details quickly
-            </Text>
-          </View>
-        </View>
-      </LinearGradient>
+        titleStyle={styles.headerTitle}
+        subtitleStyle={styles.headerSubtitle}
+        rounded
+        includeSafeArea={false}
+      />
       {/* READ-ONLY BANNER */}
       {/* READ-ONLY BANNER */}
       {isCompleted && (
@@ -640,28 +627,11 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  headerBack: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: theme.colors.onPrimarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-  },
   headerTitle: {
-    color: theme.colors.onPrimary,
     fontSize: 20,
     fontWeight: "800",
   },
   headerSubtitle: {
-    color: theme.colors.onPrimaryMuted,
     fontSize: 12,
     marginTop: 4,
   },

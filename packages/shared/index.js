@@ -19,6 +19,7 @@ export { default as SearchBar } from "./components/SearchBar";
 export { default as PriceBlock } from "./components/PriceBlock";
 export { default as StatsCard } from "./components/StatsCard";
 export { default as HeaderBar } from "./components/HeaderBar";
+export { default as TopPageHeader } from "./components/TopPageHeader";
 export { default as StatusPill } from "./components/StatusPill";
 export { default as MetricsGrid } from "./components/MetricsGrid";
 export { default as MetricRow } from "./components/MetricRow";

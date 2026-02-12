@@ -344,7 +344,9 @@ export default function AuthScreen({
           {showSignup ? (
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>
-                {isSignup ? "Already have an account?" : "New to Deal Buddy?"}
+                {isSignup
+                  ? "Already have an account?"
+                  : `New to ${brandTitle}?`}
               </Text>
               <TouchableOpacity
                 onPress={() => {

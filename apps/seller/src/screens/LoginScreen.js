@@ -10,6 +10,7 @@ export default function LoginScreen() {
       signupTitle="Create Seller Account"
       subtitle="Sign in to continue"
       signupSubtitle="Create your seller account"
+      brandTitle="Seller Buddy"
       onLogin={login}
       onRegister={register}
     />

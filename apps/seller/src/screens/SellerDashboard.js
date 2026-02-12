@@ -35,6 +35,7 @@ import {
   formatCountdown,
   theme,
   CardHeader,
+  TopPageHeader,
 } from "@dealsworld/shared";
 
 const SPACING = 20;
@@ -223,47 +224,49 @@ export default function SellerDashboard({ navigation }) {
           />
         }
       >
-        <LinearGradient
-          colors={[theme.colors.primary, theme.colors.purple]}
-          style={[styles.header, { paddingTop: 16 }]}
-        >
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              style={styles.greetingRow}
-              onPress={() => navigation.navigate("Profile")}
-              activeOpacity={0.8}
-            >
-              <View style={styles.avatarWrap}>
-                <Ionicons
-                  name="person-outline"
-                  size={20}
-                  color={theme.colors.onPrimary}
-                />
-              </View>
-              <View>
-                <Text style={styles.greetingLabel}>{greetingLabel}</Text>
-                <Text style={styles.greetingName}>Seller</Text>
-              </View>
-            </TouchableOpacity>
-            <View style={styles.headerActions}>
-              {__DEV__ && (
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("StyleGuide")}
-                  style={styles.debugChip}
-                >
-                  <Text style={styles.debugChipText}>Style</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.headerIconBtn}>
-                <Ionicons
-                  name="notifications-outline"
-                  size={20}
-                  color={theme.colors.onPrimary}
-                />
+        <TopPageHeader
+          includeSafeArea={false}
+          rounded
+          style={styles.header}
+          customRow={
+            <View style={styles.headerRow}>
+              <TouchableOpacity
+                style={styles.greetingRow}
+                onPress={() => navigation.navigate("Profile")}
+                activeOpacity={0.8}
+              >
+                <View style={styles.avatarWrap}>
+                  <Ionicons
+                    name="person-outline"
+                    size={20}
+                    color={theme.colors.onPrimary}
+                  />
+                </View>
+                <View>
+                  <Text style={styles.greetingLabel}>{greetingLabel}</Text>
+                  <Text style={styles.greetingName}>Seller</Text>
+                </View>
               </TouchableOpacity>
+              <View style={styles.headerActions}>
+                {__DEV__ && (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate("StyleGuide")}
+                    style={styles.debugChip}
+                  >
+                    <Text style={styles.debugChipText}>Style</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.headerIconBtn}>
+                  <Ionicons
+                    name="notifications-outline"
+                    size={20}
+                    color={theme.colors.onPrimary}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-
+          }
+        >
           <View style={styles.searchRow}>
             <View style={styles.searchInputWrap}>
               <AppInput
@@ -297,7 +300,7 @@ export default function SellerDashboard({ navigation }) {
               )}
             </View>
           </View>
-        </LinearGradient>
+        </TopPageHeader>
 
         <View style={styles.filterWrap}>
           <ScrollView
@@ -551,6 +554,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 40 },
   header: {
     paddingHorizontal: SPACING,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,

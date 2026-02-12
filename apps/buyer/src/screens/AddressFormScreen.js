@@ -10,7 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AppButton, AppInput, useTheme } from "@dealsworld/shared";
+import { AppButton, AppInput, useTheme, TopPageHeader } from "@dealsworld/shared";
 import { useAddresses } from "../hooks/useAddresses";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -84,26 +84,11 @@ export default function AddressFormScreen({ navigation, route }) {
         { paddingBottom: Math.max(insets.bottom, 20) },
       ]}
     >
-      <View
-        style={[
-          styles.headerBar,
-          { paddingTop: Math.max(insets.top, 12) },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color={theme.colors.onPrimary}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {existing ? "Edit Address" : "Add Address"}
-        </Text>
-      </View>
+      <TopPageHeader
+        title={existing ? "Edit Address" : "Add Address"}
+        onBack={() => navigation.goBack()}
+        rounded
+      />
 
       <KeyboardAvoidingView
         style={styles.formWrap}
