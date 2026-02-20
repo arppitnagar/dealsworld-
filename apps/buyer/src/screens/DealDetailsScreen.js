@@ -227,10 +227,18 @@ export default function DealDetailsScreen({ route, navigation }) {
   }, [addresses, dealState]);
 
   useEffect(() => {
+    hasRecorded.current = false;
+  }, [dealId]);
+
+  useEffect(() => {
     if (!dealId || hasRecorded.current || dealStateLoading) return;
     if (!viewedIds.has(dealId)) {
+      // Keep UI responsive even if backend view-tracking is delayed/unavailable.
+      markViewed(dealId);
       recordView(dealId, {
-        onSuccess: () => markViewed(dealId),
+        onError: (error) => {
+          console.warn("Record view failed:", error);
+        },
       });
     }
     hasRecorded.current = true;
@@ -264,7 +272,7 @@ export default function DealDetailsScreen({ route, navigation }) {
       dealState?.deliveryAddressId || defaultAddress?.id || null;
     setSelectedAddressId((prev) => {
       if (prev && addresses.some((item) => item.id === prev)) return prev;
-      return preferredId;
+      return preferredId || addresses[0]?.id || null;
     });
   }, [addresses, dealState?.deliveryAddressId, defaultAddress?.id, showAddressModal]);
 
@@ -313,6 +321,7 @@ export default function DealDetailsScreen({ route, navigation }) {
           setSuccessFeedback("join");
         },
         onError: (error) => {
+          console.warn("Join deal failed:", error);
           const isNetworkIssue =
             !error?.response &&
             (String(error?.code || "").toUpperCase() === "ERR_NETWORK" ||
@@ -530,6 +539,7 @@ export default function DealDetailsScreen({ route, navigation }) {
           setSuccessFeedback("leave");
         },
         onError: (error) => {
+          console.warn("Leave deal failed:", error);
           const isNetworkIssue =
             !error?.response &&
             (String(error?.code || "").toUpperCase() === "ERR_NETWORK" ||
@@ -551,6 +561,13 @@ export default function DealDetailsScreen({ route, navigation }) {
     }
 
     if (requiresDeliveryAddress) {
+      if (addressesLoading) {
+        Alert.alert(
+          "Please wait",
+          "Loading your saved addresses. Try again in a moment.",
+        );
+        return;
+      }
       if (!addressesLoading && !hasAnyAddress) {
         Alert.alert(
           "Delivery address needed",
@@ -565,13 +582,30 @@ export default function DealDetailsScreen({ route, navigation }) {
         );
         return;
       }
-      if (!addressesLoading && !hasDefaultAddress && !dealState?.deliveryAddressId) {
+      const selectedAddress =
+        dealState?.deliveryAddress ||
+        (dealState?.deliveryAddressId
+          ? addresses?.find((item) => item.id === dealState.deliveryAddressId)
+          : null) ||
+        defaultAddress ||
+        addresses?.[0] ||
+        null;
+
+      if (!selectedAddress) {
         Alert.alert(
           "Select delivery address",
-          "No default address is selected. Please choose one from your saved addresses.",
+          "Please choose one delivery address from your saved addresses.",
         );
+        setShowAddressModal(true);
+        return;
       }
-      setShowAddressModal(true);
+
+      if (!hasDefaultAddress && !dealState?.deliveryAddressId) {
+        // No default selected by user; still proceed with first saved address for smoother UX.
+        setSelectedAddressId(selectedAddress.id || null);
+      }
+
+      handleJoin(selectedAddress);
       return;
     }
 

@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 
-const NETWORK_RETRY_DELAYS_MS = [350, 900];
+const NETWORK_RETRY_DELAYS_MS = [500, 1400];
+const MUTATION_TIMEOUT_MS = 15_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -88,7 +89,7 @@ export const useJoinDeal = () => {
       const { data } = await postWithNetworkRetry(
         `/deals/${dealId}/join`,
         body,
-        { timeout: 15000 },
+        { timeout: MUTATION_TIMEOUT_MS },
       );
       return data;
     },
@@ -104,7 +105,11 @@ export const useRecordDealView = () => {
   return useMutation({
     mutationFn: async (dealId) => {
       if (!dealId) throw new Error("dealId is required");
-      const { data } = await apiClient.post(`/deals/${dealId}/view`);
+      const { data } = await postWithNetworkRetry(
+        `/deals/${dealId}/view`,
+        undefined,
+        { timeout: MUTATION_TIMEOUT_MS },
+      );
       return data;
     },
   });
@@ -120,7 +125,7 @@ export const useLeaveDeal = () => {
       const { data } = await postWithNetworkRetry(
         `/deals/${dealId}/leave`,
         undefined,
-        { timeout: 15000 },
+        { timeout: MUTATION_TIMEOUT_MS },
       );
       return data;
     },
