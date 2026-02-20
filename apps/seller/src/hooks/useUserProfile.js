@@ -21,6 +21,8 @@ export const useUserProfile = () => {
         const seed = {
           email: user.email || "",
           role: "seller",
+          approvalStatus: "approved",
+          status: "active",
           theme: "light",
           createdAt: serverTimestamp(),
         };

@@ -15,7 +15,6 @@ import {
   X,
   Heart,
   Bell,
-  UserCircle,
   Eye,
   Users,
   Zap,
@@ -117,7 +116,8 @@ const DealCard = ({
   const dealImage = deal?.imageUrl || deal?.image || null;
   const dealType = getDealType({ isJoined, isFavorite, isViewed, isHot });
   const badgeLabel = deal?.location ? String(deal.location) : null;
-  const sellerLabel = deal?.vendorName || deal?.sellerId || "Deal Buddy";
+  const sellerLabel =
+    getSellerDisplayName(deal) || "Deal Buddy";
   const endsInLabel = formatEndsIn(expiryMs);
   const showSubtitle = Boolean(sellerLabel || endsInLabel);
 
@@ -685,7 +685,13 @@ export default function HomeScreen({ navigation }) {
               <HeaderActionButton
                 label="Profile"
                 onPress={() => navigation.navigate("Profile")}
-                icon={<UserCircle size={16} color={theme.colors.onPrimary} />}
+                icon={
+                  <Ionicons
+                    name="person-outline"
+                    size={16}
+                    color={theme.colors.onPrimary}
+                  />
+                }
               />
             </View>
           </View>
@@ -883,6 +889,15 @@ function getExpiryMs(deal) {
 
   if (expiresAtMs) return expiresAtMs;
   return expiryTimeMs || null;
+}
+
+function getSellerDisplayName(deal) {
+  const candidates = [deal?.sellerName, deal?.sellerDisplayName, deal?.vendorName];
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (text) return text;
+  }
+  return null;
 }
 
 function getJoinCount(deal) {

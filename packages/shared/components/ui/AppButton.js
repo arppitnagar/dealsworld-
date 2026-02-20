@@ -16,6 +16,7 @@ export function AppButton({
   loading,
   disabled,
   variant = "primary",
+  compact = false,
   leftIcon,
   rightIcon,
   style,
@@ -49,6 +50,10 @@ export function AppButton({
           justifyContent: "center",
           minHeight: 52,
         },
+        buttonBaseCompact: {
+          paddingVertical: 10,
+          minHeight: 44,
+        },
         buttonDisabled: {
           opacity: 0.6,
         },
@@ -58,6 +63,10 @@ export function AppButton({
           paddingVertical: 14,
           paddingHorizontal: 16,
           justifyContent: "center",
+        },
+        gradientSurfaceCompact: {
+          paddingVertical: 10,
+          minHeight: 44,
         },
         content: {
           flexDirection: "row",
@@ -160,7 +169,10 @@ export function AppButton({
       {isPrimary ? (
         <LinearGradient
           colors={[theme.colors.primary, theme.colors.purple]}
-          style={styles.gradientSurface}
+          style={[
+            styles.gradientSurface,
+            compact ? styles.gradientSurfaceCompact : null,
+          ]}
         >
           {renderContent(theme.colors.onPrimary, true)}
         </LinearGradient>
@@ -168,6 +180,7 @@ export function AppButton({
         <View
           style={[
             styles.buttonBase,
+            compact ? styles.buttonBaseCompact : null,
             { backgroundColor, borderColor },
           ]}
         >

@@ -38,6 +38,8 @@ export const AuthProvider = ({ children }) => {
         {
           email: nextUser.email || "",
           role: "seller",
+          approvalStatus: "approved",
+          status: "active",
           theme: "light",
           createdAt: serverTimestamp(),
         },
@@ -67,6 +69,8 @@ export const AuthProvider = ({ children }) => {
         {
           email: credential.user.email || email,
           role: "seller",
+          approvalStatus: "approved",
+          status: "active",
           theme: "light",
           createdAt: serverTimestamp(),
         },

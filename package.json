@@ -5,10 +5,28 @@
     "lint:colors": "node scripts/check-colors.js",
     "lint:spacing": "node scripts/check-spacing.js",
     "lint:typography": "node scripts/check-typography.js",
+    "lint:versions": "node scripts/check-workspace-versions.js",
     "lint:ui": "npm run lint:colors && npm run lint:spacing && npm run lint:typography",
     "hooks:install": "node scripts/install-git-hooks.js",
     "setup:ui": "npm run hooks:install && npm run lint:ui",
-    "admin:web": "npm --workspace apps/admin run web"
+    "admin:web": "npm --workspace apps/admin run web",
+    "admin:web:fast": "npm --workspace apps/admin run web -- --port 8082",
+    "buyer:web:fast": "npm --workspace apps/buyer run web -- --port 8083",
+    "seller:web:fast": "npm --workspace apps/seller run web -- --port 8084",
+    "buyer:mobile": "npm --workspace apps/buyer run start -- --host lan --port 8083",
+    "seller:mobile": "npm --workspace apps/seller run start -- --host lan --port 8084",
+    "buyer:mobile:clear": "npm --workspace apps/buyer run start -- --host lan --port 8083 --clear",
+    "seller:mobile:clear": "npm --workspace apps/seller run start -- --host lan --port 8084 --clear",
+    "buyer:restart": "node scripts/restart-mobile.js buyer --clear",
+    "seller:restart": "node scripts/restart-mobile.js seller --clear",
+    "web:all:fast": "node scripts/start-all-web.js",
+    "web:all:fast:clear": "node scripts/start-all-web.js --clear",
+    "apps:all:mixed": "node scripts/start-all-hybrid.js",
+    "apps:all:mixed:clear": "node scripts/start-all-hybrid.js --clear"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   },
   "workspaces": [
     "apps/*",

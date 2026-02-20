@@ -10,11 +10,18 @@ const ENV_BASE_URL =
     ? process.env.EXPO_PUBLIC_API_BASE_URL
     : "";
 
+const ENV_BASE_URL_WEB =
+  typeof process !== "undefined" &&
+  process &&
+  process.env &&
+  process.env.EXPO_PUBLIC_API_BASE_URL_WEB
+    ? process.env.EXPO_PUBLIC_API_BASE_URL_WEB
+    : "";
+
 const BASE_URL =
-  ENV_BASE_URL ||
-  (Platform.OS === "web"
-    ? "http://127.0.0.1:5000/api"
-    : "http://192.168.1.8:5000/api");
+  Platform.OS === "web"
+    ? ENV_BASE_URL_WEB || "http://127.0.0.1:5000/api"
+    : ENV_BASE_URL || "http://192.168.1.9:5000/api";
 
 const apiClient = axios.create({
   baseURL: BASE_URL,

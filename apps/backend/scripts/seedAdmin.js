@@ -28,6 +28,7 @@ async function main() {
   const payload = {
     role,
     status: "active",
+    approvalStatus: "approved",
     email: authUser?.email || "",
     displayName: authUser?.displayName || "",
     updatedAt: FieldValue.serverTimestamp(),

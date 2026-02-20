@@ -27,6 +27,11 @@ export const getStatusTokens = (theme = defaultTheme) => ({
     color: theme.colors.statusExpired,
     bg: theme.colors.amberSoft,
   },
+  rejected: {
+    label: statusLabels.rejected,
+    color: theme.colors.error,
+    bg: theme.colors.dangerSoftAlt,
+  },
   draft: {
     label: statusLabels.draft,
     color: theme.colors.statusDraft,

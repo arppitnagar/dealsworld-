@@ -35,6 +35,7 @@ export default function DealDetailsLayout({
   headerBelow,
   title,
   description,
+  sellerName,
   category,
   location,
   price,
@@ -47,6 +48,7 @@ export default function DealDetailsLayout({
   statusLabel,
   statusColor,
   statusInline = false,
+  showHeroAccent = true,
   showPricing = true,
   variant = "default",
   children,
@@ -284,6 +286,7 @@ export default function DealDetailsLayout({
   const percentOff =
     typeof discountPercent === "number" ? discountPercent : computedPercent;
   const showMeta =
+    Boolean(sellerName) ||
     Boolean(category) ||
     Boolean(location) ||
     (statusInline && Boolean(statusLabel));
@@ -350,7 +353,7 @@ export default function DealDetailsLayout({
         contentContainerStyle={[styles.scrollContent, contentStyle]}
       >
         <View style={[styles.heroCard, heroStyle]}>
-          <View style={styles.heroAccent} />
+          {showHeroAccent ? <View style={styles.heroAccent} /> : null}
           <Text style={styles.heroTitle}>{title || "Deal"}</Text>
           {description ? (
             <Text style={styles.heroDescription} numberOfLines={3}>
@@ -367,6 +370,11 @@ export default function DealDetailsLayout({
               {statusInline && statusLabel ? (
                 <View style={styles.heroStatusChip}>
                   <Text style={styles.heroStatusChipText}>{statusLabel}</Text>
+                </View>
+              ) : null}
+              {sellerName ? (
+                <View style={styles.heroChipOutline}>
+                  <Text style={styles.heroChipOutlineText}>{sellerName}</Text>
                 </View>
               ) : null}
               {category ? (

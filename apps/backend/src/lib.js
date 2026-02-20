@@ -108,13 +108,126 @@ function isExpiredDeal(deal, nowMs = Date.now()) {
 function sanitizeDealForResponse(doc) {
   const data = doc.data ? doc.data() : doc;
   const id = doc.id || data.id;
+  const sellerName =
+    String(
+      data?.sellerName ||
+        data?.sellerDisplayName ||
+        data?.vendorName ||
+        "",
+    ).trim() || null;
   return {
     id,
     ...data,
     sellerId: getSellerId(data),
+    sellerName,
     approvalStatus: normalizeApprovalStatus(data),
     lifecycleStatus: normalizeLifecycleStatus(data),
   };
+}
+
+function getUserDisplayName(profile = {}, fallback = "") {
+  const candidates = [
+    profile.displayName,
+    profile.fullName,
+    profile.name,
+    profile.businessName,
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (text) return text;
+  }
+  const email = String(profile.email || "").trim();
+  if (email.includes("@")) {
+    return email.split("@")[0];
+  }
+  return String(fallback || "").trim();
+}
+
+async function attachSellerNamesToDeals(deals = []) {
+  if (!Array.isArray(deals) || deals.length === 0) return deals;
+
+  const sellerIds = [
+    ...new Set(
+      deals
+        .map((deal) => String(getSellerId(deal) || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  if (sellerIds.length === 0) {
+    return deals.map((deal) => ({
+      ...deal,
+      sellerName:
+        String(
+          deal?.sellerName ||
+            deal?.sellerDisplayName ||
+            deal?.vendorName ||
+            "",
+        ).trim() || null,
+    }));
+  }
+
+  const refs = sellerIds.map((id) => db.collection(USERS_COLLECTION).doc(id));
+  const snaps = await Promise.all(refs.map((ref) => ref.get()));
+  const namesById = new Map();
+  const unresolvedSellerIds = [];
+
+  snaps.forEach((snap, index) => {
+    const sellerId = sellerIds[index];
+    if (!sellerId) return;
+    if (!snap.exists) {
+      unresolvedSellerIds.push(sellerId);
+      return;
+    }
+    const profile = snap.data() || {};
+    namesById.set(sellerId, getUserDisplayName(profile, sellerId));
+  });
+
+  if (unresolvedSellerIds.length > 0) {
+    const aliasFields = [
+      "sellerId",
+      "vendorId",
+      "vendorid",
+      "legacySellerId",
+      "sellerCode",
+      "code",
+    ];
+
+    await Promise.all(
+      unresolvedSellerIds.map(async (sellerAlias) => {
+        for (const field of aliasFields) {
+          const snap = await db
+            .collection(USERS_COLLECTION)
+            .where(field, "==", sellerAlias)
+            .limit(1)
+            .get();
+          if (!snap.empty) {
+            const profile = snap.docs[0].data() || {};
+            namesById.set(
+              sellerAlias,
+              getUserDisplayName(profile, sellerAlias),
+            );
+            return;
+          }
+        }
+        namesById.set(sellerAlias, sellerAlias);
+      }),
+    );
+  }
+
+  return deals.map((deal) => {
+    const sellerId = String(getSellerId(deal) || "").trim();
+    const existingName = String(
+      deal?.sellerName || deal?.sellerDisplayName || deal?.vendorName || "",
+    ).trim();
+    const resolvedName = existingName || namesById.get(sellerId) || sellerId || null;
+
+    return {
+      ...deal,
+      sellerId: sellerId || null,
+      sellerName: resolvedName,
+    };
+  });
 }
 
 async function ensureUserProfile(uid, seed = {}) {
@@ -123,15 +236,27 @@ async function ensureUserProfile(uid, seed = {}) {
   if (snap.exists) {
     return { id: snap.id, ...(snap.data() || {}) };
   }
+  const role = String(seed?.role || "buyer").toLowerCase();
+  const defaultApprovalStatus = "approved";
   const payload = {
-    role: "buyer",
+    role,
     status: "active",
+    approvalStatus: defaultApprovalStatus,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
     ...seed,
   };
   await ref.set(payload, { merge: true });
   return { id: uid, ...payload };
+}
+
+function normalizeUserApprovalStatus(profile = {}) {
+  const explicit = String(profile?.approvalStatus || "").toLowerCase();
+  if (explicit) return explicit;
+  const role = String(profile?.role || "").toLowerCase();
+  // Backward compatibility for legacy profiles.
+  if (role === "seller") return "pending";
+  return "approved";
 }
 
 function normalizeAuthHeader(value) {
@@ -171,6 +296,10 @@ function requireRole(...roles) {
       const role = String(profile.role || "").toLowerCase();
       if (!allowed.has(role)) {
         return res.status(403).json({ error: "Insufficient role" });
+      }
+      const status = String(profile.status || "active").toLowerCase();
+      if (status === "blocked") {
+        return res.status(403).json({ error: "Account is blocked" });
       }
       req.userProfile = profile;
       return next();
@@ -245,6 +374,24 @@ function isDeliveryMode(mode) {
   return !value.includes("pick");
 }
 
+function isPickupMode(mode) {
+  const value = String(mode || "").trim().toLowerCase();
+  if (!value) return false;
+  return value.includes("pick");
+}
+
+function hasStoreAddress(deal = {}) {
+  const storeAddress = String(deal.storeAddress || "").trim();
+  const pickupAddress = String(deal.pickupAddress || "").trim();
+  return Boolean(storeAddress || pickupAddress);
+}
+
+function validateDealPublishability(deal = {}) {
+  if (!isPickupMode(deal.deliveryMode)) return null;
+  if (hasStoreAddress(deal)) return null;
+  return "Pickup deals require a store address before publish";
+}
+
 async function pushNotification({ userId, type, title, body, meta = {} }) {
   if (!userId) return;
   await db
@@ -280,6 +427,8 @@ function extractDealPayload(input = {}, sellerId = null) {
     categoryOther: String(input.categoryOther || ""),
     deliveryMode: String(input.deliveryMode || ""),
     deliveryCharge: asNumber(input.deliveryCharge, 0),
+    storeAddress: String(input.storeAddress || "").trim(),
+    pickupAddress: String(input.pickupAddress || "").trim(),
     originalPrice: asNumber(input.originalPrice, 0),
     discountPrice: asNumber(input.discountPrice ?? input.price, 0),
     minGroupSize: Math.max(1, minGroupSize),
@@ -320,6 +469,8 @@ function applyDealUpdate(input = {}) {
     "categoryOther",
     "deliveryMode",
     "deliveryCharge",
+    "storeAddress",
+    "pickupAddress",
     "originalPrice",
     "discountPrice",
     "minGroupSize",
@@ -388,7 +539,10 @@ module.exports = {
   normalizeLifecycleStatus,
   isExpiredDeal,
   sanitizeDealForResponse,
+  getUserDisplayName,
+  attachSellerNamesToDeals,
   ensureUserProfile,
+  normalizeUserApprovalStatus,
   normalizeAuthHeader,
   requireAuth,
   requireRole,
@@ -400,6 +554,9 @@ module.exports = {
   makePaymentId,
   makeProviderOrderId,
   isDeliveryMode,
+  isPickupMode,
+  hasStoreAddress,
+  validateDealPublishability,
   pushNotification,
   extractDealPayload,
   applyDealUpdate,

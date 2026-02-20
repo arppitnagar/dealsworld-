@@ -5,6 +5,11 @@ node_modules/
 .expo/
 .expo-shared/
 
+# Metro / Expo cache
+.metro-cache/
+metro-cache/
+.expo/web/cache/
+
 # environment variables
 .env
 .env.local

@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Path } from "react-native-svg";
 import { db } from "../config/firebase";
 import { doc, updateDoc, onSnapshot } from "firebase/firestore";
 import {
@@ -27,10 +26,22 @@ import {
   DealDetailsLayout,
   InfoCard,
 } from "@dealsworld/shared";
+import { useAuth } from "../context/AuthContext";
+import { useUserProfile } from "../hooks/useUserProfile";
 
 const { width } = Dimensions.get("window");
 
+function pickSellerDisplayName(...values) {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return null;
+}
+
 export default function DealDetails({ route, navigation }) {
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
   const initialDeal = route?.params?.deal;
   const [deal, setDeal] = useState(normalizeDeal(initialDeal));
   const [loading, setLoading] = useState(false);
@@ -92,67 +103,77 @@ export default function DealDetails({ route, navigation }) {
   const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
   const isPickup = /pick/i.test(deliveryModeLabel);
   const storeAddress =
-    deal?.storeAddress || deal?.pickupAddress || deal?.location || null;
-  const sparklineWidth = 56;
-  const sparklineHeight = 18;
+    formatAddressText(deal?.storeAddress) ||
+    formatAddressText(deal?.pickupAddress) ||
+    formatAddressText(deal?.location) ||
+    null;
+  const sellerDisplayName = pickSellerDisplayName(
+    deal?.sellerName,
+    deal?.sellerDisplayName,
+    profile?.displayName,
+    profile?.fullName,
+    profile?.name,
+    user?.displayName,
+    user?.email && String(user.email).includes("@")
+      ? String(user.email).split("@")[0]
+      : "",
+  );
   const SHARE_BASE_URL = "https://dealbuddy.app/deal";
   const APP_STORE_URL = "https://apps.apple.com/app/id0000000000";
   const PLAY_STORE_URL =
     "https://play.google.com/store/apps/details?id=com.dealbuddy";
-  const buildSparklinePath = (points, width, height) => {
-    if (!points || points.length === 0) return "";
-    const step = width / Math.max(points.length - 1, 1);
-    return points
-      .map((value, index) => {
-        const x = index * step;
-        const y = height - value * height;
-        return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-      })
-      .join(" ");
-  };
-  const insights = [
+  const totalInteractions = Number(viewsCount || 0) + favoritesCount + joinsCount;
+  const pulseCards = [
+    {
+      key: "live",
+      label: "Live Pulse",
+      value: formatNumber(totalInteractions),
+      caption: "Total interactions on this deal",
+      icon: "analytics-outline",
+      colors: [theme.colors.primary, theme.colors.purple],
+    },
     {
       key: "views",
-      label: "Views",
+      label: "View Pulse",
       value: viewsCount !== null ? formatNumber(viewsCount) : "-",
-      tone: "info",
+      caption: "Total deal views",
       icon: "eye-outline",
-      sparkline: [0.2, 0.35, 0.28, 0.52, 0.48, 0.7, 0.6, 0.82],
+      colors: [theme.colors.primary, theme.colors.purple],
     },
     {
       key: "favorites",
-      label: "Marked as favourite",
+      label: "Favourite Pulse",
       value: formatNumber(favoritesCount),
-      tone: "accent",
-      icon: "heart",
-      sparkline: [0.12, 0.2, 0.18, 0.32, 0.26, 0.4, 0.36, 0.5],
+      caption: "Marked as favourite",
+      icon: "heart-outline",
+      colors: [theme.colors.danger, theme.colors.purple],
     },
     {
       key: "conversion",
-      label: "Conversion",
+      label: "Conversion Pulse",
       value: conversionRate !== null ? `${conversionRate.toFixed(1)}%` : "-",
-      tone: "success",
+      caption: "Joined vs total views",
       icon: "analytics-outline",
-      sparkline: [0.05, 0.12, 0.1, 0.22, 0.18, 0.3, 0.26, 0.38],
+      colors: [theme.colors.success, theme.colors.primary],
     },
     {
       key: "threshold",
-      label: "Time to reach minimum buyer",
+      label: "Minimum-Buyer Pulse",
       value:
         timeToThresholdSeconds !== null
           ? formatDuration(timeToThresholdSeconds)
           : "-",
-      tone: "warning",
+      caption: "Time to reach threshold",
       icon: "timer-outline",
-      sparkline: [0.4, 0.35, 0.32, 0.3, 0.26, 0.22, 0.18, 0.15],
+      colors: [theme.colors.amberBorder, theme.colors.primary],
     },
     {
       key: "dropoff",
-      label: "Drop-off %",
+      label: "Drop-off Pulse",
       value: dropOffRate !== null ? `${dropOffRate.toFixed(1)}%` : "-",
-      tone: "danger",
+      caption: "Joined then left",
       icon: "trending-down-outline",
-      sparkline: [0.3, 0.34, 0.28, 0.4, 0.36, 0.42, 0.38, 0.46],
+      colors: [theme.colors.dangerDark, theme.colors.danger],
     },
   ];
 
@@ -320,6 +341,7 @@ export default function DealDetails({ route, navigation }) {
         headerBelow={headerBelowContent}
         title={deal.title || "Deal"}
         description={deal.description}
+        sellerName={sellerDisplayName}
         category={deal.category}
         location={deal.location}
         price={priceNumber}
@@ -332,54 +354,60 @@ export default function DealDetails({ route, navigation }) {
         statusLabel={lifecycleStatus === "completed" ? null : statusLabel}
         statusColor={accentColor}
         statusInline
+        showHeroAccent={false}
         variant="dashboard"
         contentStyle={styles.scrollContent}
       >
         <InfoCard title="Deal Insights" style={styles.insightsCard}>
-          <View style={styles.insightsGrid}>
-            {insights.map((item) => (
-              <View
+          <LinearGradient
+            colors={pulseCards[0].colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.insightSummaryCard}
+          >
+            <View style={styles.insightSummaryTextWrap}>
+              <Text style={styles.insightSummaryEyebrow}>{pulseCards[0].label}</Text>
+              <Text style={styles.insightSummaryValue}>{pulseCards[0].value}</Text>
+              <Text style={styles.insightSummaryCaption}>
+                {pulseCards[0].caption}
+              </Text>
+            </View>
+            <View style={styles.insightSummaryIconWrap}>
+              <Ionicons
+                name={pulseCards[0].icon}
+                size={18}
+                color={theme.colors.onPrimary}
+              />
+            </View>
+          </LinearGradient>
+
+          <View style={styles.insightPulseGrid}>
+            {pulseCards.slice(1).map((item, index, list) => (
+              <LinearGradient
                 key={item.key}
+                colors={item.colors}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
                 style={[
-                  styles.insightTile,
-                  styles[`insightTile_${item.tone}`],
+                  styles.insightPulseCard,
+                  index === list.length - 1 && list.length % 2 === 1
+                    ? styles.insightPulseCardFull
+                    : null,
                 ]}
               >
-                <View style={styles.insightTileHeader}>
-                  <View
-                    style={[
-                      styles.insightIconWrap,
-                      styles[`insightIconWrap_${item.tone}`],
-                    ]}
-                  >
+                <View style={styles.insightPulseTopRow}>
+                  <Text style={styles.insightPulseEyebrow}>{item.label}</Text>
+                  <View style={styles.insightPulseIconWrap}>
                     <Ionicons
                       name={item.icon}
-                      size={16}
-                      color={styles[`insightIcon_${item.tone}`].color}
+                      size={14}
+                      color={theme.colors.onPrimary}
                     />
                   </View>
-                  <Svg
-                    width={sparklineWidth}
-                    height={sparklineHeight}
-                    style={styles.sparkline}
-                  >
-                    <Path
-                      d={buildSparklinePath(
-                        item.sparkline,
-                        sparklineWidth,
-                        sparklineHeight,
-                      )}
-                      stroke={styles[`insightIcon_${item.tone}`].color}
-                      strokeWidth={2}
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </Svg>
                 </View>
-                <Text style={styles.insightValue}>{item.value}</Text>
-                <Text style={styles.insightLabel}>{item.label}</Text>
-              </View>
+                <Text style={styles.insightPulseValue}>{item.value}</Text>
+                <Text style={styles.insightPulseCaption}>{item.caption}</Text>
+              </LinearGradient>
             ))}
           </View>
         </InfoCard>
@@ -501,95 +529,97 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
-  insightsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  insightTile: {
-    flexBasis: "48%",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+  insightSummaryCard: {
     borderRadius: 18,
-    borderWidth: 1,
-    minHeight: 92,
-    justifyContent: "space-between",
-  },
-  insightTileHeader: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 6,
+    marginBottom: 10,
   },
-  sparkline: {
-    opacity: 0.9,
+  insightSummaryTextWrap: {
+    flex: 1,
+    gap: 2,
   },
-  insightIconWrap: {
-    width: 32,
-    height: 32,
+  insightSummaryEyebrow: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.onPrimaryMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  insightSummaryValue: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: theme.colors.onPrimary,
+    lineHeight: 30,
+  },
+  insightSummaryCaption: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.colors.onPrimaryMuted,
+  },
+  insightSummaryIconWrap: {
+    width: 36,
+    height: 36,
     borderRadius: 12,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
     alignItems: "center",
     justifyContent: "center",
   },
-  insightLabel: {
-    fontSize: 11,
+  insightPulseGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  insightPulseCard: {
+    width: "48%",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  insightPulseCardFull: {
+    width: "100%",
+  },
+  insightPulseTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  insightPulseEyebrow: {
+    flex: 1,
+    fontSize: 10,
     fontWeight: "700",
-    color: theme.colors.textMuted,
+    color: theme.colors.onPrimaryMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
-  insightValue: {
-    fontSize: 20,
+  insightPulseIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  insightPulseValue: {
+    fontSize: 22,
     fontWeight: "800",
-    color: theme.colors.text,
+    color: theme.colors.onPrimary,
+    lineHeight: 24,
   },
-  insightTile_info: {
-    backgroundColor: theme.colors.surfaceLighter,
-    borderColor: theme.colors.infoBorder,
-  },
-  insightIconWrap_info: {
-    backgroundColor: theme.colors.infoSoft,
-  },
-  insightIcon_info: {
-    color: theme.colors.primary,
-  },
-  insightTile_accent: {
-    backgroundColor: theme.colors.surfaceLighter,
-    borderColor: theme.colors.purple,
-  },
-  insightIconWrap_accent: {
-    backgroundColor: theme.colors.purpleSoft,
-  },
-  insightIcon_accent: {
-    color: theme.colors.purple,
-  },
-  insightTile_success: {
-    backgroundColor: theme.colors.surfaceLighter,
-    borderColor: theme.colors.success,
-  },
-  insightIconWrap_success: {
-    backgroundColor: theme.colors.successSoft,
-  },
-  insightIcon_success: {
-    color: theme.colors.successDark,
-  },
-  insightTile_warning: {
-    backgroundColor: theme.colors.surfaceLighter,
-    borderColor: theme.colors.amberBorder,
-  },
-  insightIconWrap_warning: {
-    backgroundColor: theme.colors.amberSoft,
-  },
-  insightIcon_warning: {
-    color: theme.colors.amberText,
-  },
-  insightTile_danger: {
-    backgroundColor: theme.colors.surfaceLighter,
-    borderColor: theme.colors.dangerBorder,
-  },
-  insightIconWrap_danger: {
-    backgroundColor: theme.colors.dangerSoftLight,
-  },
-  insightIcon_danger: {
-    color: theme.colors.dangerDark,
+  insightPulseCaption: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: theme.colors.onPrimaryMuted,
+    lineHeight: 12,
   },
   logisticsCard: {
     backgroundColor: theme.colors.background,
@@ -600,7 +630,7 @@ const styles = StyleSheet.create({
   },
   logisticsItem: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
     paddingVertical: 6,
   },
@@ -630,11 +660,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   logisticsValue: {
-    flex: 1,
-    textAlign: "right",
     fontSize: 13,
     fontWeight: "700",
     color: theme.colors.text,
+    lineHeight: 18,
   },
   footer: {
     position: "absolute",
@@ -676,15 +705,18 @@ function safeGet(obj, key) {
 }
 
 function getDealLifecycleStatus(deal) {
-  const approvalStatus = String(deal?.approvalStatus || "").toLowerCase();
+  const approvalStatus = String(
+    deal?.approvalStatus || deal?.approval?.status || "",
+  ).toLowerCase();
   const approved = deal?.approved === true;
+  const approvedAt = deal?.approval?.approvedAt || deal?.approvedAt;
   const status = String(deal?.status || "").toLowerCase();
+  const isAdminPublished =
+    approvalStatus === "approved" || approved || Boolean(approvedAt);
 
   if (status === "completed") return "completed";
   if (approvalStatus === "rejected" || status === "rejected") return "rejected";
-  if (approvalStatus === "pending") return "pending";
-  if (approvalStatus === "approved") return "active";
-  if (approved || status === "active") return "active";
+  if (isAdminPublished) return "active";
   return "pending";
 }
 
@@ -720,4 +752,27 @@ function formatNumber(value) {
   if (numeric >= 1000000) return `${(numeric / 1000000).toFixed(1)}M`;
   if (numeric >= 1000) return `${(numeric / 1000).toFixed(1)}K`;
   return String(Math.round(numeric));
+}
+
+function formatAddressText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value !== "object") return "";
+
+  const fullName = value.name || value.fullName || value.recipientName;
+  const cityLine = [value.city, value.state, value.pincode]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+  const parts = [fullName, value.line1, value.line2, cityLine, value.country]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+
+  const phone = String(value.phone || value.mobile || "").trim();
+  if (phone) {
+    parts.push(`Phone: ${phone}`);
+  }
+
+  return parts.join("\n");
 }

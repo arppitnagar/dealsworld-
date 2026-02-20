@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { theme } from "@dealsworld/shared";
+import { theme } from "@dealsworld/shared/theme/theme";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -16,6 +16,7 @@ import {
 } from "firebase/auth";
 import apiClient from "./src/api/client";
 import { auth } from "./src/config/firebase";
+import AdminWorkbench from "./src/screens/AdminWorkbench";
 
 const ROLES = ["buyer", "seller", "admin"];
 const STATUSES = ["active", "blocked"];
@@ -125,7 +126,7 @@ function RootApp() {
   }
 
   return (
-    <AdminDashboard
+    <AdminWorkbench
       user={user}
       profile={profile}
       onReloadProfile={fetchProfile}
@@ -206,18 +207,24 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
   const [activeTab, setActiveTab] = useState("deals");
   const [dealsLoading, setDealsLoading] = useState(false);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [pendingUsersLoading, setPendingUsersLoading] = useState(false);
   const [dealsError, setDealsError] = useState("");
   const [usersError, setUsersError] = useState("");
+  const [pendingUsersError, setPendingUsersError] = useState("");
   const [sellerDealsError, setSellerDealsError] = useState("");
   const [pendingDeals, setPendingDeals] = useState([]);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [pendingUserRole, setPendingUserRole] = useState("seller");
   const [users, setUsers] = useState([]);
   const [rejectReasonByDeal, setRejectReasonByDeal] = useState({});
+  const [rejectReasonByUser, setRejectReasonByUser] = useState({});
   const [query, setQuery] = useState("");
   const [showSellersOnly, setShowSellersOnly] = useState(false);
   const [sellerDealsByUser, setSellerDealsByUser] = useState({});
   const [expandedSellerId, setExpandedSellerId] = useState("");
   const [updatingUserId, setUpdatingUserId] = useState("");
   const [workingDealId, setWorkingDealId] = useState("");
+  const [workingUserApprovalId, setWorkingUserApprovalId] = useState("");
   const [loadingSellerDealsId, setLoadingSellerDealsId] = useState("");
 
   const loadDeals = async () => {
@@ -248,10 +255,37 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
     }
   };
 
+  const loadPendingUsers = async (roleFilter = pendingUserRole) => {
+    setPendingUsersLoading(true);
+    setPendingUsersError("");
+    try {
+      const roleParam =
+        roleFilter && roleFilter !== "all"
+          ? `&role=${encodeURIComponent(roleFilter)}`
+          : "";
+      const response = await apiClient.get(
+        `/admin/users/pending?limit=300${roleParam}`,
+      );
+      setPendingUsers(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      const message =
+        error?.response?.data?.error ||
+        error.message ||
+        "Unable to load pending users";
+      setPendingUsersError(message);
+    } finally {
+      setPendingUsersLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadDeals();
     loadUsers();
   }, []);
+
+  useEffect(() => {
+    loadPendingUsers(pendingUserRole);
+  }, [pendingUserRole]);
 
   const onApproveDeal = async (dealId) => {
     setWorkingDealId(dealId);
@@ -279,6 +313,51 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
       setDealsError(message);
     } finally {
       setWorkingDealId("");
+    }
+  };
+
+  const onApproveUserApproval = async (uid) => {
+    setWorkingUserApprovalId(uid);
+    try {
+      await apiClient.post(`/admin/users/${uid}/approve`);
+      setPendingUsers((current) => current.filter((entry) => entry.id !== uid));
+      setRejectReasonByUser((current) => ({ ...current, [uid]: "" }));
+      setUsers((current) =>
+        current.map((entry) =>
+          entry.id === uid
+            ? { ...entry, approvalStatus: "approved", status: "active" }
+            : entry,
+        ),
+      );
+    } catch (error) {
+      const message =
+        error?.response?.data?.error || error.message || "User approval failed";
+      setPendingUsersError(message);
+    } finally {
+      setWorkingUserApprovalId("");
+    }
+  };
+
+  const onRejectUserApproval = async (uid) => {
+    setWorkingUserApprovalId(uid);
+    try {
+      const reason = String(rejectReasonByUser[uid] || "").trim();
+      await apiClient.post(`/admin/users/${uid}/reject`, { reason });
+      setPendingUsers((current) => current.filter((entry) => entry.id !== uid));
+      setRejectReasonByUser((current) => ({ ...current, [uid]: "" }));
+      setUsers((current) =>
+        current.map((entry) =>
+          entry.id === uid
+            ? { ...entry, approvalStatus: "rejected", status: "blocked" }
+            : entry,
+        ),
+      );
+    } catch (error) {
+      const message =
+        error?.response?.data?.error || error.message || "User rejection failed";
+      setPendingUsersError(message);
+    } finally {
+      setWorkingUserApprovalId("");
     }
   };
 
@@ -335,6 +414,7 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
         entry.displayName,
         entry.role,
         entry.status,
+        entry.approvalStatus,
       ]
         .map((value) => String(value || "").toLowerCase())
         .join(" ");
@@ -374,7 +454,7 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
           </View>
           <View style={styles.tabRow}>
             <TabButton
-              label={`Pending Deals (${pendingDeals.length})`}
+              label={`Approvals (${pendingDeals.length + pendingUsers.length})`}
               active={activeTab === "deals"}
               onPress={() => setActiveTab("deals")}
             />
@@ -389,11 +469,18 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
         {activeTab === "deals" ? (
           <Card>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Pending Deal Approval</Text>
-              <TouchableOpacity style={styles.buttonSmall} onPress={loadDeals}>
+              <Text style={styles.sectionTitle}>Approval Queue</Text>
+              <TouchableOpacity
+                style={styles.buttonSmall}
+                onPress={() => {
+                  loadDeals();
+                  loadPendingUsers(pendingUserRole);
+                }}
+              >
                 <Text style={styles.buttonText}>Refresh</Text>
               </TouchableOpacity>
             </View>
+            <Text style={styles.bodyText}>Pending deal approvals</Text>
             {dealsError ? <Text style={styles.errorText}>{dealsError}</Text> : null}
             {dealsLoading ? (
               <ActivityIndicator />
@@ -404,7 +491,13 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
                 <View key={deal.id} style={styles.listItem}>
                   <Text style={styles.itemTitle}>{deal.title || "Untitled deal"}</Text>
                   <Text style={styles.bodyText}>ID: {deal.id}</Text>
-                  <Text style={styles.bodyText}>Seller: {deal.sellerId || "-"}</Text>
+                  <Text style={styles.bodyText}>
+                    Seller:{" "}
+                    {deal.sellerName ||
+                      deal.sellerDisplayName ||
+                      deal.vendorName ||
+                      "-"}
+                  </Text>
                   <Text style={styles.bodyText}>Category: {deal.category || "-"}</Text>
                   <Text style={styles.bodyText}>Status: {deal.status || "-"}</Text>
                   <TextInput
@@ -433,6 +526,91 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
                   </View>
                 </View>
               ))
+            )}
+            <View style={styles.sectionDivider} />
+            <View style={styles.sectionHeader}>
+              <Text style={styles.bodyText}>Pending user approvals</Text>
+              <Text style={styles.bodyText}>
+                {pendingUsers.length} item{pendingUsers.length === 1 ? "" : "s"}
+              </Text>
+            </View>
+            <View style={styles.actionRowWrap}>
+              {[
+                { key: "seller", label: "Sellers" },
+                { key: "buyer", label: "Buyers" },
+                { key: "all", label: "All" },
+              ].map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[
+                    styles.buttonMini,
+                    pendingUserRole === option.key && styles.buttonMiniActive,
+                  ]}
+                  onPress={() => setPendingUserRole(option.key)}
+                >
+                  <Text
+                    style={[
+                      styles.buttonMiniText,
+                      pendingUserRole === option.key &&
+                        styles.buttonMiniTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {pendingUsersError ? (
+              <Text style={styles.errorText}>{pendingUsersError}</Text>
+            ) : null}
+            {pendingUsersLoading ? (
+              <ActivityIndicator />
+            ) : pendingUsers.length === 0 ? (
+              <Text style={styles.bodyText}>No pending users.</Text>
+            ) : (
+              pendingUsers.map((entry) => {
+                const role = String(entry.role || "buyer").toLowerCase();
+                return (
+                  <View key={entry.id} style={styles.listItem}>
+                    <Text style={styles.itemTitle}>
+                      {entry.displayName || entry.email || entry.id}
+                    </Text>
+                    <Text style={styles.bodyText}>UID: {entry.id}</Text>
+                    <Text style={styles.bodyText}>Email: {entry.email || "-"}</Text>
+                    <Text style={styles.bodyText}>Role: {role}</Text>
+                    <Text style={styles.bodyText}>
+                      Approval: {entry.approvalStatus || "pending"}
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Reject reason (optional)"
+                      value={rejectReasonByUser[entry.id] || ""}
+                      onChangeText={(text) =>
+                        setRejectReasonByUser((current) => ({
+                          ...current,
+                          [entry.id]: text,
+                        }))
+                      }
+                    />
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity
+                        style={[styles.button, styles.buttonApprove]}
+                        disabled={workingUserApprovalId === entry.id}
+                        onPress={() => onApproveUserApproval(entry.id)}
+                      >
+                        <Text style={styles.buttonText}>Approve</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.button, styles.buttonReject]}
+                        disabled={workingUserApprovalId === entry.id}
+                        onPress={() => onRejectUserApproval(entry.id)}
+                      >
+                        <Text style={styles.buttonText}>Reject</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
             )}
           </Card>
         ) : (
@@ -498,6 +676,9 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
               filteredUsers.map((entry) => {
                 const role = String(entry.role || "buyer").toLowerCase();
                 const status = String(entry.status || "active").toLowerCase();
+                const approvalStatus = String(
+                  entry.approvalStatus || "approved",
+                ).toLowerCase();
                 return (
                   <View key={entry.id} style={styles.listItem}>
                     <Text style={styles.itemTitle}>
@@ -507,6 +688,9 @@ function AdminDashboard({ user, profile, onReloadProfile, onLogout }) {
                     <Text style={styles.bodyText}>Email: {entry.email || "-"}</Text>
                     <Text style={styles.bodyText}>Role: {role}</Text>
                     <Text style={styles.bodyText}>Status: {status}</Text>
+                    <Text style={styles.bodyText}>
+                      Approval: {approvalStatus}
+                    </Text>
                     {role === "seller" ? (
                       <View style={styles.actionRowWrap}>
                         <TouchableOpacity
@@ -772,6 +956,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    marginVertical: 6,
   },
   statsRow: {
     flexDirection: "row",

@@ -4,6 +4,7 @@ export const getStatusColors = (theme = defaultTheme) => ({
   active: theme.colors.statusActive,
   completed: theme.colors.success,
   expired: theme.colors.statusExpired,
+  rejected: theme.colors.error,
   scheduled: theme.colors.statusScheduled,
   pending: theme.colors.statusScheduled,
   draft: theme.colors.statusDraft,

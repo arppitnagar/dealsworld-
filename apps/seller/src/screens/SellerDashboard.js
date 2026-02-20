@@ -14,8 +14,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { db } from "../config/firebase";
 import {
   collection,
-  query,
-  where,
   onSnapshot,
   doc,
   updateDoc,
@@ -45,12 +43,16 @@ import {
   DealFilterModal,
   AppButton,
 } from "@dealsworld/shared";
+import { useAuth } from "../context/AuthContext";
+import { useUserProfile } from "../hooks/useUserProfile";
 
 const SPACING = 20;
 const cardStyles = getCardStyles(theme);
 const STATUS_FILTERS = [
   { key: "active", label: "Active" },
   { key: "pending", label: "Pending" },
+  { key: "rejected", label: "Rejected" },
+  { key: "expired", label: "Expired" },
 ];
 
 const SORT_FIELDS = DEAL_SORT_FIELDS;
@@ -77,9 +79,16 @@ const FilterChip = ({ label, count, isSelected, onPress, accentColor }) => (
 );
 
 export default function SellerDashboard({ navigation }) {
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
   const [loading, setLoading] = useState(true);
   const [deals, setDeals] = useState([]);
-  const [stats, setStats] = useState({ active: 0, scheduled: 0 });
+  const [stats, setStats] = useState({
+    active: 0,
+    pending: 0,
+    rejected: 0,
+    expired: 0,
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,11 +101,63 @@ export default function SellerDashboard({ navigation }) {
   const [filterField, setFilterField] = useState(null);
   const [filterQuery, setFilterQuery] = useState("");
   const greetingLabel = getGreetingLabel(now);
+  const sellerDisplayName = useMemo(() => {
+    const explicitName =
+      profile?.displayName || profile?.fullName || profile?.name || "";
+    if (String(explicitName).trim()) {
+      return String(explicitName).trim();
+    }
+    if (user?.displayName && String(user.displayName).trim()) {
+      return String(user.displayName).trim();
+    }
+    if (user?.email && String(user.email).includes("@")) {
+      return String(user.email).split("@")[0];
+    }
+    return "Seller";
+  }, [profile, user]);
 
-  // Track selected filter: null (all), 'active', or 'pending'
+  // Track selected filter: null (live), 'active', 'pending', 'rejected', 'expired'
   const [selectedFilter, setSelectedFilter] = useState(null);
 
-  const sellerId = "vendor_001";
+  const sellerOwnership = useMemo(() => {
+    const idValues = [
+      user?.uid,
+      profile?.sellerId,
+      profile?.legacySellerId,
+      profile?.vendorId,
+      profile?.vendorid,
+      profile?.sellerCode,
+      profile?.code,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const nameValues = [
+      profile?.displayName,
+      profile?.fullName,
+      profile?.name,
+      profile?.businessName,
+      sellerDisplayName,
+    ]
+      .map((value) => normalizeText(value))
+      .filter(Boolean);
+    return {
+      ids: new Set(idValues),
+      names: new Set(nameValues),
+    };
+  }, [
+    profile?.businessName,
+    profile?.code,
+    profile?.displayName,
+    profile?.fullName,
+    profile?.legacySellerId,
+    profile?.name,
+    profile?.sellerCode,
+    profile?.sellerId,
+    profile?.vendorId,
+    profile?.vendorid,
+    sellerDisplayName,
+    user?.uid,
+  ]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -106,25 +167,24 @@ export default function SellerDashboard({ navigation }) {
   }, []);
 
   useEffect(() => {
+    setLoading(true);
     const dealsRef = collection(db, "deals");
-    const q = query(
-      dealsRef,
-      where("sellerId", "==", sellerId),
-    );
-
     const unsubscribe = onSnapshot(
-      q,
+      dealsRef,
       (snapshot) => {
         const dealsList = [];
         let activeCount = 0;
-        let scheduledCount = 0;
+        let pendingCount = 0;
+        let rejectedCount = 0;
+        let expiredCount = 0;
         const nowMs = Date.now();
 
         snapshot.forEach((doc) => {
           const data = doc.data();
-          const expiryDate = toDate(data.expiresAt);
-          const isExpired = expiryDate && expiryDate.getTime() <= nowMs;
-          const status = getDealLifecycleStatus(data);
+          if (!isDealOwnedBySeller(data, sellerOwnership)) {
+            return;
+          }
+          const displayStatus = getDealDisplayStatus(data, nowMs);
 
           const currentJoins = data.currentJoins ?? data.joinedUsers ?? 0;
           const minGroupSize = data.minGroupSize ?? 1;
@@ -150,24 +210,34 @@ export default function SellerDashboard({ navigation }) {
               : data.thresholdReachedAt,
           });
 
-          if (!isExpired && status !== "completed") {
-            if (status === "active") {
-              activeCount++;
-            } else {
-              scheduledCount++;
-            }
+          if (displayStatus === "active") {
+            activeCount++;
+          } else if (displayStatus === "pending") {
+            pendingCount++;
+          } else if (displayStatus === "rejected") {
+            rejectedCount++;
+          } else if (displayStatus === "expired") {
+            expiredCount++;
           }
         });
 
         setStats({
           active: activeCount,
-          scheduled: scheduledCount,
+          pending: pendingCount,
+          rejected: rejectedCount,
+          expired: expiredCount,
         });
         dealsList.sort((a, b) => {
           const aDate = toDate(a.createdAt);
           const bDate = toDate(b.createdAt);
-          const aMs = aDate instanceof Date && !Number.isNaN(aDate.getTime()) ? aDate.getTime() : 0;
-          const bMs = bDate instanceof Date && !Number.isNaN(bDate.getTime()) ? bDate.getTime() : 0;
+          const aMs =
+            aDate instanceof Date && !Number.isNaN(aDate.getTime())
+              ? aDate.getTime()
+              : 0;
+          const bMs =
+            bDate instanceof Date && !Number.isNaN(bDate.getTime())
+              ? bDate.getTime()
+              : 0;
           return bMs - aMs;
         });
         setDeals(dealsList);
@@ -180,7 +250,7 @@ export default function SellerDashboard({ navigation }) {
     );
 
     return () => unsubscribe();
-  }, [sellerId]);
+  }, [sellerOwnership]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -192,24 +262,21 @@ export default function SellerDashboard({ navigation }) {
   // Filter Logic
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const queryTokens = normalizedQuery ? normalizedQuery.split(/\s+/) : [];
-  const canAddFilterRule = Boolean(filterField && filterQuery.trim().length > 0);
+  const canAddFilterRule = Boolean(
+    filterField && filterQuery.trim().length > 0,
+  );
   const hasFieldFilter = filterRules.length > 0;
 
   const filteredDeals = deals.filter((deal) => {
-    const status = getDealLifecycleStatus(deal);
-    const expiryDate = toDate(deal.expiresAt);
-    const isExpired = expiryDate && expiryDate.getTime() <= now;
-    const isCompleted = status === "completed";
-    if (isExpired || isCompleted) return false;
+    const displayStatus = getDealDisplayStatus(deal, now);
+    if (displayStatus === "completed") return false;
 
     if (selectedFilter) {
-      if (selectedFilter === "pending") {
-        if (status === "active" || status === "completed") {
-          return false;
-        }
-      } else if (status !== selectedFilter) {
+      if (displayStatus !== selectedFilter) {
         return false;
       }
+    } else if (!(displayStatus === "active" || displayStatus === "pending")) {
+      return false;
     }
 
     if (!queryTokens.length) return true;
@@ -224,16 +291,16 @@ export default function SellerDashboard({ navigation }) {
   const fieldFilteredDeals = useMemo(() => {
     if (!filteredDeals?.length || !filterRules.length) return filteredDeals;
     return applyDealFieldFilters(filteredDeals, filterRules, {
-      getStatusValue: getDealLifecycleStatus,
+      getStatusValue: (deal) => getDealDisplayStatus(deal, now),
     });
-  }, [filteredDeals, filterRules]);
+  }, [filteredDeals, filterRules, now]);
 
   const sortedDeals = useMemo(() => {
     if (!fieldFilteredDeals?.length || !sortField) return fieldFilteredDeals;
     return sortDealsByField(fieldFilteredDeals, sortField, sortOrder, {
-      getStatusValue: getDealLifecycleStatus,
+      getStatusValue: (deal) => getDealDisplayStatus(deal, now),
     });
-  }, [fieldFilteredDeals, sortField, sortOrder]);
+  }, [fieldFilteredDeals, sortField, sortOrder, now]);
 
   const handleFilterPress = (status) => {
     setSelectedFilter((prev) => (prev === status ? null : status));
@@ -308,9 +375,7 @@ export default function SellerDashboard({ navigation }) {
   );
 
   if (loading) {
-    return (
-      <DealBuddyLoadingScreen label="Loading deals..." />
-    );
+    return <DealBuddyLoadingScreen label="Loading deals..." />;
   }
 
   return (
@@ -336,7 +401,7 @@ export default function SellerDashboard({ navigation }) {
               <View style={styles.headerRow}>
                 <View>
                   <Text style={styles.greetingLabel}>{greetingLabel}</Text>
-                  <Text style={styles.greetingName}>Seller</Text>
+                  <Text style={styles.greetingName}>{sellerDisplayName}</Text>
                 </View>
                 {__DEV__ && (
                   <TouchableOpacity
@@ -464,12 +529,15 @@ export default function SellerDashboard({ navigation }) {
             contentContainerStyle={{ paddingLeft: 20, paddingRight: 12 }}
           >
             {STATUS_FILTERS.map((filter) => {
-              const count =
-                filter.key === "active" ? stats.active : stats.scheduled;
+              const count = stats[filter.key] ?? 0;
               const accentColor =
                 filter.key === "active"
                   ? theme.colors.warningBright
-                  : theme.colors.purple;
+                  : filter.key === "pending"
+                    ? theme.colors.purple
+                    : filter.key === "rejected"
+                      ? theme.colors.error
+                      : theme.colors.statusExpired;
               return (
                 <FilterChip
                   key={filter.key}
@@ -520,7 +588,7 @@ export default function SellerDashboard({ navigation }) {
           ) : (
             sortedDeals.map((deal) => {
               const joins = deal.joinedUsers || 0;
-              const lifecycleStatus = getDealLifecycleStatus(deal);
+              const lifecycleStatus = getDealDisplayStatus(deal, now);
               const accentColor = getStatusColor(lifecycleStatus);
               const expiryDate = toDate(deal.expiresAt);
               const countdown =
@@ -535,7 +603,12 @@ export default function SellerDashboard({ navigation }) {
                 <SharedDealCard
                   key={deal.id}
                   title={deal.title}
-                  category={deal.category}
+                  category={[
+                    deal.category,
+                    sellerDisplayName ? `Seller: ${sellerDisplayName}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" • ")}
                   image={deal.image}
                   joins={joins}
                   accentColor={accentColor}
@@ -547,7 +620,9 @@ export default function SellerDashboard({ navigation }) {
                   countdown={countdown}
                   expiryLabel={expiryLabel}
                   actionLabel="View Deal"
-                  onActionPress={() => navigation.navigate("DealDetails", { deal })}
+                  onActionPress={() =>
+                    navigation.navigate("DealDetails", { deal })
+                  }
                   onPress={() => navigation.navigate("DealDetails", { deal })}
                 />
               );
@@ -699,6 +774,38 @@ function buildSearchText(deal) {
     .toLowerCase();
 }
 
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isDealOwnedBySeller(deal, ownership) {
+  if (!deal || !ownership) return false;
+  const idSet = ownership.ids || new Set();
+  const nameSet = ownership.names || new Set();
+  if (!idSet.size && !nameSet.size) return false;
+
+  const idFields = [
+    deal?.sellerId,
+    deal?.vendorId,
+    deal?.vendorid,
+    deal?.legacySellerId,
+    deal?.sellerCode,
+    deal?.code,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  if (idFields.some((value) => idSet.has(value))) {
+    return true;
+  }
+
+  const nameFields = [deal?.sellerName, deal?.sellerDisplayName, deal?.vendorName]
+    .map((value) => normalizeText(value))
+    .filter(Boolean);
+
+  return nameFields.some((value) => nameSet.has(value));
+}
+
 function getGreetingLabel(nowMs) {
   const hour = new Date(nowMs).getHours();
   if (hour < 12) return "Good morning,";
@@ -707,18 +814,35 @@ function getGreetingLabel(nowMs) {
 }
 
 function getDealLifecycleStatus(deal) {
-  const approvalStatus = String(deal?.approvalStatus || "").toLowerCase();
+  const approvalStatus = String(
+    deal?.approvalStatus || deal?.approval?.status || "",
+  ).toLowerCase();
   const approved = deal?.approved === true;
+  const approvedAt = deal?.approval?.approvedAt || deal?.approvedAt;
   const status = String(deal?.status || "").toLowerCase();
+  const isAdminPublished =
+    approvalStatus === "approved" || approved || Boolean(approvedAt);
 
   if (status === "completed") return "completed";
   if (approvalStatus === "rejected" || status === "rejected") {
     return "rejected";
   }
-  if (approvalStatus === "pending") return "pending";
-  if (approvalStatus === "approved") return "active";
-  if (approved || status === "active") return "active";
+  if (isAdminPublished) return "active";
   return "pending";
+}
+
+function getDealDisplayStatus(deal, nowMs = Date.now()) {
+  const lifecycleStatus = getDealLifecycleStatus(deal);
+  if (lifecycleStatus === "completed" || lifecycleStatus === "rejected") {
+    return lifecycleStatus;
+  }
+  const expiryDate = toDate(deal?.expiresAt);
+  const isExpired =
+    expiryDate instanceof Date &&
+    !Number.isNaN(expiryDate.getTime()) &&
+    expiryDate.getTime() <= nowMs;
+  if (isExpired) return "expired";
+  return lifecycleStatus;
 }
 
 const styles = StyleSheet.create({

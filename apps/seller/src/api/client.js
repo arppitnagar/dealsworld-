@@ -1,8 +1,20 @@
 import axios from "axios";
+import { Platform } from "react-native";
 import { auth } from "../config/firebase";
 
-// Replace with your laptop's actual IP address (e.g., 192.168.1.5)
-const BASE_URL = "http://192.168.1.8:5000/api";
+const ENV_BASE_URL =
+  typeof process !== "undefined" &&
+  process &&
+  process.env &&
+  process.env.EXPO_PUBLIC_API_BASE_URL
+    ? process.env.EXPO_PUBLIC_API_BASE_URL
+    : "";
+
+const BASE_URL =
+  ENV_BASE_URL ||
+  (Platform.OS === "web"
+    ? "http://127.0.0.1:5000/api"
+    : "http://192.168.1.9:5000/api");
 
 const apiClient = axios.create({
   baseURL: BASE_URL,

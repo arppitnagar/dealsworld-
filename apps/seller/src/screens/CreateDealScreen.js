@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -31,6 +31,9 @@ import {
   DealFormFields,
   TopPageHeader,
 } from "@dealsworld/shared";
+import { useAddresses } from "../hooks/useAddresses";
+import { useAuth } from "../context/AuthContext";
+import { useUserProfile } from "../hooks/useUserProfile";
 const formStyles = getFormStyles(theme);
 /* ---------- CATEGORY OPTIONS ---------- */
 const CATEGORIES = [
@@ -74,30 +77,34 @@ const dealSchema = Yup.object().shape({
   }),
   originalPrice: Yup.number()
     .transform((value, originalValue) =>
-      originalValue === "" ? undefined : value,
+      originalValue === "" ||
+      originalValue === null ||
+      originalValue === undefined
+        ? undefined
+        : value,
     )
     .typeError("Original price must be a number")
-    .positive("Price must be greater than zero")
-    .nullable(), // Allows the field to be empty
+    .required("Original price is required")
+    .moreThan(0, "Original price must be greater than zero"),
   discountPrice: Yup.number()
     .transform((value, originalValue) =>
-      originalValue === "" ? undefined : value,
+      originalValue === "" ||
+      originalValue === null ||
+      originalValue === undefined
+        ? undefined
+        : value,
     )
     .typeError("Deal price must be a number")
     .required("Deal price is required")
-    .positive("Price must be greater than zero")
+    .moreThan(0, "Deal price must be greater than zero")
     .test(
       "is-lower",
       "Deal price must be lower than original price",
       function (value) {
         const { originalPrice } = this.parent;
-        // If originalPrice is not provided (null/undefined), the test passes.
-        // If it IS provided, value must be less than originalPrice.
-        return (
-          originalPrice === undefined ||
-          originalPrice === null ||
-          value < originalPrice
-        );
+        if (!Number.isFinite(Number(value))) return true;
+        if (!Number.isFinite(Number(originalPrice))) return true;
+        return Number(value) < Number(originalPrice);
       },
     ),
   minGroupSize: Yup.number()
@@ -128,6 +135,8 @@ const dealSchema = Yup.object().shape({
  * Additionally, there are styles defined for the component
  */
 export default function CreateDealScreen({ route, navigation }) {
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
   // 1. Detect if we are in Edit/View mode
   const deal = route.params?.deal;
   const isCompleted = deal?.status === "completed";
@@ -135,6 +144,18 @@ export default function CreateDealScreen({ route, navigation }) {
   const isEditMode = !!deal && !isDuplicateMode;
   const isReadOnly = isCompleted && !isDuplicateMode;
   const isExpiryLocked = isReadOnly;
+  const sellerDisplayName = useMemo(() => {
+    const explicitName =
+      profile?.displayName || profile?.fullName || profile?.name || "";
+    if (String(explicitName).trim()) return String(explicitName).trim();
+    if (user?.displayName && String(user.displayName).trim()) {
+      return String(user.displayName).trim();
+    }
+    if (user?.email && String(user.email).includes("@")) {
+      return String(user.email).split("@")[0];
+    }
+    return String(deal?.sellerName || "").trim();
+  }, [deal?.sellerName, profile, user]);
 
   // 2. Initialize state with deal data if it exists
   const initialCategory = deal?.category || "";
@@ -156,7 +177,7 @@ export default function CreateDealScreen({ route, navigation }) {
         ? new Date(deal.expiresAt)
         : null,
     location: deal?.location || "",
-    sellerId: deal?.sellerId || "vendor_001",
+    sellerId: deal?.sellerId || user?.uid || "",
   });
 
   const [image, setImage] = useState(null);
@@ -166,6 +187,131 @@ export default function CreateDealScreen({ route, navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [deliveryModalVisible, setDeliveryModalVisible] = useState(false);
+  const [storeAddressModalVisible, setStoreAddressModalVisible] =
+    useState(false);
+  const [selectedStoreAddressId, setSelectedStoreAddressId] = useState(null);
+  const { addresses, loading: addressesLoading } = useAddresses();
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    setForm((prev) => {
+      const current = String(prev?.sellerId || "").trim();
+      if (current) return prev;
+      return { ...prev, sellerId: user.uid };
+    });
+  }, [user?.uid]);
+
+  const clearFieldErrors = (...fields) => {
+    if (!fields?.length) return;
+    setErrors((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      fields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(next, field)) {
+          delete next[field];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  };
+
+  const setFieldValue = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    clearFieldErrors(key);
+
+    if (key === "category" && value !== "Other") {
+      clearFieldErrors("categoryOther");
+    }
+    if (key === "deliveryMode" && value !== "Paid Home Delivery") {
+      clearFieldErrors("deliveryCharge");
+    }
+  };
+
+  const defaultStoreAddress = useMemo(
+    () =>
+      Array.isArray(addresses)
+        ? addresses.find((item) => item?.isDefault) || null
+        : null,
+    [addresses],
+  );
+
+  const selectedStoreAddress = useMemo(
+    () =>
+      Array.isArray(addresses)
+        ? addresses.find((item) => item.id === selectedStoreAddressId) || null
+        : null,
+    [addresses, selectedStoreAddressId],
+  );
+
+  const effectiveStoreAddress =
+    selectedStoreAddress || defaultStoreAddress || null;
+
+  const formatStoreAddress = (address) => {
+    if (!address) return "";
+    const fullName =
+      address.name || address.fullName || address.recipientName || "";
+    const parts = [
+      fullName,
+      address.line1,
+      address.line2,
+      address.city,
+      address.state,
+      address.pincode,
+      address.country,
+      address.phone || address.mobile
+        ? `Phone: ${address.phone || address.mobile}`
+        : "",
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    return parts.join(", ");
+  };
+
+  const normalizeStoreAddressForDeal = (address) => {
+    if (!address || typeof address !== "object") return null;
+    const normalized = {
+      label: String(address.label || "").trim(),
+      name: String(address.name || "").trim(),
+      phone: String(address.phone || "").trim(),
+      line1: String(address.line1 || "").trim(),
+      line2: String(address.line2 || "").trim(),
+      city: String(address.city || "").trim(),
+      state: String(address.state || "").trim(),
+      pincode: String(address.pincode || "").trim(),
+      country: String(address.country || "").trim(),
+    };
+    if (
+      !normalized.line1 ||
+      !normalized.city ||
+      !normalized.state ||
+      !normalized.pincode
+    ) {
+      return null;
+    }
+    return normalized;
+  };
+
+  useEffect(() => {
+    if (form.deliveryMode !== "Pick from Store") {
+      setStoreAddressModalVisible(false);
+      return;
+    }
+    if (!Array.isArray(addresses) || addresses.length === 0) {
+      setSelectedStoreAddressId(null);
+      return;
+    }
+    setSelectedStoreAddressId((prev) => {
+      if (prev && addresses.some((item) => item.id === prev)) return prev;
+      return defaultStoreAddress?.id || null;
+    });
+  }, [form.deliveryMode, addresses, defaultStoreAddress?.id]);
+
+  useEffect(() => {
+    if (form.deliveryMode === "Pick from Store" && effectiveStoreAddress) {
+      clearFieldErrors("deliveryMode");
+    }
+  }, [form.deliveryMode, effectiveStoreAddress]);
 
   /* ---------- PRICE HELPERS ---------- */
 
@@ -203,6 +349,7 @@ export default function CreateDealScreen({ route, navigation }) {
     const deal = Number(parseNumber(updated.discountPrice));
 
     setForm(updated);
+    clearFieldErrors(field, "discountPrice", "originalPrice");
   };
 
   /* ---------- MIN BUYERS ---------- */
@@ -218,6 +365,7 @@ export default function CreateDealScreen({ route, navigation }) {
   const handleMinBuyersChange = (value) => {
     const clean = value.replace(/[^0-9]/g, "");
     setForm((p) => ({ ...p, minGroupSize: clean }));
+    clearFieldErrors("minGroupSize");
   };
 
   /* ---------- IMAGE ---------- */
@@ -249,8 +397,10 @@ export default function CreateDealScreen({ route, navigation }) {
         ...form,
         originalPrice: form.originalPrice
           ? Number(parseNumber(form.originalPrice))
-          : null,
-        discountPrice: Number(parseNumber(form.discountPrice)),
+          : undefined,
+        discountPrice: form.discountPrice
+          ? Number(parseNumber(form.discountPrice))
+          : undefined,
         deliveryCharge: form.deliveryCharge
           ? Number(parseNumber(form.deliveryCharge))
           : 0,
@@ -258,13 +408,65 @@ export default function CreateDealScreen({ route, navigation }) {
       };
 
       await dealSchema.validate(cleanData, { abortEarly: false });
+      if (cleanData.deliveryMode === "Pick from Store") {
+        if (addressesLoading) {
+          Alert.alert(
+            "Please wait",
+            "Loading seller addresses. Try again in a moment.",
+          );
+          return false;
+        }
+        const hasAnyAddress = Array.isArray(addresses) && addresses.length > 0;
+        if (!hasAnyAddress) {
+          setErrors({
+            deliveryMode:
+              "Add at least one seller address before selecting Pick from Store.",
+          });
+          Alert.alert(
+            "Store address required",
+            "To publish a pickup deal, add at least one seller address first.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Add Address",
+                onPress: () => navigation.navigate("AddressForm"),
+              },
+            ],
+          );
+          return false;
+        }
+        if (!effectiveStoreAddress) {
+          setErrors({
+            deliveryMode:
+              "Select a store address before publishing this pickup deal.",
+          });
+          Alert.alert(
+            "Select store address",
+            "No default address is selected. Please choose one from your saved addresses.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Select Address",
+                onPress: () => setStoreAddressModalVisible(true),
+              },
+            ],
+          );
+          return false;
+        }
+      }
       setErrors({});
       return true;
     } catch (err) {
       const newErrors = {};
-      err.inner.forEach((error) => {
-        newErrors[error.path] = error.message;
-      });
+      if (Array.isArray(err?.inner) && err.inner.length > 0) {
+        err.inner.forEach((error) => {
+          if (error?.path) {
+            newErrors[error.path] = error.message;
+          }
+        });
+      } else if (err?.path) {
+        newErrors[err.path] = err.message;
+      }
       setErrors(newErrors);
       return false;
     }
@@ -288,8 +490,25 @@ export default function CreateDealScreen({ route, navigation }) {
         form.category === "Other"
           ? form.categoryOther?.trim() || "Other"
           : form.category;
+      const preferredStoreAddress =
+        form.deliveryMode === "Pick from Store" ? effectiveStoreAddress : null;
+      const storeAddressObject = normalizeStoreAddressForDeal(
+        preferredStoreAddress,
+      );
+      const existingStoreAddress =
+        typeof deal?.storeAddress === "string" && deal.storeAddress.trim()
+          ? deal.storeAddress.trim()
+          : typeof deal?.pickupAddress === "string" && deal.pickupAddress.trim()
+            ? deal.pickupAddress.trim()
+            : "";
+      const storeAddressText = preferredStoreAddress
+        ? formatStoreAddress(preferredStoreAddress)
+        : existingStoreAddress;
       const dealData = {
         ...form,
+        sellerId: form.sellerId || user?.uid || deal?.sellerId || "",
+        sellerName:
+          sellerDisplayName || deal?.sellerName || deal?.vendorName || null,
         category: resolvedCategory,
         originalPrice: Number(parseNumber(form.originalPrice)) || 0,
         discountPrice: Number(parseNumber(form.discountPrice)) || 0,
@@ -302,6 +521,12 @@ export default function CreateDealScreen({ route, navigation }) {
           form.deliveryMode === "Paid Home Delivery"
             ? Number(parseNumber(form.deliveryCharge)) || 0
             : 0,
+        storeAddress:
+          form.deliveryMode === "Pick from Store"
+            ? storeAddressObject || storeAddressText
+            : null,
+        pickupAddress:
+          form.deliveryMode === "Pick from Store" ? storeAddressText : null,
         updatedAt: serverTimestamp(),
       };
 
@@ -367,7 +592,11 @@ export default function CreateDealScreen({ route, navigation }) {
           <View style={styles.bannerContent}>
             {!isDuplicateMode && (
               <View style={styles.bannerHeader}>
-            <Ionicons name="lock-closed" size={16} color={theme.colors.amberText} />
+                <Ionicons
+                  name="lock-closed"
+                  size={16}
+                  color={theme.colors.amberText}
+                />
                 <Text style={styles.readOnlyBannerText}>
                   This deal has been completed. Editing is disabled; you may
                   create a duplicate deal.
@@ -472,61 +701,108 @@ export default function CreateDealScreen({ route, navigation }) {
       )}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.formCard}>
-        <DealFormFields
-          form={form}
-          errors={errors}
-          image={image}
-          isReadOnly={isReadOnly}
-          isExpiryLocked={isExpiryLocked}
-          onPickImage={pickImage}
-          onFieldChange={(key, value) =>
-            setForm((p) => ({ ...p, [key]: value }))
-          }
-          onPriceChange={handlePriceChange}
-          onMinBuyersChange={handleMinBuyersChange}
-          onCategoryPress={() => setCategoryModalVisible(true)}
-          onDeliveryModePress={() => setDeliveryModalVisible(true)}
-          onExpiresAtPress={() => setShowDatePicker(true)}
-          onBlurPrice={(field) =>
-            setForm((p) => ({
-              ...p,
-              [field]: formatINRWithCommas(p[field]),
-            }))
-          }
-          onBlurDeliveryCharge={() =>
-            setForm((p) => ({
-              ...p,
-              deliveryCharge: formatINRWithCommas(p.deliveryCharge),
-            }))
-          }
-          onDeliveryChargeChange={(value) =>
-            setForm((p) => ({
-              ...p,
-              deliveryCharge: value.replace(/[^0-9.]/g, ""),
-            }))
-          }
-        />
-
-        {showDatePicker && !isExpiryLocked && (
-          <DateTimePicker
-            value={form.expiresAt instanceof Date ? form.expiresAt : new Date()}
-            mode="date"
-            display="default"
-            onChange={(e, d) => {
-              setShowDatePicker(false);
-              if (d) setForm({ ...form, expiresAt: d });
+          <DealFormFields
+            form={form}
+            errors={errors}
+            image={image}
+            isReadOnly={isReadOnly}
+            isExpiryLocked={isExpiryLocked}
+            onPickImage={pickImage}
+            onFieldChange={setFieldValue}
+            onPriceChange={handlePriceChange}
+            onMinBuyersChange={handleMinBuyersChange}
+            onCategoryPress={() => setCategoryModalVisible(true)}
+            onDeliveryModePress={() => setDeliveryModalVisible(true)}
+            onExpiresAtPress={() => setShowDatePicker(true)}
+            onBlurPrice={(field) =>
+              setForm((p) => ({
+                ...p,
+                [field]: formatINRWithCommas(p[field]),
+              }))
+            }
+            onBlurDeliveryCharge={() =>
+              setForm((p) => ({
+                ...p,
+                deliveryCharge: formatINRWithCommas(p.deliveryCharge),
+              }))
+            }
+            onDeliveryChargeChange={(value) => {
+              setForm((p) => ({
+                ...p,
+                deliveryCharge: value.replace(/[^0-9.]/g, ""),
+              }));
+              clearFieldErrors("deliveryCharge");
             }}
           />
-        )}
 
-        {/* SUBMIT */}
-        {/* Only show the button if NOT in Read Only mode */}
+          {form.deliveryMode === "Pick from Store" ? (
+            <View style={styles.storeAddressPanel}>
+              <View style={styles.storeAddressPanelHeader}>
+                <Ionicons
+                  name="location-outline"
+                  size={16}
+                  color={theme.colors.primary}
+                />
+                <Text style={styles.storeAddressPanelTitle}>Store Address</Text>
+              </View>
+              {effectiveStoreAddress ? (
+                <Text style={styles.storeAddressText}>
+                  {formatStoreAddress(effectiveStoreAddress)}
+                </Text>
+              ) : (
+                <Text style={styles.storeAddressHint}>
+                  No default store address selected. Choose one from your saved
+                  addresses.
+                </Text>
+              )}
+              <View style={styles.storeAddressPanelActions}>
+                <TouchableOpacity
+                  style={styles.storeAddressActionGhost}
+                  onPress={() => navigation.navigate("AddressBook")}
+                >
+                  <Text style={styles.storeAddressActionGhostText}>
+                    Manage Addresses
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.storeAddressActionPrimary}
+                  onPress={() => setStoreAddressModalVisible(true)}
+                >
+                  <Text style={styles.storeAddressActionPrimaryText}>
+                    {effectiveStoreAddress
+                      ? "Change Address"
+                      : "Select Address"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {showDatePicker && !isExpiryLocked && (
+            <DateTimePicker
+              value={
+                form.expiresAt instanceof Date ? form.expiresAt : new Date()
+              }
+              mode="date"
+              display="default"
+              onChange={(e, d) => {
+                setShowDatePicker(false);
+                if (d) {
+                  setForm((prev) => ({ ...prev, expiresAt: d }));
+                  clearFieldErrors("expiresAt");
+                }
+              }}
+            />
+          )}
+
+          {/* SUBMIT */}
+          {/* Only show the button if NOT in Read Only mode */}
           {!isReadOnly && (
             <AppButton
               title="Submit for Approval"
               onPress={handleSubmit}
               loading={loading}
-              disabled={loading || !!errors.discountPrice}
+              disabled={loading}
               leftIcon={<Save color={theme.colors.onPrimary} size={18} />}
               style={{ marginTop: 30 }}
             />
@@ -548,6 +824,10 @@ export default function CreateDealScreen({ route, navigation }) {
                     category: c.label,
                     categoryOther: c.label === "Other" ? p.categoryOther : "",
                   }));
+                  clearFieldErrors("category");
+                  if (c.label !== "Other") {
+                    clearFieldErrors("categoryOther");
+                  }
                   setCategoryModalVisible(false);
                 }}
               >
@@ -574,12 +854,139 @@ export default function CreateDealScreen({ route, navigation }) {
                     deliveryCharge:
                       mode === "Paid Home Delivery" ? form.deliveryCharge : "",
                   });
+                  clearFieldErrors("deliveryMode");
+                  if (mode !== "Paid Home Delivery") {
+                    clearFieldErrors("deliveryCharge");
+                  }
                   setDeliveryModalVisible(false);
                 }}
               >
                 <Text>{mode}</Text>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* STORE ADDRESS MODAL */}
+      <Modal
+        transparent
+        visible={storeAddressModalVisible}
+        animationType="slide"
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.card, styles.storeAddressModalCard]}>
+            <View style={styles.storeAddressModalHeader}>
+              <Text style={styles.storeAddressModalTitle}>
+                Select Store Address
+              </Text>
+              <TouchableOpacity
+                onPress={() => setStoreAddressModalVisible(false)}
+                style={styles.storeAddressModalClose}
+              >
+                <Ionicons name="close" size={18} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {addressesLoading ? (
+              <Text style={styles.storeAddressLoading}>
+                Loading addresses...
+              </Text>
+            ) : addresses?.length ? (
+              <ScrollView
+                style={styles.storeAddressList}
+                contentContainerStyle={styles.storeAddressListContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {addresses.map((item) => {
+                  const isSelected = item.id === selectedStoreAddressId;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.storeAddressOption,
+                        isSelected && styles.storeAddressOptionSelected,
+                      ]}
+                      onPress={() => setSelectedStoreAddressId(item.id)}
+                    >
+                      <View style={styles.storeAddressOptionHeader}>
+                        <Text style={styles.storeAddressOptionLabel}>
+                          {item.label || "Address"}
+                        </Text>
+                        {item.isDefault ? (
+                          <View style={styles.storeAddressDefaultTag}>
+                            <Ionicons
+                              name="star"
+                              size={12}
+                              color={theme.colors.warningBright}
+                            />
+                            <Text style={styles.storeAddressDefaultText}>
+                              Default
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      {item.name ? (
+                        <Text style={styles.storeAddressOptionLine}>
+                          {item.name}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.storeAddressOptionLine}>
+                        {item.line1 || ""}
+                      </Text>
+                      {item.line2 ? (
+                        <Text style={styles.storeAddressOptionLine}>
+                          {item.line2}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.storeAddressOptionLine}>
+                        {[item.city, item.state, item.pincode]
+                          .map((entry) => String(entry || "").trim())
+                          .filter(Boolean)
+                          .join(", ")}
+                      </Text>
+                      {item.phone ? (
+                        <Text style={styles.storeAddressOptionLine}>
+                          Phone: {item.phone}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View style={styles.storeAddressEmpty}>
+                <Text style={styles.storeAddressHint}>
+                  No saved addresses found.
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.storeAddressModalActions}>
+              <TouchableOpacity
+                style={styles.storeAddressActionGhost}
+                onPress={() => {
+                  setStoreAddressModalVisible(false);
+                  navigation.navigate("AddressForm");
+                }}
+              >
+                <Text style={styles.storeAddressActionGhostText}>
+                  Add Address
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.storeAddressActionPrimary,
+                  !selectedStoreAddressId && styles.storeAddressActionDisabled,
+                ]}
+                disabled={!selectedStoreAddressId}
+                onPress={() => setStoreAddressModalVisible(false)}
+              >
+                <Text style={styles.storeAddressActionPrimaryText}>
+                  Use Selected
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -600,7 +1007,9 @@ export default function CreateDealScreen({ route, navigation }) {
                   navigation.goBack();
                 }}
               />
-              <Text style={styles.successText}>Deal submitted for approval!</Text>
+              <Text style={styles.successText}>
+                Deal submitted for approval!
+              </Text>
             </View>
           </View>
         </Modal>
@@ -647,6 +1056,71 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 3,
   },
+  storeAddressPanel: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.infoBorder,
+    backgroundColor: theme.colors.infoSoft,
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  storeAddressPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  storeAddressPanelTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+  storeAddressText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  storeAddressHint: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  storeAddressPanelActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2,
+  },
+  storeAddressActionPrimary: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.primary,
+  },
+  storeAddressActionPrimaryText: {
+    color: theme.colors.onPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  storeAddressActionGhost: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.surface,
+  },
+  storeAddressActionGhostText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  storeAddressActionDisabled: {
+    opacity: 0.55,
+  },
   label: formStyles.label,
   input: {
     borderWidth: 1,
@@ -676,6 +1150,93 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 20,
     width: "80%",
+  },
+  storeAddressModalCard: {
+    width: "90%",
+    maxHeight: "82%",
+    padding: 18,
+    gap: 10,
+  },
+  storeAddressModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  storeAddressModalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+  storeAddressModalClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  storeAddressLoading: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+  },
+  storeAddressList: {
+    maxHeight: 360,
+  },
+  storeAddressListContent: {
+    gap: 10,
+    paddingBottom: 6,
+  },
+  storeAddressOption: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: theme.colors.surface,
+    gap: 3,
+  },
+  storeAddressOptionSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.infoSoft,
+  },
+  storeAddressOptionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  storeAddressOptionLabel: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  storeAddressDefaultTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  storeAddressDefaultText: {
+    color: theme.colors.textMuted,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  storeAddressOptionLine: {
+    color: theme.colors.text,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  storeAddressEmpty: {
+    paddingVertical: 10,
+  },
+  storeAddressModalActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
   },
   categoryRow: {
     flexDirection: "row",
@@ -810,6 +1371,3 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
-
-
-

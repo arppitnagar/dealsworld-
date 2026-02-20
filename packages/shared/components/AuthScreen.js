@@ -302,6 +302,7 @@ export default function AuthScreen({
               }
               onPress={isSignup ? handleSignup : handleLogin}
               loading={loading}
+              compact
               style={styles.submit}
               textStyle={styles.submitText}
             />
@@ -498,14 +499,7 @@ const createStyles = (theme) =>
     },
     submit: {
       marginTop: 12,
-      borderRadius: 999,
-      paddingVertical: 14,
-      backgroundColor: theme.colors.primary,
-      borderColor: theme.colors.primary,
-      shadowColor: theme.colors.primary,
-      shadowOpacity: 0.25,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 6 },
+      borderRadius: 20,
     },
     submitText: {
       fontWeight: "800",

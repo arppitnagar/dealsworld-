@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "node server.js",
     "seed:admin": "node scripts/seedAdmin.js",
+    "create:admin": "node scripts/createAdminUser.js",
     "migrate:sellerid": "node scripts/migrateSellerId.js",
+    "backfill:sellername": "node scripts/backfillSellerName.js",
+    "reconcile:joins": "node scripts/reconcileJoinCounts.js",
     "cleanup:fields": "node scripts/cleanupFields.js",
     "admin:web": "echo skip"
   },
@@ -14,6 +17,8 @@
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
-    "firebase-admin": "^13.6.0"
+    "firebase-admin": "^13.6.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   }
 }

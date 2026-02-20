@@ -149,6 +149,7 @@ export default function DealFormFields({
               editable={!isReadOnly}
               onChangeText={(value) => onPriceChange?.("originalPrice", value)}
               onBlur={() => onBlurPrice?.("originalPrice")}
+              error={errors.originalPrice}
             />
 
             <AppInput

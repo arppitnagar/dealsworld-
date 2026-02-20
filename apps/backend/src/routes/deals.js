@@ -13,6 +13,7 @@ const {
   normalizeApprovalStatus,
   isExpiredDeal,
   sanitizeDealForResponse,
+  attachSellerNamesToDeals,
   requireAuth,
   requireRole,
   optionalAuth,
@@ -20,6 +21,7 @@ const {
   makeJoinDocId,
   validateAddress,
   isDeliveryMode,
+  validateDealPublishability,
   extractDealPayload,
   applyDealUpdate,
   toMillis,
@@ -50,22 +52,27 @@ router.get("/api/deals", async (req, res) => {
       .sort((a, b) => getCreatedMs(b) - getCreatedMs(a))
       .slice(0, limit);
 
-    res.json(deals);
+    const hydratedDeals = await attachSellerNamesToDeals(deals);
+    res.json(hydratedDeals);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get("/api/deals/seller/:sellerId", async (req, res) => {
+router.get("/api/deals/seller/:sellerId", requireAuth, requireRole("seller", "admin"), async (req, res) => {
   try {
     const { sellerId } = req.params;
+    const requesterRole = String(req.userProfile?.role || "").toLowerCase();
+    if (requesterRole !== "admin" && req.user.uid !== sellerId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const dealsRef = db.collection(DEALS_COLLECTION);
     const snap = await dealsRef.where("sellerId", "==", sellerId).get();
     const list = snap.docs
       .map((doc) => sanitizeDealForResponse(doc))
       .sort((x, y) => getCreatedMs(y) - getCreatedMs(x));
-
-    return res.json(list);
+    const hydratedList = await attachSellerNamesToDeals(list);
+    return res.json(hydratedList);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -78,7 +85,9 @@ router.get("/api/deals/:dealId", async (req, res) => {
     if (!snap.exists) {
       return res.status(404).json({ error: "Deal not found" });
     }
-    return res.json(sanitizeDealForResponse(snap));
+    const deal = sanitizeDealForResponse(snap);
+    const [hydratedDeal] = await attachSellerNamesToDeals([deal]);
+    return res.json(hydratedDeal || deal);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -87,6 +96,10 @@ router.get("/api/deals/:dealId", async (req, res) => {
 router.post("/api/deals/create", async (req, res) => {
   try {
     const payload = extractDealPayload(req.body);
+    const publishabilityError = validateDealPublishability(payload);
+    if (publishabilityError) {
+      return res.status(400).json({ error: publishabilityError });
+    }
     const docRef = await db.collection(DEALS_COLLECTION).add(payload);
     return res.status(201).json({ id: docRef.id, ...payload });
   } catch (error) {
@@ -97,6 +110,10 @@ router.post("/api/deals/create", async (req, res) => {
 router.post("/api/deals", requireAuth, requireRole("seller", "admin"), async (req, res) => {
   try {
     const payload = extractDealPayload(req.body, req.user.uid);
+    const publishabilityError = validateDealPublishability(payload);
+    if (publishabilityError) {
+      return res.status(400).json({ error: publishabilityError });
+    }
     const docRef = await db.collection(DEALS_COLLECTION).add(payload);
     return res.status(201).json({ id: docRef.id, ...payload });
   } catch (error) {
@@ -152,6 +169,10 @@ router.post(
       if (role !== "admin" && sellerId && sellerId !== req.user.uid) {
         return res.status(403).json({ error: "Only owner can submit this deal" });
       }
+      const publishabilityError = validateDealPublishability(data);
+      if (publishabilityError) {
+        return res.status(400).json({ error: publishabilityError });
+      }
 
       await ref.set(
         {
@@ -200,13 +221,20 @@ router.post("/api/deals/:dealId/join", optionalAuth, async (req, res) => {
     const buyerId = getBuyerId(req);
     const joinRef = db.collection(DEAL_JOINS_COLLECTION).doc(makeJoinDocId(dealId, buyerId));
 
-    await db.runTransaction(async (tx) => {
+    const result = await db.runTransaction(async (tx) => {
       const dealRef = db.collection(DEALS_COLLECTION).doc(dealId);
-      const dealSnap = await tx.get(dealRef);
+      const [dealSnap, joinSnap] = await Promise.all([tx.get(dealRef), tx.get(joinRef)]);
       if (!dealSnap.exists) throw new Error("Deal not found");
       const deal = dealSnap.data() || {};
-
+      const joinData = joinSnap.exists ? joinSnap.data() || {} : {};
+      const joinStatus = String(joinData.joinStatus || "").toLowerCase();
       const currentJoins = asNumber(deal.currentJoins ?? deal.joinedUsers, 0);
+
+      // Idempotent join: do not increase counts if the same user is already joined.
+      if (joinStatus === "joined") {
+        return { alreadyJoined: true, currentJoins };
+      }
+
       const minGroupSize = Math.max(1, asNumber(deal.minGroupSize ?? deal.minThreshold, 1));
       const thresholdReached = Boolean(deal.thresholdReachedAt) || currentJoins >= minGroupSize;
       if (thresholdReached) throw new Error("Minimum threshold reached");
@@ -218,7 +246,7 @@ router.post("/api/deals/:dealId/join", optionalAuth, async (req, res) => {
       const nextJoins = currentJoins + 1;
       const updates = {
         currentJoins: nextJoins,
-        joinedUsers: asNumber(deal.joinedUsers, currentJoins) + 1,
+        joinedUsers: nextJoins,
         updatedAt: FieldValue.serverTimestamp(),
       };
 
@@ -257,9 +285,10 @@ router.post("/api/deals/:dealId/join", optionalAuth, async (req, res) => {
       );
 
       tx.update(dealRef, updates);
+      return { joined: true, currentJoins: nextJoins };
     });
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, ...result });
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
@@ -271,12 +300,20 @@ router.post("/api/deals/:dealId/leave", optionalAuth, async (req, res) => {
     const buyerId = getBuyerId(req);
     const joinRef = db.collection(DEAL_JOINS_COLLECTION).doc(makeJoinDocId(dealId, buyerId));
 
-    await db.runTransaction(async (tx) => {
+    const result = await db.runTransaction(async (tx) => {
       const dealRef = db.collection(DEALS_COLLECTION).doc(dealId);
-      const dealSnap = await tx.get(dealRef);
+      const [dealSnap, joinSnap] = await Promise.all([tx.get(dealRef), tx.get(joinRef)]);
       if (!dealSnap.exists) throw new Error("Deal not found");
       const deal = dealSnap.data() || {};
+      const joinData = joinSnap.exists ? joinSnap.data() || {} : {};
+      const joinStatus = String(joinData.joinStatus || "").toLowerCase();
       const currentJoins = asNumber(deal.currentJoins ?? deal.joinedUsers, 0);
+
+      // Idempotent leave: do not decrease counts if the user is not currently joined.
+      if (joinStatus !== "joined") {
+        return { alreadyLeft: true, currentJoins };
+      }
+
       const nextJoins = Math.max(0, currentJoins - 1);
 
       tx.set(
@@ -293,12 +330,14 @@ router.post("/api/deals/:dealId/leave", optionalAuth, async (req, res) => {
 
       tx.update(dealRef, {
         currentJoins: nextJoins,
+        joinedUsers: nextJoins,
         leftCount: FieldValue.increment(1),
         updatedAt: FieldValue.serverTimestamp(),
       });
+      return { left: true, currentJoins: nextJoins };
     });
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, ...result });
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }

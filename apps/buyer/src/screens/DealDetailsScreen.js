@@ -91,6 +91,38 @@ function formatNumber(value) {
   return String(Math.round(numeric));
 }
 
+function formatAddressText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value !== "object") return "";
+
+  const fullName = value.name || value.fullName || value.recipientName;
+  const cityLine = [value.city, value.state, value.pincode]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+  const parts = [fullName, value.line1, value.line2, cityLine, value.country]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+
+  const phone = String(value.phone || value.mobile || "").trim();
+  if (phone) {
+    parts.push(`Phone: ${phone}`);
+  }
+
+  return parts.join("\n");
+}
+
+function getSellerDisplayName(deal) {
+  const candidates = [deal?.sellerName, deal?.sellerDisplayName, deal?.vendorName];
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (text) return text;
+  }
+  return null;
+}
+
 export default function DealDetailsScreen({ route, navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -125,7 +157,7 @@ export default function DealDetailsScreen({ route, navigation }) {
     setDeliveryAddress,
   } = useDealState();
   const hasRecorded = useRef(false);
-  const [showJoinSuccess, setShowJoinSuccess] = useState(false);
+  const [successFeedback, setSuccessFeedback] = useState(null);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [ratingValue, setRatingValue] = useState(0);
@@ -169,9 +201,20 @@ export default function DealDetailsScreen({ route, navigation }) {
   const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
   const isPickup = /pick/i.test(deliveryModeLabel);
   const storeAddress =
-    deal?.storeAddress || deal?.pickupAddress || deal?.location || null;
+    formatAddressText(deal?.storeAddress) ||
+    formatAddressText(deal?.pickupAddress) ||
+    formatAddressText(deal?.location) ||
+    null;
+  const sellerDisplayName =
+    getSellerDisplayName(deal);
   const requiresDeliveryAddress =
     deliveryModeLabel.length > 0 && !/pick/i.test(deliveryModeLabel);
+  const hasAnyAddress = Array.isArray(addresses) && addresses.length > 0;
+  const defaultAddress = useMemo(
+    () => (hasAnyAddress ? addresses.find((item) => item.isDefault) || null : null),
+    [addresses, hasAnyAddress],
+  );
+  const hasDefaultAddress = Boolean(defaultAddress);
   const deliveryAddress = useMemo(() => {
     if (dealState?.deliveryAddress) return dealState.deliveryAddress;
     if (dealState?.deliveryAddressId && addresses?.length) {
@@ -194,7 +237,7 @@ export default function DealDetailsScreen({ route, navigation }) {
   }, [dealId, dealStateLoading, markViewed, recordView, viewedIds]);
 
   useEffect(() => {
-    if (!showJoinSuccess) return;
+    if (!successFeedback) return;
     successScale.setValue(0.9);
     successOpacity.setValue(0);
     Animated.parallel([
@@ -210,22 +253,20 @@ export default function DealDetailsScreen({ route, navigation }) {
         useNativeDriver: true,
       }),
     ]).start();
-    const timer = setTimeout(() => setShowJoinSuccess(false), 1400);
+    const timer = setTimeout(() => setSuccessFeedback(null), 1400);
     return () => clearTimeout(timer);
-  }, [showJoinSuccess, successOpacity, successScale]);
+  }, [successFeedback, successOpacity, successScale]);
 
   useEffect(() => {
     if (!showAddressModal) return;
     if (!addresses || addresses.length === 0) return;
-    const defaultAddress =
-      addresses.find((item) => item.isDefault) || addresses[0];
     const preferredId =
       dealState?.deliveryAddressId || defaultAddress?.id || null;
     setSelectedAddressId((prev) => {
       if (prev && addresses.some((item) => item.id === prev)) return prev;
       return preferredId;
     });
-  }, [addresses, dealState?.deliveryAddressId, showAddressModal]);
+  }, [addresses, dealState?.deliveryAddressId, defaultAddress?.id, showAddressModal]);
 
   useEffect(() => {
     if (!myReview || reviewPrefilledRef.current) return;
@@ -256,21 +297,34 @@ export default function DealDetailsScreen({ route, navigation }) {
 
   const handleJoin = (address) => {
     if (joining) return;
+    const deliveryAddressPayload = address || dealState?.deliveryAddress || null;
     joinDeal(
-      { dealId, createdAt: deal?.createdAt },
+      {
+        dealId,
+        createdAt: deal?.createdAt,
+        deliveryAddress: deliveryAddressPayload,
+      },
       {
         onSuccess: () => {
           markJoined(dealId);
           if (address) {
             setDeliveryAddress(dealId, address, deal?.deliveryMode);
           }
-          setShowJoinSuccess(true);
+          setSuccessFeedback("join");
         },
         onError: (error) => {
+          const isNetworkIssue =
+            !error?.response &&
+            (String(error?.code || "").toUpperCase() === "ERR_NETWORK" ||
+              String(error?.message || "")
+                .toLowerCase()
+                .includes("network"));
           const message =
-            error?.response?.data?.error ||
-            error?.message ||
-            "Unable to join this deal.";
+            isNetworkIssue
+              ? "Network issue while joining. Please check internet and try again."
+              : error?.response?.data?.error ||
+                error?.message ||
+                "Unable to join this deal.";
           Alert.alert("Join failed", message);
         },
       },
@@ -424,29 +478,43 @@ export default function DealDetailsScreen({ route, navigation }) {
     : null;
   const ratingLabel =
     ratingCount > 0 && ratingAvg !== null ? ratingAvg.toFixed(1) : "0.0";
-  const insights = [
+  const totalInteractions = viewsCount + favoritesCount + joinCount;
+  const pulseCards = [
     {
-      key: "views",
-      label: "Views",
-      value: formatNumber(viewsCount),
-      icon: "eye-outline",
+      key: "live",
+      label: "Live Pulse",
+      value: formatNumber(totalInteractions),
+      caption: "Total interactions on this deal",
+      icon: "analytics-outline",
+      colors: [theme.colors.primary, theme.colors.purple],
     },
     {
-      key: "favorites",
-      label: "Marked as favourite",
+      key: "favorite",
+      label: "Favourite Pulse",
       value: formatNumber(favoritesCount),
+      caption: "Marked as favourite",
       icon: "heart-outline",
+      colors: [theme.colors.danger, theme.colors.purple],
     },
     {
       key: "joined",
-      label: "Total joined",
+      label: "Join Pulse",
       value: formatNumber(joinCount),
+      caption: "Joined this deal",
       icon: "people-outline",
+      colors: [theme.colors.success, theme.colors.primary],
     },
   ];
 
   const handleToggleJoin = () => {
     if (!dealId) return;
+    if (joining || leaving) {
+      Alert.alert(
+        "Please wait",
+        "We are updating your deal status. Try again in a moment.",
+      );
+      return;
+    }
     if (!hasJoined && thresholdReached) {
       Alert.alert(
         "Deal unlocked",
@@ -459,13 +527,31 @@ export default function DealDetailsScreen({ route, navigation }) {
       leaveDeal(dealId, {
         onSuccess: () => {
           unmarkJoined(dealId);
+          setSuccessFeedback("leave");
+        },
+        onError: (error) => {
+          const isNetworkIssue =
+            !error?.response &&
+            (String(error?.code || "").toUpperCase() === "ERR_NETWORK" ||
+              String(error?.message || "")
+                .toLowerCase()
+                .includes("network") ||
+              String(error?.message || "")
+                .toLowerCase()
+                .includes("timeout"));
+          const message = isNetworkIssue
+            ? "Network issue while leaving. Please check internet and try again."
+            : error?.response?.data?.error ||
+              error?.message ||
+              "Unable to leave this deal.";
+          Alert.alert("Leave failed", message);
         },
       });
       return;
     }
 
     if (requiresDeliveryAddress) {
-      if (!addressesLoading && (!addresses || addresses.length === 0)) {
+      if (!addressesLoading && !hasAnyAddress) {
         Alert.alert(
           "Delivery address needed",
           "Please add a delivery address before joining this deal.",
@@ -478,6 +564,12 @@ export default function DealDetailsScreen({ route, navigation }) {
           ],
         );
         return;
+      }
+      if (!addressesLoading && !hasDefaultAddress && !dealState?.deliveryAddressId) {
+        Alert.alert(
+          "Select delivery address",
+          "No default address is selected. Please choose one from your saved addresses.",
+        );
       }
       setShowAddressModal(true);
       return;
@@ -506,7 +598,7 @@ export default function DealDetailsScreen({ route, navigation }) {
       <View style={styles.headerActionItem}>
         <GradientIconButton
           onPress={handleToggleJoin}
-          disabled={joining || leaving || (!hasJoined && thresholdReached)}
+          disabled={false}
         >
           {joining || leaving ? (
             <ActivityIndicator color={theme.colors.onPrimary} size="small" />
@@ -570,6 +662,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         headerBelow={headerBelowContent}
         title={deal.title || "Deal"}
         description={deal.description}
+        sellerName={sellerDisplayName}
         category={deal.category}
         location={deal.location}
         price={primaryPrice}
@@ -583,19 +676,50 @@ export default function DealDetailsScreen({ route, navigation }) {
         contentStyle={styles.scrollContent}
       >
         <InfoCard title="Deal Insights" style={styles.insightsCard}>
-          <View style={styles.insightsGrid}>
-            {insights.map((item) => (
-              <View key={item.key} style={styles.insightTile}>
-                <View style={styles.insightIconWrap}>
-                  <Ionicons
-                    name={item.icon}
-                    size={16}
-                    color={theme.colors.primary}
-                  />
+          <LinearGradient
+            colors={pulseCards[0].colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.insightSummaryCard}
+          >
+            <View style={styles.insightSummaryTextWrap}>
+              <Text style={styles.insightSummaryEyebrow}>{pulseCards[0].label}</Text>
+              <Text style={styles.insightSummaryValue}>{pulseCards[0].value}</Text>
+              <Text style={styles.insightSummaryCaption}>
+                {pulseCards[0].caption}
+              </Text>
+            </View>
+            <View style={styles.insightSummaryIconWrap}>
+              <Ionicons
+                name={pulseCards[0].icon}
+                size={18}
+                color={theme.colors.onPrimary}
+              />
+            </View>
+          </LinearGradient>
+
+          <View style={styles.insightPulseGrid}>
+            {pulseCards.slice(1).map((item) => (
+              <LinearGradient
+                key={item.key}
+                colors={item.colors}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.insightPulseCard}
+              >
+                <View style={styles.insightPulseTopRow}>
+                  <Text style={styles.insightPulseEyebrow}>{item.label}</Text>
+                  <View style={styles.insightPulseIconWrap}>
+                    <Ionicons
+                      name={item.icon}
+                      size={14}
+                      color={theme.colors.onPrimary}
+                    />
+                  </View>
                 </View>
-                <Text style={styles.insightValue}>{item.value}</Text>
-                <Text style={styles.insightLabel}>{item.label}</Text>
-              </View>
+                <Text style={styles.insightPulseValue}>{item.value}</Text>
+                <Text style={styles.insightPulseCaption}>{item.caption}</Text>
+              </LinearGradient>
             ))}
           </View>
         </InfoCard>
@@ -840,6 +964,11 @@ export default function DealDetailsScreen({ route, navigation }) {
               <Text style={styles.addressSubtitle}>
                 Delivery mode: {deliveryModeLabel || "Delivery"}
               </Text>
+              {!addressesLoading && hasAnyAddress && !hasDefaultAddress ? (
+                <Text style={styles.addressHint}>
+                  No default address selected. Please choose one from below.
+                </Text>
+              ) : null}
 
               {addressesLoading ? (
                 <Text style={styles.addressLoading}>Loading addresses...</Text>
@@ -927,7 +1056,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         </Modal>
       )}
 
-      {showJoinSuccess && (
+      {successFeedback && (
         <Modal transparent animationType="fade">
           <View style={styles.successOverlay}>
             <Animated.View
@@ -940,11 +1069,17 @@ export default function DealDetailsScreen({ route, navigation }) {
               ]}
             >
               <Ionicons
-                name="checkmark-circle"
+                name={successFeedback === "leave" ? "exit-outline" : "checkmark-circle"}
                 size={64}
-                color={theme.colors.success}
+                color={
+                  successFeedback === "leave"
+                    ? theme.colors.warningBright
+                    : theme.colors.success
+                }
               />
-              <Text style={styles.successText}>Joined!</Text>
+              <Text style={styles.successText}>
+                {successFeedback === "leave" ? "Left deal!" : "Joined!"}
+              </Text>
             </Animated.View>
           </View>
         </Modal>
@@ -1004,41 +1139,93 @@ const createStyles = (theme) =>
     borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
-  insightsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  insightTile: {
-    flexBasis: "48%",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+  insightSummaryCard: {
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: theme.colors.infoBorder,
-    backgroundColor: theme.colors.surfaceLighter,
-    minHeight: 84,
-    justifyContent: "space-between",
-  },
-  insightIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.infoSoft,
-    borderWidth: 1,
-    borderColor: theme.colors.infoBorder,
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
-  insightValue: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: theme.colors.text,
+  insightSummaryTextWrap: {
+    flex: 1,
+    gap: 2,
   },
-  insightLabel: {
+  insightSummaryEyebrow: {
     fontSize: 11,
     fontWeight: "700",
-    color: theme.colors.textMuted,
+    color: theme.colors.onPrimaryMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  insightSummaryValue: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: theme.colors.onPrimary,
+    lineHeight: 30,
+  },
+  insightSummaryCaption: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.colors.onPrimaryMuted,
+  },
+  insightSummaryIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  insightPulseGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  insightPulseCard: {
+    flex: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  insightPulseTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  insightPulseEyebrow: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "700",
+    color: theme.colors.onPrimaryMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  insightPulseIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    backgroundColor: theme.colors.onPrimarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  insightPulseValue: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: theme.colors.onPrimary,
+    lineHeight: 24,
+  },
+  insightPulseCaption: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: theme.colors.onPrimaryMuted,
+    lineHeight: 12,
   },
   logisticsCard: {
     backgroundColor: theme.colors.background,
@@ -1047,7 +1234,7 @@ const createStyles = (theme) =>
   },
   logisticsItem: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
     paddingVertical: 6,
   },
@@ -1080,6 +1267,7 @@ const createStyles = (theme) =>
     fontSize: 13,
     fontWeight: "700",
     color: theme.colors.text,
+    lineHeight: 18,
   },
   reviewCard: {
     backgroundColor: theme.colors.background,
@@ -1264,6 +1452,12 @@ const createStyles = (theme) =>
   addressSubtitle: {
     color: theme.colors.textMuted,
     fontSize: 12,
+    marginBottom: 12,
+  },
+  addressHint: {
+    color: theme.colors.warningBright,
+    fontSize: 12,
+    fontWeight: "600",
     marginBottom: 12,
   },
   addressClose: {
