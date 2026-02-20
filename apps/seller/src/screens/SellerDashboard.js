@@ -29,8 +29,6 @@ import {
   getStatusLabel,
   toDate,
   formatDate,
-  formatExpiryLabel,
-  formatCountdown,
   theme,
   CardHeader,
   TopPageHeader,
@@ -591,34 +589,32 @@ export default function SellerDashboard({ navigation }) {
               const lifecycleStatus = getDealDisplayStatus(deal, now);
               const accentColor = getStatusColor(lifecycleStatus);
               const expiryDate = toDate(deal.expiresAt);
-              const countdown =
-                lifecycleStatus === "active" && expiryDate
-                  ? formatCountdown(expiryDate.getTime() - now)
+              const endsInLabel =
+                expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
+                  ? formatEndsIn(expiryDate.getTime(), now)
                   : null;
-              const expiryLabel = expiryDate
-                ? formatExpiryLabel(expiryDate, now)
-                : null;
 
               return (
                 <SharedDealCard
                   key={deal.id}
                   title={deal.title}
-                  category={[
-                    deal.category,
-                    sellerDisplayName ? `Seller: ${sellerDisplayName}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" • ")}
+                  category={deal.category || null}
                   image={deal.image}
                   joins={joins}
+                  targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
                   accentColor={accentColor}
+                  badgeLabel={getStatusLabel(lifecycleStatus)}
                   statusLabel={getStatusLabel(lifecycleStatus)}
                   viewsCount={deal.viewsCount ?? deal.views ?? 0}
                   favoritesCount={
                     deal.favoritesCount ?? deal.favouritesCount ?? 0
                   }
-                  countdown={countdown}
-                  expiryLabel={expiryLabel}
+                  ratingAvg={deal.ratingAvg ?? deal.rating ?? null}
+                  ratingCount={deal.ratingCount ?? 0}
+                  originalPrice={deal.originalPrice}
+                  discountPrice={deal.discountPrice}
+                  countdown={null}
+                  expiryLabel={endsInLabel}
                   actionLabel="View Deal"
                   onActionPress={() =>
                     navigation.navigate("DealDetails", { deal })
@@ -772,6 +768,19 @@ function buildSearchText(deal) {
     })
     .join(" ")
     .toLowerCase();
+}
+
+function formatEndsIn(expiryMs, nowMs = Date.now()) {
+  if (typeof expiryMs !== "number") return null;
+  const diffMs = expiryMs - nowMs;
+  if (diffMs <= 0) return "Ends soon";
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  if (days > 0) return `Ends in ${days}d`;
+  if (hours > 0) return `Ends in ${hours}h`;
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `Ends in ${Math.max(minutes, 1)}m`;
 }
 
 function normalizeText(value) {
@@ -1202,3 +1211,4 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: SPACING, marginBottom: 15 },
   emptyContainer: { alignItems: "center", marginTop: 40 },
 });
+

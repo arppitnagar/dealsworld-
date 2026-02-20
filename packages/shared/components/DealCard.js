@@ -5,14 +5,28 @@ import { LinearGradient } from "expo-linear-gradient";
 import { getCardStyles } from "../styles/cards";
 import { useTheme } from "../theme/ThemeProvider";
 
+function formatCount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0";
+  if (numeric >= 1000000) return `${(numeric / 1000000).toFixed(1)}M`;
+  if (numeric >= 1000) return `${(numeric / 1000).toFixed(numeric >= 10000 ? 0 : 1)}K`;
+  return `${numeric}`;
+}
+
 export default function DealCard({
   title,
   category,
   image,
   joins,
+  targetCount,
   accentColor,
   viewsCount,
   favoritesCount,
+  ratingAvg,
+  ratingCount,
+  originalPrice,
+  discountPrice,
+  badgeLabel,
   countdown,
   expiryLabel,
   statusLabel,
@@ -22,20 +36,38 @@ export default function DealCard({
 }) {
   const { theme } = useTheme();
   const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
-  const subtitleLine = [category, expiryLabel || countdown]
-    .filter(Boolean)
-    .join(" • ");
-  const formatCount = (value) => {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return "0";
-    if (numeric >= 1000000) {
-      return `${(numeric / 1000000).toFixed(1)}m`;
-    }
-    if (numeric >= 1000) {
-      return `${(numeric / 1000).toFixed(numeric >= 10000 ? 0 : 1)}k`;
-    }
-    return `${numeric}`;
-  };
+
+  const joinedCount = Number.isFinite(Number(joins)) ? Number(joins) : 0;
+  const target = Number.isFinite(Number(targetCount)) ? Number(targetCount) : 0;
+  const showProgress = target > 0;
+  const progressRatio = showProgress ? Math.min(joinedCount / target, 1) : 0;
+  const rightSubtitle = expiryLabel || countdown || null;
+  const resolvedBadgeLabel = badgeLabel || statusLabel || null;
+  const avgRating = Number.isFinite(Number(ratingAvg)) ? Number(ratingAvg) : null;
+  const totalReviews = Number.isFinite(Number(ratingCount)) ? Number(ratingCount) : 0;
+  const ratingLabel =
+    totalReviews > 0 && avgRating !== null
+      ? `${avgRating.toFixed(1)} (${formatCount(totalReviews)})`
+      : "0.0 (0)";
+
+  const original = Number(originalPrice);
+  const discount = Number(discountPrice);
+  const discountPercent =
+    Number.isFinite(original) &&
+    Number.isFinite(discount) &&
+    original > discount
+      ? Math.round(((original - discount) / original) * 100)
+      : null;
+
+  const progressFillColor =
+    progressRatio >= 0.85
+      ? theme.colors.success
+      : progressRatio >= 0.6
+        ? theme.colors.warningBright
+        : progressRatio >= 0.35
+          ? theme.colors.amberBorder
+          : theme.colors.danger;
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -45,7 +77,7 @@ export default function DealCard({
           backgroundColor: theme.colors.surface,
           borderRadius: 24,
           borderWidth: 1,
-          borderColor: theme.colors.border,
+          borderColor: accentColor || theme.colors.border,
           ...cardStyles.shadow,
         },
         imageWrap: {
@@ -53,7 +85,10 @@ export default function DealCard({
           backgroundColor: theme.colors.surfaceLight,
           overflow: "hidden",
         },
-        image: { width: "100%", height: "100%" },
+        image: {
+          width: "100%",
+          height: "100%",
+        },
         imagePlaceholder: {
           flex: 1,
           alignItems: "center",
@@ -79,19 +114,68 @@ export default function DealCard({
           position: "absolute",
           top: 12,
           right: 12,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          borderRadius: 999,
+          width: 36,
+          height: 36,
+          borderRadius: 18,
           backgroundColor: theme.colors.surfaceGlass,
           borderWidth: 1,
           borderColor: theme.colors.border,
-          flexDirection: "row",
           alignItems: "center",
-          gap: 6,
+          justifyContent: "center",
         },
-        heartText: {
-          fontSize: 10,
+        discountTagWrap: {
+          position: "absolute",
+          top: -2,
+          right: 56,
+          alignItems: "center",
+        },
+        discountTagString: {
+          width: 2,
+          height: 18,
+          backgroundColor: theme.colors.amberBorder,
+          borderRadius: 1,
+        },
+        discountTag: {
+          minWidth: 86,
+          paddingHorizontal: 10,
+          paddingVertical: 8,
+          borderRadius: 12,
+          backgroundColor: theme.colors.amberChipBg,
+          borderWidth: 1,
+          borderColor: theme.colors.amberBorder,
+          alignItems: "center",
+          transform: [{ rotate: "-3deg" }],
+        },
+        discountTagHole: {
+          position: "absolute",
+          top: 6,
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: theme.colors.surface,
+          borderWidth: 1,
+          borderColor: theme.colors.amberBorder,
+        },
+        discountTagLabel: {
+          fontSize: 9,
           fontWeight: "700",
+          color: theme.colors.amberText,
+          letterSpacing: 0.6,
+        },
+        discountTagValueRow: {
+          flexDirection: "row",
+          alignItems: "baseline",
+          gap: 4,
+          marginTop: 4,
+        },
+        discountTagValue: {
+          fontSize: 18,
+          fontWeight: "800",
+          color: theme.colors.text,
+        },
+        discountTagOff: {
+          fontSize: 10,
+          fontWeight: "800",
           color: theme.colors.textMuted,
         },
         body: {
@@ -104,26 +188,76 @@ export default function DealCard({
           alignItems: "flex-start",
           gap: 10,
         },
-        title: { flex: 1, fontSize: 16, fontWeight: "800", color: theme.colors.text },
-        subtitle: { fontSize: 12, color: theme.colors.textMuted },
+        title: {
+          flex: 1,
+          fontSize: 18,
+          fontWeight: "900",
+          color: theme.colors.text,
+        },
+        subtitleRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        },
+        subtitle: {
+          flex: 1,
+          fontSize: 12,
+          color: theme.colors.textMuted,
+        },
+        expiry: {
+          fontSize: 12,
+          fontWeight: "800",
+          color: theme.colors.warningBright,
+        },
         metaRow: {
           flexDirection: "row",
           alignItems: "center",
           gap: 8,
+          flexWrap: "wrap",
         },
         metaChip: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 6,
+          gap: 8,
           backgroundColor: theme.colors.surfaceLight,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
+          paddingHorizontal: 10,
+          paddingVertical: 6,
           borderRadius: 8,
         },
         metaText: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: "700",
           color: theme.colors.textMuted,
+        },
+        progressWrap: {
+          gap: 6,
+        },
+        progressHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        },
+        progressLabel: {
+          fontSize: 11,
+          fontWeight: "700",
+          color: theme.colors.textMuted,
+        },
+        progressPercent: {
+          fontSize: 11,
+          fontWeight: "800",
+          color: theme.colors.textMuted,
+        },
+        progressTrack: {
+          height: 8,
+          borderRadius: 999,
+          backgroundColor: theme.colors.surfaceLight,
+          overflow: "hidden",
+        },
+        progressFill: {
+          height: "100%",
+          borderRadius: 999,
+          backgroundColor: progressFillColor,
         },
         actionRow: {
           alignItems: "flex-end",
@@ -146,8 +280,9 @@ export default function DealCard({
           fontWeight: "800",
         },
       }),
-    [accentColor, cardStyles, theme],
+    [accentColor, cardStyles.shadow, progressFillColor, theme],
   );
+
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
       <View style={styles.imageWrap}>
@@ -158,19 +293,27 @@ export default function DealCard({
             <Ionicons name="image-outline" size={24} color={theme.colors.textMuted} />
           </View>
         )}
-        {statusLabel ? (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{statusLabel}</Text>
+        {discountPercent ? (
+          <View style={styles.discountTagWrap}>
+            <View style={styles.discountTagString} />
+            <View style={styles.discountTag}>
+              <View style={styles.discountTagHole} />
+              <Text style={styles.discountTagLabel}>DISCOUNT</Text>
+              <View style={styles.discountTagValueRow}>
+                <Text style={styles.discountTagValue}>{discountPercent}%</Text>
+                <Text style={styles.discountTagOff}>OFF</Text>
+              </View>
+            </View>
           </View>
         ) : null}
-          {Number.isFinite(Number(favoritesCount)) ? (
-            <View style={styles.heartBadge}>
-              <Ionicons name="heart" size={12} color={theme.colors.danger} />
-              <Text style={styles.heartText}>
-                {formatCount(favoritesCount)}
-              </Text>
-            </View>
-          ) : null}
+        {resolvedBadgeLabel ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{resolvedBadgeLabel}</Text>
+          </View>
+        ) : null}
+        <View style={styles.heartBadge}>
+          <Ionicons name="heart-outline" size={18} color={theme.colors.textMuted} />
+        </View>
       </View>
 
       <View style={styles.body}>
@@ -179,29 +322,62 @@ export default function DealCard({
             {title}
           </Text>
         </View>
-        {subtitleLine ? (
-          <Text style={styles.subtitle}>{subtitleLine}</Text>
+
+        {category || rightSubtitle ? (
+          <View style={styles.subtitleRow}>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {category}
+            </Text>
+            {rightSubtitle ? (
+              <Text style={styles.expiry} numberOfLines={1}>
+                {rightSubtitle}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
+
         <View style={styles.metaRow}>
           {Number.isFinite(Number(viewsCount)) ? (
             <View style={styles.metaChip}>
-              <Ionicons name="eye-outline" size={14} color={theme.colors.textMuted} />
+              <Ionicons name="eye-outline" size={18} color={theme.colors.textMuted} />
               <Text style={styles.metaText}>{formatCount(viewsCount)}</Text>
             </View>
           ) : null}
-          {Number.isFinite(Number(joins)) ? (
+          <View style={styles.metaChip}>
+            <Ionicons name="people-outline" size={18} color={theme.colors.primary} />
+            <Text style={styles.metaText}>{formatCount(joinedCount)}</Text>
+          </View>
+          {Number.isFinite(Number(favoritesCount)) ? (
             <View style={styles.metaChip}>
-              <Ionicons name="people-outline" size={14} color={theme.colors.textMuted} />
-              <Text style={styles.metaText}>{formatCount(joins)}</Text>
+              <Ionicons name="heart-outline" size={18} color={theme.colors.danger} />
+              <Text style={styles.metaText}>{formatCount(favoritesCount)}</Text>
             </View>
           ) : null}
+          <View style={styles.metaChip}>
+            <Ionicons name="star-outline" size={18} color={theme.colors.warningBright} />
+            <Text style={styles.metaText}>{ratingLabel}</Text>
+          </View>
         </View>
+
+        {showProgress ? (
+          <View style={styles.progressWrap}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressLabel}>
+                Joined {formatCount(joinedCount)} of {formatCount(target)}
+              </Text>
+              <Text style={styles.progressPercent}>
+                {Math.round(progressRatio * 100)}%
+              </Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
+            </View>
+          </View>
+        ) : null}
+
         {actionLabel ? (
           <View style={styles.actionRow}>
-            <TouchableOpacity
-              onPress={onActionPress}
-              style={styles.actionButton}
-            >
+            <TouchableOpacity onPress={onActionPress} style={styles.actionButton}>
               <LinearGradient
                 colors={[theme.colors.primary, theme.colors.purple]}
                 style={styles.actionButtonGradient}
