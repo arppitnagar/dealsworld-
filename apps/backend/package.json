@@ -6,6 +6,7 @@
     "dev": "node server.js",
     "seed:admin": "node scripts/seedAdmin.js",
     "create:admin": "node scripts/createAdminUser.js",
+    "reset:password": "node scripts/resetUserPassword.js",
     "migrate:sellerid": "node scripts/migrateSellerId.js",
     "backfill:sellername": "node scripts/backfillSellerName.js",
     "reconcile:joins": "node scripts/reconcileJoinCounts.js",
@@ -18,7 +19,8 @@
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
     "firebase-admin": "^13.6.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "multer": "^2.3.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   }
 }

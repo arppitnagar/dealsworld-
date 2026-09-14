@@ -21,10 +21,11 @@ const ENV_BASE_URL_WEB =
 const BASE_URL =
   Platform.OS === "web"
     ? ENV_BASE_URL_WEB || "http://127.0.0.1:5000/api"
-    : ENV_BASE_URL || "http://192.168.1.9:5000/api";
+    : ENV_BASE_URL || "http://192.168.1.11:5000/api";
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
+  timeout: 20000,
   headers: {
     "Content-Type": "application/json",
   },

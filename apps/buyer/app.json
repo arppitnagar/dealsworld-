@@ -10,10 +10,21 @@
     },
     "android": {
       "package": "com.dealsworld.dealbuddy",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "../../packages/shared/components/ui/DealBuddy App Icon.png",
         "backgroundColor": "#FFFFFF"
       }
-    }
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-notifications"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "238fe782-1ec0-4d68-a675-df35cc41f077"
+      }
+    },
+    "owner": "arppit"
   }
 }

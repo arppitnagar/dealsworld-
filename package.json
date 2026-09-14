@@ -22,14 +22,19 @@
     "web:all:fast": "node scripts/start-all-web.js",
     "web:all:fast:clear": "node scripts/start-all-web.js --clear",
     "apps:all:mixed": "node scripts/start-all-hybrid.js",
-    "apps:all:mixed:clear": "node scripts/start-all-hybrid.js --clear"
+    "apps:all:mixed:clear": "node scripts/start-all-hybrid.js --clear",
+    "apps:all:full": "node scripts/start-all-stack.js",
+    "apps:all:full:clear": "node scripts/start-all-stack.js --clear"
   },
   "overrides": {
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "devDependencies": {
+    "cross-env": "^10.1.0"
+  }
 }

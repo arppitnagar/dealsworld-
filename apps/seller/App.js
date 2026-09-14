@@ -16,7 +16,9 @@ import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
 import ThemeSettingsScreen from "./src/screens/ThemeSettingsScreen";
 import AddressBookScreen from "./src/screens/AddressBookScreen";
 import AddressFormScreen from "./src/screens/AddressFormScreen";
+import NotificationsScreen from "./src/screens/NotificationsScreen";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { usePushToken } from "./src/hooks/usePushToken";
 import { useUserProfile } from "./src/hooks/useUserProfile";
 import {
   DealBuddyLoadingScreen,
@@ -41,6 +43,7 @@ function AppNavigator() {
   const { user, loading } = useAuth();
   const { profile, loading: profileLoading } = useUserProfile();
   const { logout } = useAuth();
+  usePushToken();
   const role = String(profile?.role || "").toLowerCase();
   const accountStatus = String(profile?.status || "").toLowerCase();
 
@@ -76,6 +79,10 @@ function AppNavigator() {
           />
           <Stack.Screen name="ThemeSettings" component={ThemeSettingsScreen} />
           <Stack.Screen name="AddressBook" component={AddressBookScreen} />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+          />
           <Stack.Screen name="AddressForm" component={AddressFormScreen} />
           <Stack.Screen
             name="DealDetails"

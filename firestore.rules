@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// DealsWorld Firestore security rules.
+//
+// Reverse-engineered from every direct client-side firebase/firestore call in
+// apps/seller and apps/buyer (apps/admin and the deal-join/review-aggregate
+// flows in apps/backend go through firebase-admin, which is not subject to
+// these rules at all). There was no firestore.rules file in the repo before
+// this, so the project was very likely running on Firebase's default
+// deny-all rules - which is exactly what "Missing or insufficient
+// permissions" on login means.
+//
+// Deploy: paste this file's contents into
+// Firebase Console -> Firestore Database -> Rules -> Publish
+// (or `firebase deploy --only firestore:rules` if you set up the CLI).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Deal participant checks, used to scope chat/typing to the two people
+    // actually in that deal. Participation itself is tracked only by the
+    // backend (apps/backend/src/routes/deals.js) in the top-level dealJoins
+    // collection, doc id `${dealId}_${buyerId}`, never written by clients.
+    function isDealSeller(dealId) {
+      return get(/databases/$(database)/documents/deals/$(dealId)).data.sellerId == request.auth.uid;
+    }
+
+    function isJoinedBuyer(dealId) {
+      let joinPath = /databases/$(database)/documents/dealJoins/$(dealId + '_' + request.auth.uid);
+      return exists(joinPath) && get(joinPath).data.joinStatus == 'joined';
+    }
+
+    function isDealParticipant(dealId) {
+      return isSignedIn() && (isDealSeller(dealId) || isJoinedBuyer(dealId));
+    }
+
+    // Each user's own profile doc (apps/*/src/context/AuthContext.js,
+    // apps/*/src/hooks/useUserProfile.js). Read/write restricted to the
+    // profile's own owner.
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Notifications, saved addresses, per-deal UI state
+      // (apps/*/src/hooks/useNotifications.js, useAddresses.js,
+      // useDealState.js) - all scoped to the owning user only.
+      match /notifications/{notificationId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /addresses/{addressId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /dealStates/{dealId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Deal listings (apps/seller/src/screens/SellerDashboard.js reads the
+    // whole collection unfiltered and filters client-side, so read access
+    // must not depend on document contents). Writes are restricted to the
+    // deal's own seller; the backend's admin SDK bypasses this entirely for
+    // join/review-aggregate writes.
+    match /deals/{dealId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.sellerId == request.auth.uid;
+
+      // Chat messages and typing indicators (apps/*/src/screens/DealChat*.js)
+      // - only the deal's seller or a buyer who has actively joined it.
+      match /messages/{messageId} {
+        allow read, write: if isDealParticipant(dealId);
+      }
+
+      match /typing/{who} {
+        allow read, write: if isDealParticipant(dealId);
+      }
+
+      // Reviews (apps/buyer/src/hooks/useDealReviews.js) are keyed by the
+      // reviewing buyer's own uid, so a buyer can only write their own
+      // review; anyone signed in can read reviews for a deal.
+      match /reviews/{reviewerId} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(reviewerId);
+      }
+    }
+  }
+}

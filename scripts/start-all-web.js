@@ -49,8 +49,10 @@ function buildEnv(entry) {
 
   return {
     ...process.env,
-    EXPO_NO_DEPENDENCY_VALIDATION:
-      process.env.EXPO_NO_DEPENDENCY_VALIDATION || "1",
+    // Skip Expo CLI's remote dependency-version check, which otherwise fetches
+    // exp.host/--/api/v2/versions on every start and can crash with an undici
+    // "Unexpected end of JSON input" error on a flaky connection.
+    EXPO_OFFLINE: process.env.EXPO_OFFLINE || "1",
     TMP: cacheDir,
     TEMP: cacheDir,
     TMPDIR: cacheDir,

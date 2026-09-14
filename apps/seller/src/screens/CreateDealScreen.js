@@ -22,6 +22,7 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
+import apiClient from "../api/client";
 import * as Yup from "yup";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -180,7 +181,7 @@ export default function CreateDealScreen({ route, navigation }) {
     sellerId: deal?.sellerId || user?.uid || "",
   });
 
-  const [image, setImage] = useState(null);
+  const [image, setImage] = useState(deal?.imageUrl || deal?.image || null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -382,6 +383,32 @@ export default function CreateDealScreen({ route, navigation }) {
     if (!res.canceled) setImage(res.assets[0].uri);
   };
 
+  /**
+   * `image` state holds a local device file:// URI right after picking a
+   * photo - that path only exists on this phone, so buyers on other devices
+   * can never load it. Upload it to the backend (see
+   * apps/backend/src/routes/uploads.js, stored on its own disk under
+   * uploads/deals/{sellerUid}/) and swap in the public URL it returns
+   * before saving the deal. If the image is already an https:// URL
+   * (unchanged from an existing deal, or already uploaded), leave it as-is
+   * instead of re-uploading.
+   */
+  const resolveImageForSave = async (uri) => {
+    if (!uri) return null;
+    if (/^https?:\/\//i.test(uri)) return uri;
+
+    const formData = new FormData();
+    formData.append("image", {
+      uri,
+      name: `deal-${Date.now()}.jpg`,
+      type: "image/jpeg",
+    });
+    const response = await apiClient.post("/uploads/deal-image", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data?.url || null;
+  };
+
   /* ---------- VALIDATION ---------- */
 
   /**
@@ -485,6 +512,8 @@ export default function CreateDealScreen({ route, navigation }) {
 
     setLoading(true);
     try {
+      const resolvedImageUrl = await resolveImageForSave(image);
+
       // 1. Prepare the data object ONCE
       const resolvedCategory =
         form.category === "Other"
@@ -516,7 +545,7 @@ export default function CreateDealScreen({ route, navigation }) {
         description: form.description || "", // Fixed typo from 'descrption'
         deliveryMode: form.deliveryMode,
         title: form.title,
-        image: image || null,
+        image: resolvedImageUrl,
         deliveryCharge:
           form.deliveryMode === "Paid Home Delivery"
             ? Number(parseNumber(form.deliveryCharge)) || 0

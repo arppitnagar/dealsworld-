@@ -3,18 +3,21 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "expo start",
-    "web": "expo start --web",
-    "admin:web": "expo start --web"
+    "start": "node ../../scripts/start-mobile.js",
+    "web": "cross-env EXPO_OFFLINE=1 expo start --web",
+    "admin:web": "cross-env EXPO_OFFLINE=1 expo start --web"
   },
   "dependencies": {
     "@dealsworld/shared": "file:../../packages/shared",
+    "@react-native/virtualized-lists": "0.86.3",
     "axios": "^1.13.4",
-    "expo": "^54.0.32",
+    "expo": "57",
+    "expo-asset": "~57.0.16",
+    "expo-constants": "~57.0.17",
     "firebase": "^12.8.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-native": "0.81.5",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
     "react-native-web": "^0.21.0"
   }
 }

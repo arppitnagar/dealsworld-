@@ -16,12 +16,18 @@ if (!mobileBackendUrl) {
       "Example (cmd):",
       "set EXPO_PUBLIC_API_BASE_URL=http://192.168.1.9:5000/api",
       "Example (PowerShell):",
-      '$env:EXPO_PUBLIC_API_BASE_URL=\"http://192.168.1.9:5000/api\"',
+      '$env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.9:5000/api"',
     ].join("\n"),
   );
 }
 
 const commands = [
+  {
+    name: "backend",
+    workspace: "apps/backend",
+    script: "dev",
+    args: [],
+  },
   {
     name: "admin-web",
     workspace: "apps/admin",
@@ -49,8 +55,11 @@ const commands = [
 const children = [];
 
 function buildArgs(entry) {
-  const args = ["--workspace", entry.workspace, "run", entry.script, "--"];
-  if (shouldClearMetro) {
+  const args = ["--workspace", entry.workspace, "run", entry.script];
+  if (entry.args.length > 0 || shouldClearMetro) {
+    args.push("--");
+  }
+  if (shouldClearMetro && entry.script === "start") {
     args.push("--clear");
   }
   args.push(...entry.args);
@@ -69,7 +78,8 @@ function buildEnv(entry) {
 
   return {
     ...process.env,
-    EXPO_PUBLIC_API_BASE_URL: entry.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL,
+    EXPO_PUBLIC_API_BASE_URL:
+      entry.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL,
     EXPO_PUBLIC_API_BASE_URL_WEB:
       entry.webApiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL_WEB,
     // Skip Expo CLI's remote dependency-version check, which otherwise fetches
@@ -99,6 +109,9 @@ function printBanner(entry) {
   if (entry.name === "admin-web") {
     lines.push("Admin web will open on: http://localhost:8082");
   }
+  if (entry.name === "backend") {
+    lines.push("Backend health: http://127.0.0.1:5000/api/health");
+  }
 
   lines.push("============================================================");
   console.log(lines.join("\n"));
@@ -121,7 +134,9 @@ commands.forEach((entry) => {
 
 const shutdown = () => {
   children.forEach((child) => {
-    if (!child.killed) child.kill();
+    if (!child.killed) {
+      child.kill();
+    }
   });
   process.exit(0);
 };

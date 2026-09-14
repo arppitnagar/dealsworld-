@@ -43,6 +43,7 @@ import {
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
+import { useNotifications } from "../hooks/useNotifications";
 
 const SPACING = 20;
 const cardStyles = getCardStyles(theme);
@@ -79,6 +80,7 @@ const FilterChip = ({ label, count, isSelected, onPress, accentColor }) => (
 export default function SellerDashboard({ navigation }) {
   const { user } = useAuth();
   const { profile } = useUserProfile();
+  const { unreadCount } = useNotifications();
   const [loading, setLoading] = useState(true);
   const [deals, setDeals] = useState([]);
   const [stats, setStats] = useState({
@@ -354,7 +356,7 @@ export default function SellerDashboard({ navigation }) {
     setIsFilterVisible(false);
   };
 
-  const HeaderActionButton = ({ label, onPress, icon }) => (
+  const HeaderActionButton = ({ label, onPress, icon, showBadge = false }) => (
     <View style={styles.headerActionItem}>
       <TouchableOpacity
         onPress={onPress}
@@ -366,6 +368,7 @@ export default function SellerDashboard({ navigation }) {
           style={styles.headerIconGradient}
         >
           <View style={styles.headerIconInner}>{icon}</View>
+          {showBadge ? <View style={styles.badgeDot} /> : null}
         </LinearGradient>
       </TouchableOpacity>
       <Text style={styles.headerActionLabel}>{label}</Text>
@@ -459,7 +462,7 @@ export default function SellerDashboard({ navigation }) {
                 />
                 <HeaderActionButton
                   label="Alerts"
-                  onPress={() => {}}
+                  onPress={() => navigation.navigate("Notifications")}
                   icon={
                     <Ionicons
                       name="notifications-outline"
@@ -467,6 +470,7 @@ export default function SellerDashboard({ navigation }) {
                       color={theme.colors.onPrimary}
                     />
                   }
+                  showBadge={unreadCount > 0}
                 />
                 <HeaderActionButton
                   label="Profile"
@@ -908,6 +912,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+  },
+  badgeDot: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.danger,
+    borderWidth: 1,
+    borderColor: theme.colors.onPrimary,
   },
   headerIconInner: {
     width: 30,

@@ -392,6 +392,40 @@ function validateDealPublishability(deal = {}) {
   return "Pickup deals require a store address before publish";
 }
 
+const EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send";
+
+// Sends real OS push notifications via Expo's push service. Tokens come
+// from Notifications.getExpoPushTokenAsync() on each client, saved to
+// users/{uid}.expoPushToken (apps/*/src/hooks/usePushToken.js). Expo's
+// endpoint accepts up to 100 messages per request and needs no API secret
+// for basic sending.
+async function sendExpoPushNotifications(messages) {
+  const chunks = [];
+  for (let i = 0; i < messages.length; i += 100) {
+    chunks.push(messages.slice(i, i + 100));
+  }
+  for (const chunk of chunks) {
+    try {
+      const response = await fetch(EXPO_PUSH_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(chunk),
+      });
+      if (!response.ok) {
+        console.warn("Expo push request failed:", response.status, await response.text());
+      }
+    } catch (error) {
+      console.warn("Expo push request errored:", error.message || error);
+    }
+  }
+}
+
+// Writes the in-app notification doc (apps/*/src/hooks/useNotifications.js
+// reads users/{uid}/notifications) and, if the user has a registered Expo
+// push token, also sends a real OS push notification for it.
 async function pushNotification({ userId, type, title, body, meta = {} }) {
   if (!userId) return;
   await db
@@ -406,6 +440,20 @@ async function pushNotification({ userId, type, title, body, meta = {} }) {
       isRead: false,
       createdAt: FieldValue.serverTimestamp(),
     });
+
+  const userSnap = await db.collection(USERS_COLLECTION).doc(userId).get();
+  const expoPushToken = userSnap.exists ? userSnap.data()?.expoPushToken : null;
+  if (!expoPushToken) return;
+
+  await sendExpoPushNotifications([
+    {
+      to: expoPushToken,
+      sound: "default",
+      title,
+      body,
+      data: { type, ...meta },
+    },
+  ]);
 }
 
 function extractDealPayload(input = {}, sellerId = null) {

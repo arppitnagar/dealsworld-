@@ -14,7 +14,6 @@ export const useUserProfile = () => {
       setLoading(false);
       return undefined;
     }
-    setLoading(true);
     const ref = doc(db, "users", user.uid);
     const unsubscribe = onSnapshot(ref, (snap) => {
       if (!snap.exists()) {
@@ -34,7 +33,12 @@ export const useUserProfile = () => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [user]);
+    // Depend on the uid, not the user object - Firebase Auth can re-emit a
+    // new (but equivalent) user object on events like app resume, and
+    // re-running this effect on every such reference change tears down and
+    // rebuilds the listener for no reason, briefly resetting `loading` and
+    // - one level up, in App.js - the whole navigator's mounted screen tree.
+  }, [user?.uid]);
 
   const updateProfile = useMemo(
     () => async (updates) => {
@@ -42,7 +46,7 @@ export const useUserProfile = () => {
       const ref = doc(db, "users", user.uid);
       await setDoc(ref, updates, { merge: true });
     },
-    [user],
+    [user?.uid],
   );
 
   return { profile, loading, updateProfile };

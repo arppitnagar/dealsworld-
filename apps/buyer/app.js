@@ -24,6 +24,7 @@ import AddressBookScreen from "./src/screens/AddressBookScreen";
 import AddressFormScreen from "./src/screens/AddressFormScreen";
 import RoleMismatchScreen from "./src/screens/RoleMismatchScreen";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { usePushToken } from "./src/hooks/usePushToken";
 import { useUserProfile } from "./src/hooks/useUserProfile";
 import {
   getStoredThemeMode,
@@ -40,6 +41,7 @@ function LoadingScreen() {
 function AppNavigator() {
   const { user, loading, logout } = useAuth();
   const { profile, loading: profileLoading } = useUserProfile();
+  usePushToken();
   const role = String(profile?.role || "").toLowerCase();
   const accountStatus = String(profile?.status || "").toLowerCase();
 

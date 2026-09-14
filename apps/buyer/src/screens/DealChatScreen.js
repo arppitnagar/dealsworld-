@@ -18,6 +18,7 @@ import {
 } from "@dealsworld/shared";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
+import apiClient from "../api/client";
 import {
   collection,
   addDoc,
@@ -40,8 +41,7 @@ export default function DealChatScreen({ route, navigation }) {
   const [isSellerTyping, setIsSellerTyping] = useState(false);
   const listRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const chatNotifyRef = useRef(0);
-  const chatInitRef = useRef(false);
+  const isTypingSentRef = useRef(false);
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
 
@@ -54,12 +54,6 @@ export default function DealChatScreen({ route, navigation }) {
 
   useEffect(() => {
     if (!dealId) return;
-    chatInitRef.current = false;
-    chatNotifyRef.current = 0;
-  }, [dealId]);
-
-  useEffect(() => {
-    if (!dealId) return;
     const messagesRef = collection(db, "deals", dealId, "messages");
     const q = query(messagesRef, orderBy("createdAt", "asc"));
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -69,58 +63,34 @@ export default function DealChatScreen({ route, navigation }) {
         ...docSnap.data(),
       }));
 
-      const sellerMessages = list.filter(
-        (msg) => msg.senderRole === "seller",
-      );
-      const sellerTimes = sellerMessages
-        .map((msg) => getMessageDate(msg.createdAt)?.getTime() || 0)
-        .filter((value) => value > 0);
-      const latestSellerMs =
-        sellerTimes.length > 0 ? Math.max(...sellerTimes) : 0;
-
-      if (!chatInitRef.current) {
-        chatInitRef.current = true;
-        chatNotifyRef.current = latestSellerMs;
-      } else if (latestSellerMs > chatNotifyRef.current && user?.uid) {
-        const newMessages = sellerMessages.filter((msg) => {
-          const messageMs = getMessageDate(msg.createdAt)?.getTime() || 0;
-          return messageMs > chatNotifyRef.current;
-        });
-        chatNotifyRef.current = latestSellerMs;
-
-        const notificationsRef = collection(
-          db,
-          "users",
-          user.uid,
-          "notifications",
-        );
-        newMessages.forEach((msg) => {
-          addDoc(notificationsRef, {
-            type: "chat",
-            dealId,
-            title: "Seller replied",
-            body: msg.text || "New message received",
-            createdAt: serverTimestamp(),
-            isRead: false,
-          });
-        });
-      }
-
-      list.forEach((msg) => {
-        if (msg.senderRole === "seller") {
-          if (!msg.deliveredAtBuyer || !msg.seenAtBuyer) {
-            updateDoc(msg.ref, {
-              deliveredAtBuyer: msg.deliveredAtBuyer || serverTimestamp(),
-              seenAtBuyer: serverTimestamp(),
-            });
-          }
+      // Only mark newly-added messages, not the whole list on every single
+      // snapshot - re-scanning and re-writing every message on every change
+      // is O(n) per event and was the real cause of chat getting slower
+      // with every message sent, not a rendering issue. (The seller-replied
+      // notification that used to live here is now handled server-side by
+      // the backend's /chat-notify endpoint - see apps/backend/src/routes
+      // /chat.js - which also sends the real push notification, so doing it
+      // here too was just producing a duplicate in-app notification.)
+      snap.docChanges().forEach((change) => {
+        if (change.type !== "added") return;
+        const msg = change.doc.data();
+        if (
+          msg.senderRole === "seller" &&
+          (!msg.deliveredAtBuyer || !msg.seenAtBuyer)
+        ) {
+          updateDoc(change.doc.ref, {
+            deliveredAtBuyer: msg.deliveredAtBuyer || serverTimestamp(),
+            seenAtBuyer: serverTimestamp(),
+          }).catch((error) =>
+            console.warn("Failed to mark message seen:", error),
+          );
         }
       });
       setMessages(list);
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [dealId, user?.uid]);
+  }, [dealId]);
 
   useEffect(() => {
     if (!dealId) return;
@@ -131,40 +101,59 @@ export default function DealChatScreen({ route, navigation }) {
   useEffect(() => {
     if (!dealId) return;
     const sellerTypingRef = doc(db, "deals", dealId, "typing", "seller");
-    const unsubscribe = onSnapshot(sellerTypingRef, (snap) => {
-      const data = snap.exists() ? snap.data() : {};
-      setIsSellerTyping(Boolean(data?.isTyping));
-    });
+    const unsubscribe = onSnapshot(
+      sellerTypingRef,
+      (snap) => {
+        const data = snap.exists() ? snap.data() : {};
+        setIsSellerTyping(Boolean(data?.isTyping));
+      },
+      (error) => console.warn("Seller typing listener failed:", error),
+    );
     return () => unsubscribe();
   }, [dealId]);
 
   useEffect(() => {
-    if (!dealId) return;
-    const typingRef = doc(db, "deals", dealId, "typing", "buyer");
+    if (!dealId || !user?.uid) return;
+    // Each buyer gets their own typing doc (a deal's chat can have several
+    // buyers in it at once) - a single shared "buyer" doc would let one
+    // buyer stopping typing wipe out another buyer's still-active typing
+    // state.
+    const typingRef = doc(db, "deals", dealId, "typing", `buyer_${user.uid}`);
 
     if (text.trim().length > 0) {
-      setDoc(
-        typingRef,
-        { isTyping: true, updatedAt: serverTimestamp() },
-        { merge: true },
-      );
+      // Only write isTyping=true on the rising edge (first keystroke of a
+      // burst) - writing on every single keystroke was hammering Firestore
+      // and was the real cause of the multi-second UI freezes seen in
+      // testing, not a rendering bug.
+      if (!isTypingSentRef.current) {
+        isTypingSentRef.current = true;
+        setDoc(
+          typingRef,
+          { isTyping: true, role: "buyer", updatedAt: serverTimestamp() },
+          { merge: true },
+        ).catch((error) => console.warn("Failed to set isTyping=true:", error));
+      }
 
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
       typingTimeoutRef.current = setTimeout(() => {
+        isTypingSentRef.current = false;
         setDoc(
           typingRef,
-          { isTyping: false, updatedAt: serverTimestamp() },
+          { isTyping: false, role: "buyer", updatedAt: serverTimestamp() },
           { merge: true },
+        ).catch((error) =>
+          console.warn("Failed to set isTyping=false (timeout):", error),
         );
-      }, 1500);
-    } else {
+      }, 4000);
+    } else if (isTypingSentRef.current) {
+      isTypingSentRef.current = false;
       setDoc(
         typingRef,
-        { isTyping: false, updatedAt: serverTimestamp() },
+        { isTyping: false, role: "buyer", updatedAt: serverTimestamp() },
         { merge: true },
-      );
+      ).catch((error) => console.warn("Failed to set isTyping=false:", error));
     }
 
     return () => {
@@ -172,7 +161,24 @@ export default function DealChatScreen({ route, navigation }) {
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [dealId, text]);
+  }, [dealId, text, user?.uid]);
+
+  // Separate from the per-keystroke effect above (which would otherwise
+  // clear isTyping on every single keystroke's cleanup, not just when
+  // actually leaving the screen) - this only fires on unmount, so leaving
+  // chat mid-type doesn't leave a stale "typing..." indicator stuck on for
+  // the other side forever.
+  useEffect(() => {
+    if (!dealId || !user?.uid) return undefined;
+    const typingRef = doc(db, "deals", dealId, "typing", `buyer_${user.uid}`);
+    return () => {
+      setDoc(
+        typingRef,
+        { isTyping: false, role: "buyer", updatedAt: serverTimestamp() },
+        { merge: true },
+      ).catch(() => {});
+    };
+  }, [dealId, user?.uid]);
 
   useEffect(() => {
     if (!listRef.current || messages.length === 0) return;
@@ -185,18 +191,42 @@ export default function DealChatScreen({ route, navigation }) {
     const trimmed = text.trim();
     if (!trimmed || !dealId) return;
     setText("");
-    await setDoc(
-      doc(db, "deals", dealId, "typing", "buyer"),
-      { isTyping: false, updatedAt: serverTimestamp() },
-      { merge: true },
-    );
-    await addDoc(collection(db, "deals", dealId, "messages"), {
-      text: trimmed,
-      createdAt: serverTimestamp(),
-      senderRole: "buyer",
-      senderId: "buyer",
-      senderName: "Buyer",
-    });
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    isTypingSentRef.current = false;
+
+    // Clearing the typing flag is a nice-to-have, not worth losing the
+    // actual message over if it fails for some reason.
+    if (user?.uid) {
+      setDoc(
+        doc(db, "deals", dealId, "typing", `buyer_${user.uid}`),
+        { isTyping: false, role: "buyer", updatedAt: serverTimestamp() },
+        { merge: true },
+      ).catch((error) =>
+        console.warn("Failed to clear isTyping on send:", error),
+      );
+    }
+
+    try {
+      await addDoc(collection(db, "deals", dealId, "messages"), {
+        text: trimmed,
+        createdAt: serverTimestamp(),
+        senderRole: "buyer",
+        senderId: user?.uid || "buyer",
+        senderName: "Buyer",
+      });
+    } catch (error) {
+      console.warn("Failed to send message:", error);
+      setText(trimmed); // put it back so it isn't silently lost
+      return;
+    }
+
+    // Push notification for the seller (and any other joined buyers) -
+    // best-effort, never blocks sending the message itself if it fails.
+    apiClient
+      .post(`/deals/${dealId}/chat-notify`, { message: trimmed })
+      .catch((error) => console.warn("chat-notify failed:", error?.message));
   };
 
   const renderItem = ({ item }) => {
@@ -218,14 +248,7 @@ export default function DealChatScreen({ route, navigation }) {
             isBuyer ? styles.bubbleRight : styles.bubbleLeft,
           ]}
         >
-          <Text
-            style={[
-              styles.messageText,
-              isBuyer ? styles.messageTextRight : styles.messageTextLeft,
-            ]}
-          >
-            {item.text}
-          </Text>
+          <Text style={styles.messageText}>{item.text}</Text>
           {messageTime ? (
             <Text style={styles.timeText}>{messageTime}</Text>
           ) : null}
@@ -248,7 +271,11 @@ export default function DealChatScreen({ route, navigation }) {
         style={styles.header}
         titleStyle={styles.headerTitle}
         subtitleStyle={styles.headerSubtitle}
-      />
+      >
+        {isSellerTyping ? (
+          <Text style={styles.headerTypingText}>Seller is typing…</Text>
+        ) : null}
+      </TopPageHeader>
 
       <KeyboardAvoidingView
         style={styles.chatBody}
@@ -260,6 +287,7 @@ export default function DealChatScreen({ route, navigation }) {
         ) : (
           <FlatList
             ref={listRef}
+            style={styles.messageList}
             data={messages}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
@@ -281,12 +309,6 @@ export default function DealChatScreen({ route, navigation }) {
               </View>
             }
           />
-        )}
-
-        {isSellerTyping && (
-          <View style={styles.typingRow}>
-            <Text style={styles.typingText}>Seller is typing…</Text>
-          </View>
         )}
 
         <View style={[styles.inputBar, { marginBottom: bottomInset }]}>
@@ -385,6 +407,9 @@ const createStyles = (theme) =>
   chatBody: {
     flex: 1,
   },
+  messageList: {
+    flex: 1,
+  },
   listContent: {
     paddingHorizontal: 8,
     paddingTop: 8,
@@ -427,12 +452,7 @@ const createStyles = (theme) =>
   messageText: {
     fontSize: 13,
     color: theme.colors.text,
-  },
-  messageTextRight: {
-    color: theme.colors.text,
-  },
-  messageTextLeft: {
-    color: theme.colors.text,
+    lineHeight: 19,
   },
   timeText: {
     fontSize: 9,
@@ -499,14 +519,9 @@ const createStyles = (theme) =>
     alignItems: "center",
     justifyContent: "center",
   },
-  typingRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: theme.colors.chatBg,
-  },
-  typingText: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
+  headerTypingText: {
+    fontSize: 10,
+    color: theme.colors.chatHeaderSubtle,
     fontStyle: "italic",
   },
   });

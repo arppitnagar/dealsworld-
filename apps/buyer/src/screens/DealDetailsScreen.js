@@ -13,7 +13,7 @@ import {
   StyleSheet,
   TextInput,
 } from "react-native";
-import { Heart, MessageCircle } from "lucide-react-native";
+import { Heart } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -670,7 +670,11 @@ export default function DealDetailsScreen({ route, navigation }) {
             navigation.navigate("DealChat", { dealId: deal.id, deal })
           }
         >
-          <MessageCircle size={16} color={theme.colors.onPrimary} />
+          <Ionicons
+            name="chatbubble-ellipses-outline"
+            size={16}
+            color={theme.colors.onPrimary}
+          />
         </GradientIconButton>
         <Text style={styles.headerActionLabel}>Chat</Text>
       </View>

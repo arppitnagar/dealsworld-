@@ -11,13 +11,22 @@
     },
     "android": {
       "package": "com.dealsworld.sellerbuddy",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "../../packages/shared/components/ui/DealBuddy App Icon.png",
         "backgroundColor": "#FFFFFF"
       }
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
-    ]
+      "@react-native-community/datetimepicker",
+      "expo-asset",
+      "expo-notifications"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9b232f80-21ce-4d75-8811-11924244c99d"
+      }
+    },
+    "owner": "arppit"
   }
 }
