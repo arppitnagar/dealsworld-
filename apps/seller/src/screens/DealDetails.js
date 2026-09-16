@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import {
   formatExpiryLabel,
   formatCountdown,
   formatINR,
-  theme,
+  useTheme,
   SkeletonBlock,
   DealDetailsLayout,
   InfoCard,
@@ -40,6 +40,8 @@ function pickSellerDisplayName(...values) {
 }
 
 export default function DealDetails({ route, navigation }) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { user } = useAuth();
   const { profile } = useUserProfile();
   const initialDeal = route?.params?.deal;
@@ -74,7 +76,7 @@ export default function DealDetails({ route, navigation }) {
       : null;
   const target = safeGet(deal, "minGroupSize") || 1;
   const lifecycleStatus = getDealLifecycleStatus(deal);
-  const accentColor = getStatusColor(lifecycleStatus);
+  const accentColor = getStatusColor(lifecycleStatus, theme);
 
   const expiryDate = toDate(safeGet(deal, "expiresAt"));
   const countdown =
@@ -130,7 +132,7 @@ export default function DealDetails({ route, navigation }) {
       value: formatNumber(totalInteractions),
       caption: "Total interactions on this deal",
       icon: "analytics-outline",
-      colors: [theme.colors.primary, theme.colors.purple],
+      colors: [theme.colors.primary, theme.colors.primaryDeep],
     },
     {
       key: "views",
@@ -138,7 +140,7 @@ export default function DealDetails({ route, navigation }) {
       value: viewsCount !== null ? formatNumber(viewsCount) : "-",
       caption: "Total deal views",
       icon: "eye-outline",
-      colors: [theme.colors.primary, theme.colors.purple],
+      colors: [theme.colors.primary, theme.colors.primaryDeep],
     },
     {
       key: "favorites",
@@ -289,7 +291,7 @@ export default function DealDetails({ route, navigation }) {
   const GradientIconButton = ({ onPress, children }) => (
     <TouchableOpacity onPress={onPress} style={styles.headerIconButton}>
       <LinearGradient
-        colors={[theme.colors.primary, theme.colors.purple]}
+        colors={[theme.colors.primary, theme.colors.primaryDeep]}
         style={styles.headerIconGradient}
       >
         <View style={styles.headerIconInner}>{children}</View>
@@ -478,7 +480,8 @@ export default function DealDetails({ route, navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.dashboardBg },
   scrollContent: {
     paddingHorizontal: 20,

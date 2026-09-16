@@ -495,7 +495,7 @@ export default function DealDetailsScreen({ route, navigation }) {
       value: formatNumber(totalInteractions),
       caption: "Total interactions on this deal",
       icon: "analytics-outline",
-      colors: [theme.colors.primary, theme.colors.purple],
+      colors: [theme.colors.primary, theme.colors.primaryDeep],
     },
     {
       key: "favorite",
@@ -619,7 +619,7 @@ export default function DealDetailsScreen({ route, navigation }) {
       style={styles.headerIconButton}
     >
       <LinearGradient
-        colors={[theme.colors.primary, theme.colors.purple]}
+        colors={[theme.colors.primary, theme.colors.primaryDeep]}
         style={styles.headerIconGradient}
       >
         <View style={styles.headerIconInner}>{children}</View>

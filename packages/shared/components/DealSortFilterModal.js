@@ -126,7 +126,7 @@ export function DealSortModal({
         />
         <View style={styles.sheet}>
           <LinearGradient
-            colors={[theme.colors.primary, theme.colors.purple]}
+            colors={[theme.colors.primary, theme.colors.primaryDeep]}
             style={styles.sortHeaderGradient}
           >
             <View style={styles.sortHeaderRow}>
@@ -287,7 +287,7 @@ export function DealFilterModal({
         />
         <View style={styles.filterSheet}>
           <LinearGradient
-            colors={[theme.colors.primary, theme.colors.purple]}
+            colors={[theme.colors.primary, theme.colors.primaryDeep]}
             style={styles.sortHeaderGradient}
           >
             <View style={styles.sortHeaderRow}>

@@ -27,7 +27,7 @@ import * as Yup from "yup";
 import { Ionicons } from "@expo/vector-icons";
 import {
   AppButton,
-  theme,
+  useTheme,
   getFormStyles,
   DealFormFields,
   TopPageHeader,
@@ -35,7 +35,6 @@ import {
 import { useAddresses } from "../hooks/useAddresses";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
-const formStyles = getFormStyles(theme);
 /* ---------- CATEGORY OPTIONS ---------- */
 const CATEGORIES = [
   { label: "Food & Beverages", icon: "🍔" },
@@ -136,6 +135,9 @@ const dealSchema = Yup.object().shape({
  * Additionally, there are styles defined for the component
  */
 export default function CreateDealScreen({ route, navigation }) {
+  const { theme } = useTheme();
+  const formStyles = useMemo(() => getFormStyles(theme), [theme]);
+  const styles = useMemo(() => createStyles(theme, formStyles), [theme, formStyles]);
   const { user } = useAuth();
   const { profile } = useUserProfile();
   // 1. Detect if we are in Edit/View mode
@@ -1050,7 +1052,8 @@ export default function CreateDealScreen({ route, navigation }) {
 }
 
 /* ---------- STYLES ---------- */
-const styles = StyleSheet.create({
+const createStyles = (theme, formStyles) =>
+  StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.dashboardBg,

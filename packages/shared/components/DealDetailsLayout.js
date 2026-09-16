@@ -327,7 +327,7 @@ export default function DealDetailsLayout({
     <View style={styles.screen}>
       {isDashboard ? (
         <LinearGradient
-          colors={[theme.colors.primary, theme.colors.purple]}
+          colors={[theme.colors.primary, theme.colors.primaryDeep]}
           style={[styles.headerGradient, { paddingTop: topInset }]}
         >
           <View style={[styles.headerBar, { backgroundColor: "transparent" }]}>

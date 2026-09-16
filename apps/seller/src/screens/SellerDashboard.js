@@ -29,7 +29,7 @@ import {
   getStatusLabel,
   toDate,
   formatDate,
-  theme,
+  useTheme,
   CardHeader,
   TopPageHeader,
   DEAL_SORT_FIELDS,
@@ -46,7 +46,6 @@ import { useUserProfile } from "../hooks/useUserProfile";
 import { useNotifications } from "../hooks/useNotifications";
 
 const SPACING = 20;
-const cardStyles = getCardStyles(theme);
 const STATUS_FILTERS = [
   { key: "active", label: "Active" },
   { key: "pending", label: "Pending" },
@@ -57,26 +56,30 @@ const STATUS_FILTERS = [
 const SORT_FIELDS = DEAL_SORT_FIELDS;
 const FILTER_FIELDS = DEAL_FILTER_FIELDS;
 
-const FilterChip = ({ label, count, isSelected, onPress }) => (
-  <TouchableOpacity
-    style={[
-      styles.filterChip,
-      isSelected ? styles.filterChipActive : styles.filterChipIdle,
-    ]}
-    onPress={onPress}
-  >
-    <Text
-      style={[
-        styles.filterChipText,
-        isSelected ? styles.filterChipTextActive : styles.filterChipTextIdle,
-      ]}
-    >
-      {count !== null && count !== undefined ? `${label} (${count})` : label}
-    </Text>
-  </TouchableOpacity>
-);
-
 export default function SellerDashboard({ navigation }) {
+  const { theme } = useTheme();
+  const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
+  const styles = useMemo(() => createStyles(theme, cardStyles), [theme, cardStyles]);
+
+  const FilterChip = ({ label, count, isSelected, onPress }) => (
+    <TouchableOpacity
+      style={[
+        styles.filterChip,
+        isSelected ? styles.filterChipActive : styles.filterChipIdle,
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.filterChipText,
+          isSelected ? styles.filterChipTextActive : styles.filterChipTextIdle,
+        ]}
+      >
+        {count !== null && count !== undefined ? `${label} (${count})` : label}
+      </Text>
+    </TouchableOpacity>
+  );
+
   const { user } = useAuth();
   const { profile } = useUserProfile();
   const { unreadCount } = useNotifications();
@@ -581,7 +584,7 @@ export default function SellerDashboard({ navigation }) {
             sortedDeals.map((deal) => {
               const joins = deal.joinedUsers || 0;
               const lifecycleStatus = getDealDisplayStatus(deal, now);
-              const accentColor = getStatusColor(lifecycleStatus);
+              const accentColor = getStatusColor(lifecycleStatus, theme);
               const expiryDate = toDate(deal.expiresAt);
               const endsInLabel =
                 expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
@@ -848,7 +851,8 @@ function getDealDisplayStatus(deal, nowMs = Date.now()) {
   return lifecycleStatus;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme, cardStyles) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.dashboardBg },
   center: {
     flex: 1,

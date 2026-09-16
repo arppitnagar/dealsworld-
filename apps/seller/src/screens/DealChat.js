@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -27,9 +27,11 @@ import {
   serverTimestamp,
   where,
 } from "firebase/firestore";
-import { theme, ChatSkeleton, TopPageHeader, AppInput } from "@dealsworld/shared";
+import { useTheme, ChatSkeleton, TopPageHeader, AppInput } from "@dealsworld/shared";
 
 export default function DealChat({ route, navigation }) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const deal = route?.params?.deal;
   const dealId = deal?.id;
   const [messages, setMessages] = useState([]);
@@ -345,6 +347,8 @@ function getStatusLevel(deliveredAt, seenAt) {
 }
 
 function StatusIndicator({ level }) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const isSeen = level === "seen";
   const strokeColor = isSeen
     ? theme.colors.chatStatusSeen
@@ -377,7 +381,8 @@ function StatusIndicator({ level }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.chatBg,

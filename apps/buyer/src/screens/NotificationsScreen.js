@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { EmptyState, toDate, useTheme } from "@dealsworld/shared";
+import { EmptyState, toDate, useTheme, TopPageHeader } from "@dealsworld/shared";
 import { useNotifications } from "../hooks/useNotifications";
 
 export default function NotificationsScreen({ navigation }) {
@@ -70,15 +70,11 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={18} color={theme.colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-      </View>
+      <TopPageHeader
+        title="Notifications"
+        onBack={() => navigation.goBack()}
+        rounded
+      />
 
       {notifications.length === 0 && !loading ? (
         <View style={styles.emptyWrap}>
@@ -117,30 +113,9 @@ const createStyles = (theme) =>
     screen: {
       flex: 1,
       backgroundColor: theme.colors.dashboardBg,
-      padding: 20,
-    },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      marginBottom: 16,
-    },
-    backBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: theme.colors.surfaceMuted,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    headerTitle: {
-      fontSize: 20,
-      fontWeight: "800",
-      color: theme.colors.text,
     },
     listContent: {
+      padding: 20,
       paddingBottom: 24,
       gap: 12,
     },
@@ -197,6 +172,7 @@ const createStyles = (theme) =>
     emptyWrap: {
       flex: 1,
       justifyContent: "center",
+      paddingHorizontal: 20,
       paddingBottom: 80,
     },
   });
