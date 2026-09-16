@@ -7,11 +7,11 @@ const ThemeContext = createContext({
   setMode: () => {},
 });
 
-export const ThemeProvider = ({ initialMode = "light", children }) => {
+export const ThemeProvider = ({ initialMode = "light", app = null, children }) => {
   const [mode, setMode] = useState(initialMode);
   const value = useMemo(
-    () => ({ mode, theme: createTheme(mode), setMode }),
-    [mode],
+    () => ({ mode, theme: createTheme(mode, app), setMode }),
+    [mode, app],
   );
 
   return (

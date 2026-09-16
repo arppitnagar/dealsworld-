@@ -1,8 +1,9 @@
 export const lightColors = {
   primary: "#2563eb",
+  primaryDeep: "#1D4ED8",
   onPrimary: "#ffffff",
   text: "#0F172A",
-  textMuted: "#64748B",
+  textMuted: "#475569",
   background: "#FFFFFF",
   surface: "#FFFFFF",
   surfaceMuted: "#F3F4F6",
@@ -32,6 +33,15 @@ export const lightColors = {
   amberText: "#92400E",
   amberAccent: "#B45309",
   amberChipBg: "#FFEDD5",
+  // Deal-content accent — constant across the buyer and seller apps (discount
+  // badge, join-progress bar/percent). Independent of the per-app primary
+  // color role below, and chosen for AA contrast with white text (5.2:1).
+  dealAccent: "#C2410C",
+  dealAccentSoft: "#FFF7ED",
+  // AA-safe text-on-tint variants for semantic status colors (the brighter
+  // success/danger tokens above fail 4.5:1 on their own light tint backgrounds).
+  textOnSuccessTint: "#047857",
+  textOnDangerTint: "#B91C1C",
   chatBg: "#ECE5DD",
   chatHeader: "#075E54",
   chatHeaderSubtle: "rgba(255,255,255,0.75)",
@@ -60,6 +70,7 @@ export const lightColors = {
 
 export const darkColors = {
   primary: "#60A5FA",
+  primaryDeep: "#3B82F6",
   onPrimary: "#0B1220",
   text: "#F8FAFC",
   textMuted: "#94A3B8",
@@ -92,6 +103,10 @@ export const darkColors = {
   amberText: "#FCD34D",
   amberAccent: "#FDBA74",
   amberChipBg: "#3A2A0E",
+  dealAccent: "#C2410C",
+  dealAccentSoft: "#3A2A0E",
+  textOnSuccessTint: "#6EE7B7",
+  textOnDangerTint: "#FCA5A5",
   chatBg: "#0B1220",
   chatHeader: "#0F766E",
   chatHeaderSubtle: "rgba(255,255,255,0.75)",
@@ -116,6 +131,48 @@ export const darkColors = {
   statusScheduled: "#A78BFA",
   statusExpired: "#FBBF24",
   statusDraft: "#64748B",
+};
+
+// Per-app color role overrides. Buyer (DealBuddy) leads with a deep, AA-safe
+// orange; seller (SellerBuddy) leads with the existing brand blue. Both are
+// distinct from `dealAccent` above, which never changes per app. Merged over
+// the base palette by `createTheme(mode, app)` — omit `app` to get the
+// unmodified base colors (what every existing no-arg caller, e.g. the admin
+// app's static `theme` import, continues to see).
+const buyerLightOverrides = {
+  primary: "#C2410C",
+  primaryDeep: "#9A3412",
+  primaryTintBg: "#FFF7ED",
+  primaryTintBorder: "#FDBA74",
+  primaryTintText: "#9A3412",
+};
+const buyerDarkOverrides = {
+  primary: "#FB923C",
+  primaryDeep: "#EA580C",
+  onPrimary: "#1B0D03",
+  primaryTintBg: "#3A1D0B",
+  primaryTintBorder: "#9A3412",
+  primaryTintText: "#FDBA74",
+};
+const sellerLightOverrides = {
+  primary: "#2563EB",
+  primaryDeep: "#1D4ED8",
+  primaryTintBg: "#EFF6FF",
+  primaryTintBorder: "#BFDBFE",
+  primaryTintText: "#1D4ED8",
+};
+const sellerDarkOverrides = {
+  primary: "#60A5FA",
+  primaryDeep: "#3B82F6",
+  onPrimary: "#0B1220",
+  primaryTintBg: "#0F2747",
+  primaryTintBorder: "#1E3A8A",
+  primaryTintText: "#93C5FD",
+};
+
+const APP_OVERRIDES = {
+  buyer: { light: buyerLightOverrides, dark: buyerDarkOverrides },
+  seller: { light: sellerLightOverrides, dark: sellerDarkOverrides },
 };
 
 const getTypography = (colors) => ({
@@ -145,8 +202,10 @@ const getShadow = (colors, mode) => ({
   },
 });
 
-export const createTheme = (mode = "light") => {
-  const colors = mode === "dark" ? darkColors : lightColors;
+export const createTheme = (mode = "light", app = null) => {
+  const base = mode === "dark" ? darkColors : lightColors;
+  const override = APP_OVERRIDES[app]?.[mode === "dark" ? "dark" : "light"];
+  const colors = override ? { ...base, ...override } : base;
   return {
     colors,
     skeleton: {

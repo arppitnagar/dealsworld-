@@ -19,7 +19,8 @@ export const getStatusTokens = (theme = defaultTheme) => ({
   },
   completed: {
     label: statusLabels.completed,
-    color: theme.colors.success,
+    // AA text-on-tint: the brighter `success` token fails 4.5:1 on this bg.
+    color: theme.colors.textOnSuccessTint,
     bg: theme.colors.successSoftAlt,
   },
   expired: {
@@ -29,7 +30,8 @@ export const getStatusTokens = (theme = defaultTheme) => ({
   },
   rejected: {
     label: statusLabels.rejected,
-    color: theme.colors.error,
+    // AA text-on-tint: the brighter `error` token fails 4.5:1 on this bg.
+    color: theme.colors.textOnDangerTint,
     bg: theme.colors.dangerSoftAlt,
   },
   draft: {

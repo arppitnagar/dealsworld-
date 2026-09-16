@@ -65,7 +65,7 @@ export default function TopPageHeader({
 
   return (
     <LinearGradient
-      colors={[theme.colors.primary, theme.colors.purple]}
+      colors={[theme.colors.primary, theme.colors.primaryDeep]}
       style={[
         styles.wrapper,
         rounded ? styles.wrapperRounded : null,

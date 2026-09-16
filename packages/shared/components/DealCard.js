@@ -59,15 +59,6 @@ export default function DealCard({
       ? Math.round(((original - discount) / original) * 100)
       : null;
 
-  const progressFillColor =
-    progressRatio >= 0.85
-      ? theme.colors.success
-      : progressRatio >= 0.6
-        ? theme.colors.warningBright
-        : progressRatio >= 0.35
-          ? theme.colors.amberBorder
-          : theme.colors.danger;
-
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -80,7 +71,14 @@ export default function DealCard({
           borderColor: accentColor || theme.colors.border,
           ...cardStyles.shadow,
         },
-        imageWrap: {
+        // Image sits in an unclipped outer wrapper so the floating discount
+        // badge (and the other overlay chips) can overhang its edges without
+        // being cut off by the image's own overflow:hidden clip — only the
+        // inner `imageClip` clips, and only the <Image> itself lives there.
+        imageOuter: {
+          position: "relative",
+        },
+        imageClip: {
           height: 190,
           backgroundColor: theme.colors.surfaceLight,
           overflow: "hidden",
@@ -123,60 +121,33 @@ export default function DealCard({
           alignItems: "center",
           justifyContent: "center",
         },
-        discountTagWrap: {
+        // Floating discount badge — always the app-independent `dealAccent`
+        // orange (deal content, not app chrome). Positioned as a sibling of
+        // the clipped image, hanging over the image/body boundary.
+        discountBadge: {
           position: "absolute",
-          top: -2,
-          right: 56,
-          alignItems: "center",
-        },
-        discountTagString: {
-          width: 2,
-          height: 18,
-          backgroundColor: theme.colors.amberBorder,
-          borderRadius: 1,
-        },
-        discountTag: {
-          minWidth: 86,
-          paddingHorizontal: 10,
+          bottom: -16,
+          right: 16,
+          backgroundColor: theme.colors.dealAccent,
+          borderRadius: 14,
+          paddingHorizontal: 14,
           paddingVertical: 8,
-          borderRadius: 12,
-          backgroundColor: theme.colors.amberChipBg,
-          borderWidth: 1,
-          borderColor: theme.colors.amberBorder,
           alignItems: "center",
-          transform: [{ rotate: "-3deg" }],
+          transform: [{ rotate: "-6deg" }],
+          ...cardStyles.shadow,
         },
-        discountTagHole: {
-          position: "absolute",
-          top: 6,
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-          backgroundColor: theme.colors.surface,
-          borderWidth: 1,
-          borderColor: theme.colors.amberBorder,
+        discountBadgeValue: {
+          fontSize: 16,
+          fontWeight: "900",
+          color: theme.colors.onPrimary,
+          lineHeight: 18,
         },
-        discountTagLabel: {
-          fontSize: 9,
-          fontWeight: "700",
-          color: theme.colors.amberText,
-          letterSpacing: 0.6,
-        },
-        discountTagValueRow: {
-          flexDirection: "row",
-          alignItems: "baseline",
-          gap: 4,
-          marginTop: 4,
-        },
-        discountTagValue: {
-          fontSize: 18,
+        discountBadgeOff: {
+          fontSize: 8,
           fontWeight: "800",
-          color: theme.colors.text,
-        },
-        discountTagOff: {
-          fontSize: 10,
-          fontWeight: "800",
-          color: theme.colors.textMuted,
+          color: theme.colors.onPrimary,
+          letterSpacing: 1,
+          marginTop: 2,
         },
         body: {
           padding: 16,
@@ -246,7 +217,7 @@ export default function DealCard({
         progressPercent: {
           fontSize: 11,
           fontWeight: "800",
-          color: theme.colors.textMuted,
+          color: theme.colors.dealAccent,
         },
         progressTrack: {
           height: 8,
@@ -257,7 +228,7 @@ export default function DealCard({
         progressFill: {
           height: "100%",
           borderRadius: 999,
-          backgroundColor: progressFillColor,
+          backgroundColor: theme.colors.dealAccent,
         },
         actionRow: {
           alignItems: "flex-end",
@@ -280,32 +251,21 @@ export default function DealCard({
           fontWeight: "800",
         },
       }),
-    [accentColor, cardStyles.shadow, progressFillColor, theme],
+    [accentColor, cardStyles.shadow, theme],
   );
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
-      <View style={styles.imageWrap}>
-        {image ? (
-          <Image source={{ uri: image }} style={styles.image} />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <Ionicons name="image-outline" size={24} color={theme.colors.textMuted} />
-          </View>
-        )}
-        {discountPercent ? (
-          <View style={styles.discountTagWrap}>
-            <View style={styles.discountTagString} />
-            <View style={styles.discountTag}>
-              <View style={styles.discountTagHole} />
-              <Text style={styles.discountTagLabel}>DISCOUNT</Text>
-              <View style={styles.discountTagValueRow}>
-                <Text style={styles.discountTagValue}>{discountPercent}%</Text>
-                <Text style={styles.discountTagOff}>OFF</Text>
-              </View>
+      <View style={styles.imageOuter}>
+        <View style={styles.imageClip}>
+          {image ? (
+            <Image source={{ uri: image }} style={styles.image} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="image-outline" size={24} color={theme.colors.textMuted} />
             </View>
-          </View>
-        ) : null}
+          )}
+        </View>
         {resolvedBadgeLabel ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{resolvedBadgeLabel}</Text>
@@ -314,6 +274,12 @@ export default function DealCard({
         <View style={styles.heartBadge}>
           <Ionicons name="heart-outline" size={18} color={theme.colors.textMuted} />
         </View>
+        {discountPercent ? (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountBadgeValue}>{discountPercent}%</Text>
+            <Text style={styles.discountBadgeOff}>OFF</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.body}>
@@ -379,7 +345,7 @@ export default function DealCard({
           <View style={styles.actionRow}>
             <TouchableOpacity onPress={onActionPress} style={styles.actionButton}>
               <LinearGradient
-                colors={[theme.colors.primary, theme.colors.purple]}
+                colors={[theme.colors.primary, theme.colors.primaryDeep]}
                 style={styles.actionButtonGradient}
               >
                 <Text style={styles.actionText}>{actionLabel}</Text>

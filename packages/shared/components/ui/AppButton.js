@@ -168,7 +168,7 @@ export function AppButton({
     >
       {isPrimary ? (
         <LinearGradient
-          colors={[theme.colors.primary, theme.colors.purple]}
+          colors={[theme.colors.primary, theme.colors.primaryDeep]}
           style={[
             styles.gradientSurface,
             compact ? styles.gradientSurfaceCompact : null,

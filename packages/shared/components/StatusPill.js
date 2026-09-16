@@ -16,7 +16,7 @@ export default function StatusPill({
           alignSelf: "flex-start",
           paddingHorizontal: 8,
           paddingVertical: 4,
-          borderRadius: 8,
+          borderRadius: 999,
         },
         text: {
           fontSize: 10,
