@@ -57,12 +57,11 @@ const STATUS_FILTERS = [
 const SORT_FIELDS = DEAL_SORT_FIELDS;
 const FILTER_FIELDS = DEAL_FILTER_FIELDS;
 
-const FilterChip = ({ label, count, isSelected, onPress, accentColor }) => (
+const FilterChip = ({ label, count, isSelected, onPress }) => (
   <TouchableOpacity
     style={[
       styles.filterChip,
       isSelected ? styles.filterChipActive : styles.filterChipIdle,
-      isSelected && { backgroundColor: accentColor, borderColor: accentColor },
     ]}
     onPress={onPress}
   >
@@ -364,7 +363,7 @@ export default function SellerDashboard({ navigation }) {
         activeOpacity={0.9}
       >
         <LinearGradient
-          colors={[theme.colors.primary, theme.colors.purple]}
+          colors={[theme.colors.primary, theme.colors.primaryDeep]}
           style={styles.headerIconGradient}
         >
           <View style={styles.headerIconInner}>{icon}</View>
@@ -532,14 +531,6 @@ export default function SellerDashboard({ navigation }) {
           >
             {STATUS_FILTERS.map((filter) => {
               const count = stats[filter.key] ?? 0;
-              const accentColor =
-                filter.key === "active"
-                  ? theme.colors.warningBright
-                  : filter.key === "pending"
-                    ? theme.colors.purple
-                    : filter.key === "rejected"
-                      ? theme.colors.error
-                      : theme.colors.statusExpired;
               return (
                 <FilterChip
                   key={filter.key}
@@ -547,7 +538,6 @@ export default function SellerDashboard({ navigation }) {
                   count={count}
                   isSelected={selectedFilter === filter.key}
                   onPress={() => handleFilterPress(filter.key)}
-                  accentColor={accentColor}
                 />
               );
             })}
@@ -1167,8 +1157,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   filterChipActive: {
-    backgroundColor: theme.colors.warningBright,
-    borderColor: theme.colors.warningBright,
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   filterChipIdle: {
     backgroundColor: theme.colors.surface,

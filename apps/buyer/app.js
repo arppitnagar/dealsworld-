@@ -10,7 +10,7 @@ import {
   ThemeProvider,
   useTheme,
 } from "@dealsworld/shared";
-import HomeScreen from "./src/screens/HomeScreen";
+import BuyerTabs from "./src/navigation/BuyerTabs";
 import DealDetailsScreen from "./src/screens/DealDetailsScreen";
 import DealChatScreen from "./src/screens/DealChatScreen";
 import StyleGuideScreen from "./src/screens/StyleGuideScreen";
@@ -67,7 +67,7 @@ function AppNavigator() {
         </Stack.Screen>
       ) : (
         <>
-          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="MainTabs" component={BuyerTabs} />
           <Stack.Screen name="DealDetails" component={DealDetailsScreen} />
           <Stack.Screen name="DealChat" component={DealChatScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
@@ -151,7 +151,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ThemeProvider initialMode="light">
+        <ThemeProvider initialMode="light" app="buyer">
           <ThemeBootstrap>
             <NavigationContainer>
               <AppNavigator />

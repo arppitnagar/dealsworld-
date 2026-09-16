@@ -6,7 +6,6 @@ import {
   ScrollView,
   RefreshControl,
   StyleSheet,
-  Image,
   StatusBar,
 } from "react-native";
 import {
@@ -18,7 +17,6 @@ import {
   Eye,
   Users,
   Zap,
-  Star,
 } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,13 +33,12 @@ import {
 import {
   useTheme,
   EmptyState,
-  getStatusLabel,
-  getCardStyles,
   CardHeader,
   AppInput,
   toDate,
   DealBuddyLoadingScreen,
   TopPageHeader,
+  DealCard,
   DEAL_SORT_FIELDS,
   DEAL_FILTER_FIELDS,
   normalizeDealFilterText,
@@ -61,200 +58,6 @@ const STATUS_FILTERS = [
 
 const SORT_FIELDS = DEAL_SORT_FIELDS;
 const FILTER_FIELDS = DEAL_FILTER_FIELDS;
-
-const DealCard = ({
-  deal,
-  navigation,
-  isFavorite,
-  isJoined,
-  isViewed,
-  isHot,
-  onToggleFavorite,
-  styles,
-  theme,
-  accentColor,
-}) => {
-  const metaIconSize = 18;
-  const joinCount = getJoinCount(deal);
-  const minGroupSize = getMinGroupSize(deal);
-  const progressRatio =
-    minGroupSize > 0 ? Math.min(joinCount / minGroupSize, 1) : 0;
-  const progressLabel =
-    minGroupSize > 0
-      ? `Joined ${formatCount(joinCount)} of ${formatCount(minGroupSize)}`
-      : `Joined ${formatCount(joinCount)}`;
-  const progressColor = getProgressColor(progressRatio, theme);
-  const expiryMs = getExpiryMs(deal);
-  const originalPrice = Number(deal?.originalPrice);
-  const discountPrice = Number(deal?.discountPrice);
-  const discountPercent =
-    Number.isFinite(originalPrice) &&
-    Number.isFinite(discountPrice) &&
-    originalPrice > discountPrice
-      ? Math.round(((originalPrice - discountPrice) / originalPrice) * 100)
-      : null;
-  const viewsCountRaw = deal?.viewsCount ?? deal?.views ?? 0;
-  const viewsCount = Number.isFinite(Number(viewsCountRaw))
-    ? Number(viewsCountRaw)
-    : 0;
-  const favoritesCountRaw = deal?.favoritesCount ?? deal?.favouritesCount ?? 0;
-  const favoritesCount = Number.isFinite(Number(favoritesCountRaw))
-    ? Number(favoritesCountRaw)
-    : 0;
-  const ratingCountRaw = deal?.ratingCount ?? 0;
-  const ratingCount = Number.isFinite(Number(ratingCountRaw))
-    ? Number(ratingCountRaw)
-    : 0;
-  const ratingAvgRaw = deal?.ratingAvg ?? deal?.rating ?? null;
-  const ratingAvg = Number.isFinite(Number(ratingAvgRaw))
-    ? Number(ratingAvgRaw)
-    : null;
-  const ratingLabel =
-    ratingCount > 0 && ratingAvg !== null
-      ? `${ratingAvg.toFixed(1)} (${formatCount(ratingCount)})`
-      : "0.0 (0)";
-  const dealImage = deal?.imageUrl || deal?.image || null;
-  const dealType = getDealType({ isJoined, isFavorite, isViewed, isHot });
-  const badgeLabel = deal?.location ? String(deal.location) : null;
-  const sellerLabel =
-    getSellerDisplayName(deal) || "Deal Buddy";
-  const endsInLabel = formatEndsIn(expiryMs);
-  const showSubtitle = Boolean(sellerLabel || endsInLabel);
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() => navigation.navigate("DealDetails", { dealId: deal.id })}
-      style={[styles.card, accentColor ? { borderColor: accentColor } : null]}
-    >
-      <View style={styles.cardImageWrap}>
-        {dealImage ? (
-          <Image source={{ uri: dealImage }} style={styles.cardImage} />
-        ) : (
-          <View style={styles.cardImagePlaceholder}>
-            <Ionicons
-              name="image-outline"
-              size={26}
-              color={theme.colors.textMuted}
-            />
-          </View>
-        )}
-        {discountPercent ? (
-          <View style={styles.discountTagWrap}>
-            <View style={styles.discountTagString} />
-            <View style={styles.discountTag}>
-              <View style={styles.discountTagHole} />
-              <Text style={styles.discountTagLabel}>DISCOUNT</Text>
-              <View style={styles.discountTagValueRow}>
-                <Text style={styles.discountTagValue}>{discountPercent}%</Text>
-                <Text style={styles.discountTagOff}>OFF</Text>
-              </View>
-            </View>
-          </View>
-        ) : null}
-        {badgeLabel ? (
-          <View style={[styles.cardBadge, getDealBadgeStyle(dealType, theme)]}>
-            <Text style={styles.cardBadgeText}>{badgeLabel}</Text>
-          </View>
-        ) : null}
-        <TouchableOpacity
-          style={styles.cardHeart}
-          onPress={(event) => {
-            event?.stopPropagation?.();
-            onToggleFavorite?.(deal.id);
-          }}
-        >
-          <Heart
-            size={18}
-            color={isFavorite ? theme.colors.danger : theme.colors.textMuted}
-            fill={isFavorite ? theme.colors.danger : "transparent"}
-          />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.cardBody}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle} numberOfLines={2}>
-            {deal.title}
-          </Text>
-        </View>
-        {showSubtitle ? (
-          <View style={styles.cardSubtitleRow}>
-            <Text style={styles.cardSubtitle} numberOfLines={1}>
-              {sellerLabel}
-            </Text>
-            {endsInLabel ? (
-              <Text style={styles.cardExpiry} numberOfLines={1}>
-                {endsInLabel}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-
-        <View style={styles.cardMetaRow}>
-          <View style={styles.metaChip}>
-            <Eye size={metaIconSize} color={theme.colors.textMuted} />
-            <Text style={styles.metaText}>{formatCount(viewsCount)}</Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Users size={metaIconSize} color={theme.colors.primary} />
-            <Text style={styles.metaText}>{formatCount(joinCount)}</Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Heart size={metaIconSize} color={theme.colors.danger} />
-            <Text style={styles.metaText}>{formatCount(favoritesCount)}</Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Star size={metaIconSize} color={theme.colors.warningBright} />
-            <Text style={styles.metaText}>{ratingLabel}</Text>
-          </View>
-          {isHot ? (
-            <View style={styles.metaChip}>
-              <Zap size={metaIconSize} color={theme.colors.purple} />
-              <Text style={styles.metaText}>Hot</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={styles.progressWrap}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>{progressLabel}</Text>
-            <Text style={styles.progressPercent}>
-              {Math.round(progressRatio * 100)}%
-            </Text>
-          </View>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${Math.round(progressRatio * 100)}%`,
-                  backgroundColor: progressColor,
-                },
-              ]}
-            />
-          </View>
-        </View>
-
-        <View style={styles.cardActionRow}>
-          <TouchableOpacity
-            style={styles.cardActionBtn}
-            onPress={() =>
-              navigation.navigate("DealDetails", { dealId: deal.id })
-            }
-          >
-            <LinearGradient
-              colors={[theme.colors.primary, theme.colors.purple]}
-              style={styles.cardActionGradient}
-            >
-              <Text style={styles.cardActionText}>View Deal</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-};
 
 const FilterChip = ({
   label,
@@ -278,7 +81,7 @@ const FilterChip = ({
       <LinearGradient
         colors={
           isSelected
-            ? [theme.colors.primary, theme.colors.purple]
+            ? [theme.colors.primary, theme.colors.primaryDeep]
             : [accentColor, accentColor]
         }
         style={styles.filterChipGradient}
@@ -333,11 +136,7 @@ const FilterChip = ({
 export default function HomeScreen({ navigation }) {
   const { data: deals, isLoading, refetch } = useDeals();
   const { theme } = useTheme();
-  const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
-  const styles = useMemo(
-    () => createStyles(theme, cardStyles),
-    [theme, cardStyles],
-  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [now, setNow] = useState(Date.now());
   const [searchText, setSearchText] = useState("");
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -432,7 +231,7 @@ export default function HomeScreen({ navigation }) {
         activeOpacity={0.9}
       >
         <LinearGradient
-          colors={[theme.colors.primary, theme.colors.purple]}
+          colors={[theme.colors.primary, theme.colors.primaryDeep]}
           style={styles.headerIconGradient}
         >
           <View style={styles.headerIconInner}>{icon}</View>
@@ -798,27 +597,54 @@ export default function HomeScreen({ navigation }) {
           />
 
           {sortedDeals?.length > 0 ? (
-            sortedDeals.map((deal) => (
-              <DealCard
-                key={deal.id}
-                deal={deal}
-                navigation={navigation}
-                isFavorite={favoriteIds.has(deal.id)}
-                isJoined={joinedIds.has(deal.id)}
-                isViewed={viewedIds.has(deal.id)}
-                isHot={isHotDeal(deal)}
-                onToggleFavorite={handleToggleFavorite}
-                styles={styles}
-                theme={theme}
-                accentColor={getDealAccentColor({
-                  isJoined: joinedIds.has(deal.id),
-                  isFavorite: favoriteIds.has(deal.id),
-                  isViewed: viewedIds.has(deal.id),
-                  isHot: isHotDeal(deal),
-                  theme,
-                })}
-              />
-            ))
+            sortedDeals.map((deal) => {
+              const expiryMs = getExpiryMs(deal);
+              const viewsCountRaw = deal?.viewsCount ?? deal?.views ?? 0;
+              const favoritesCountRaw =
+                deal?.favoritesCount ?? deal?.favouritesCount ?? 0;
+              return (
+                <DealCard
+                  key={deal.id}
+                  title={deal.title}
+                  category={deal?.category || null}
+                  image={deal?.imageUrl || deal?.image || null}
+                  joins={getJoinCount(deal)}
+                  targetCount={getMinGroupSize(deal)}
+                  accentColor={getDealAccentColor({
+                    isJoined: joinedIds.has(deal.id),
+                    isFavorite: favoriteIds.has(deal.id),
+                    isViewed: viewedIds.has(deal.id),
+                    isHot: isHotDeal(deal),
+                    theme,
+                  })}
+                  viewsCount={
+                    Number.isFinite(Number(viewsCountRaw))
+                      ? Number(viewsCountRaw)
+                      : 0
+                  }
+                  favoritesCount={
+                    Number.isFinite(Number(favoritesCountRaw))
+                      ? Number(favoritesCountRaw)
+                      : 0
+                  }
+                  ratingAvg={deal?.ratingAvg ?? deal?.rating ?? null}
+                  ratingCount={deal?.ratingCount ?? 0}
+                  originalPrice={deal?.originalPrice}
+                  discountPrice={deal?.discountPrice}
+                  badgeLabel={deal?.location ? String(deal.location) : null}
+                  expiryLabel={formatEndsIn(expiryMs)}
+                  isFavorite={favoriteIds.has(deal.id)}
+                  onFavoritePress={() => handleToggleFavorite(deal.id)}
+                  actionLabel="View Deal"
+                  onActionPress={() =>
+                    navigation.navigate("DealDetails", { dealId: deal.id })
+                  }
+                  onPress={() =>
+                    navigation.navigate("DealDetails", { dealId: deal.id })
+                  }
+                />
+              );
+            })
           ) : (
             <View style={styles.emptyWrap}>
               <EmptyState
@@ -891,15 +717,6 @@ function getExpiryMs(deal) {
   return expiryTimeMs || null;
 }
 
-function getSellerDisplayName(deal) {
-  const candidates = [deal?.sellerName, deal?.sellerDisplayName, deal?.vendorName];
-  for (const candidate of candidates) {
-    const text = String(candidate || "").trim();
-    if (text) return text;
-  }
-  return null;
-}
-
 function getJoinCount(deal) {
   const joinCountRaw = deal?.currentJoins ?? deal?.joinedUsers ?? 0;
   return Number.isFinite(Number(joinCountRaw)) ? Number(joinCountRaw) : 0;
@@ -915,57 +732,6 @@ function isHotDeal(deal) {
   if (!minGroupSize) return false;
   const joinCount = getJoinCount(deal);
   return joinCount / minGroupSize >= 0.8;
-}
-
-function getDealType({ isJoined, isFavorite, isViewed, isHot }) {
-  if (isJoined) return "joined";
-  if (isFavorite) return "favourite";
-  if (isViewed) return "viewed";
-  if (isHot) return "hot";
-  return "new";
-}
-
-function getDealTypeLabel(type, status) {
-  switch (type) {
-    case "joined":
-      return "Joined";
-    case "favourite":
-      return "Favourite";
-    case "viewed":
-      return "Viewed";
-    case "hot":
-      return "Hot Deal";
-    case "new":
-      return "New";
-    default:
-      return status ? getStatusLabel(status) : "Deal";
-  }
-}
-
-function getDealBadgeStyle(type, theme) {
-  if (!theme?.colors) return null;
-  switch (type) {
-    case "joined":
-      return { backgroundColor: theme.colors.success };
-    case "favourite":
-      return { backgroundColor: theme.colors.danger };
-    case "viewed":
-      return { backgroundColor: theme.colors.primary };
-    case "hot":
-      return { backgroundColor: theme.colors.purple };
-    case "new":
-      return { backgroundColor: theme.colors.warningBright };
-    default:
-      return null;
-  }
-}
-
-function getProgressColor(ratio, theme) {
-  if (!theme?.colors) return null;
-  if (ratio >= 0.85) return theme.colors.success;
-  if (ratio >= 0.6) return theme.colors.warningBright;
-  if (ratio >= 0.35) return theme.colors.amberBorder;
-  return theme.colors.danger;
 }
 
 function getTimeMs(value) {
@@ -1150,7 +916,7 @@ function getDealAccentColor({ isJoined, isFavorite, isViewed, isHot, theme }) {
   return theme.colors.warningBright;
 }
 
-const createStyles = (theme, cardStyles) =>
+const createStyles = (theme) =>
   StyleSheet.create({
     screen: {
       flex: 1,
@@ -1530,218 +1296,5 @@ const createStyles = (theme, cardStyles) =>
     emptyWrap: {
       paddingVertical: 80,
       alignItems: "center",
-    },
-    card: {
-      marginBottom: 20,
-      overflow: "hidden",
-      backgroundColor: theme.colors.surface,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      ...cardStyles.shadow,
-    },
-    cardImageWrap: {
-      height: 190,
-      backgroundColor: theme.colors.surfaceLight,
-      overflow: "hidden",
-    },
-    cardImage: {
-      width: "100%",
-      height: "100%",
-    },
-    cardImagePlaceholder: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: theme.colors.surfaceLight,
-    },
-    cardBadge: {
-      position: "absolute",
-      top: 12,
-      left: 12,
-      backgroundColor: theme.colors.warningBright,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 999,
-    },
-    cardBadgeText: {
-      color: theme.colors.onPrimary,
-      fontSize: 10,
-      fontWeight: "800",
-      letterSpacing: 0.6,
-      textTransform: "uppercase",
-    },
-    cardHeart: {
-      position: "absolute",
-      top: 12,
-      right: 12,
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: theme.colors.surfaceGlass,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    discountTagWrap: {
-      position: "absolute",
-      top: -2,
-      right: 56,
-      alignItems: "center",
-    },
-    discountTagString: {
-      width: 2,
-      height: 18,
-      backgroundColor: theme.colors.amberBorder,
-      borderRadius: 1,
-    },
-    discountTag: {
-      minWidth: 86,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-      borderRadius: 12,
-      backgroundColor: theme.colors.amberChipBg,
-      borderWidth: 1,
-      borderColor: theme.colors.amberBorder,
-      alignItems: "center",
-      transform: [{ rotate: "-3deg" }],
-    },
-    discountTagHole: {
-      position: "absolute",
-      top: 6,
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.amberBorder,
-    },
-    discountTagLabel: {
-      fontSize: 9,
-      fontWeight: "700",
-      color: theme.colors.amberText,
-      letterSpacing: 0.6,
-    },
-    discountTagValueRow: {
-      flexDirection: "row",
-      alignItems: "baseline",
-      gap: 4,
-      marginTop: 4,
-    },
-    discountTagValue: {
-      fontSize: 18,
-      fontWeight: "800",
-      color: theme.colors.text,
-    },
-    discountTagOff: {
-      fontSize: 10,
-      fontWeight: "800",
-      color: theme.colors.textMuted,
-    },
-    cardBody: {
-      padding: 16,
-      gap: 8,
-    },
-    cardTitleRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      gap: 10,
-    },
-    cardTitle: {
-      flex: 1,
-      fontSize: 18,
-      fontWeight: "900",
-      color: theme.colors.text,
-    },
-    cardDiscount: {
-      fontSize: 16,
-      fontWeight: "800",
-      color: theme.colors.warningBright,
-    },
-    cardSubtitle: {
-      flex: 1,
-      fontSize: 12,
-      color: theme.colors.textMuted,
-    },
-    cardSubtitleRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 8,
-    },
-    cardExpiry: {
-      fontSize: 12,
-      fontWeight: "800",
-      color: theme.colors.warningBright,
-    },
-    cardMetaRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      flexWrap: "wrap",
-    },
-    metaChip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor: theme.colors.surfaceLight,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 8,
-    },
-    metaText: {
-      fontSize: 11,
-      fontWeight: "700",
-      color: theme.colors.textMuted,
-    },
-    cardActionRow: {
-      alignItems: "flex-end",
-    },
-    progressWrap: {
-      gap: 6,
-    },
-    progressHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    progressLabel: {
-      fontSize: 11,
-      fontWeight: "700",
-      color: theme.colors.textMuted,
-    },
-    progressPercent: {
-      fontSize: 11,
-      fontWeight: "800",
-      color: theme.colors.textMuted,
-    },
-    progressTrack: {
-      height: 8,
-      borderRadius: 999,
-      backgroundColor: theme.colors.surfaceLight,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: "100%",
-      borderRadius: 999,
-    },
-    cardActionBtn: {
-      borderRadius: 14,
-      overflow: "hidden",
-      ...cardStyles.shadow,
-    },
-    cardActionGradient: {
-      borderRadius: 14,
-      paddingHorizontal: 16,
-      paddingVertical: 9,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    cardActionText: {
-      color: theme.colors.onPrimary,
-      fontSize: 13,
-      fontWeight: "800",
     },
   });

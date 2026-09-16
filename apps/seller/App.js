@@ -5,7 +5,7 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import DealDetails from "./src/screens/DealDetails";
 import DealChat from "./src/screens/DealChat";
-import SellerDashboard from "./src/screens/SellerDashboard";
+import SellerTabs from "./src/navigation/SellerTabs";
 import CreateDealScreen from "./src/screens/CreateDealScreen";
 import StyleGuideScreen from "./src/screens/StyleGuideScreen";
 import LoginScreen from "./src/screens/LoginScreen";
@@ -69,7 +69,7 @@ function AppNavigator() {
         </Stack.Screen>
       ) : (
         <>
-          <Stack.Screen name="SellerDashboard" component={SellerDashboard} />
+          <Stack.Screen name="MainTabs" component={SellerTabs} />
           <Stack.Screen name="CreateDeal" component={CreateDealScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="UserDetails" component={UserDetailsScreen} />
@@ -169,7 +169,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ThemeProvider initialMode="light">
+        <ThemeProvider initialMode="light" app="seller">
           <ThemeBootstrap>
             <NavigationContainer>
               <AppNavigator />

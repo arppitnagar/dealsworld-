@@ -33,6 +33,8 @@ export default function DealCard({
   onPress,
   actionLabel,
   onActionPress,
+  isFavorite = false,
+  onFavoritePress,
 }) {
   const { theme } = useTheme();
   const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
@@ -271,9 +273,20 @@ export default function DealCard({
             <Text style={styles.badgeText}>{resolvedBadgeLabel}</Text>
           </View>
         ) : null}
-        <View style={styles.heartBadge}>
-          <Ionicons name="heart-outline" size={18} color={theme.colors.textMuted} />
-        </View>
+        <TouchableOpacity
+          style={styles.heartBadge}
+          disabled={!onFavoritePress}
+          onPress={(event) => {
+            event?.stopPropagation?.();
+            onFavoritePress?.();
+          }}
+        >
+          <Ionicons
+            name={isFavorite ? "heart" : "heart-outline"}
+            size={18}
+            color={isFavorite ? theme.colors.danger : theme.colors.textMuted}
+          />
+        </TouchableOpacity>
         {discountPercent ? (
           <View style={styles.discountBadge}>
             <Text style={styles.discountBadgeValue}>{discountPercent}%</Text>

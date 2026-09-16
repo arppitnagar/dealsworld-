@@ -687,7 +687,9 @@ export default function CreateDealScreen({ route, navigation }) {
                   styles.bannerActionCard,
                   isDuplicateMode && styles.bannerActionCardCompact,
                 ]}
-                onPress={() => navigation.navigate("SellerDashboard")}
+                onPress={() =>
+                  navigation.navigate("MainTabs", { screen: "Dashboard" })
+                }
               >
                 <View style={styles.bannerActionContent}>
                   <View
