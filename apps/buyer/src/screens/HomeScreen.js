@@ -26,6 +26,7 @@ import {
   CardHeader,
   DealBuddyLoadingScreen,
   DealCard,
+  ViewModeToggle,
   getDealImages,
 } from "@dealsworld/shared";
 import DashboardHeader from "../components/DashboardHeader";
@@ -63,6 +64,14 @@ export default function HomeScreen({ navigation }) {
   const { unreadCount } = useNotifications();
   const dealNotifyRef = useRef(0);
   const dealNotifyBusyRef = useRef(false);
+
+  // Defaults to "list" until the profile loads/has a saved preference;
+  // persisted per-buyer so the dashboard reopens the way they left it.
+  const viewMode = profile?.dashboardViewMode === "grid" ? "grid" : "list";
+  const handleChangeViewMode = (mode) => {
+    if (mode === viewMode) return;
+    updateProfile({ dashboardViewMode: mode });
+  };
 
   const handleToggleFavorite = (dealId) => {
     if (!dealId) return;
@@ -180,19 +189,23 @@ export default function HomeScreen({ navigation }) {
           <CardHeader
             title={dealsHeaderTitle}
             right={
-              <TouchableOpacity
-                onPress={() => {
-                  controls.setSearchText("");
-                  navigation.navigate("Deals");
-                }}
-              >
-                <Text style={styles.seeAllText}>See All</Text>
-              </TouchableOpacity>
+              <View style={styles.headerRight}>
+                <ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />
+                <TouchableOpacity
+                  onPress={() => {
+                    controls.setSearchText("");
+                    navigation.navigate("Deals");
+                  }}
+                >
+                  <Text style={styles.seeAllText}>See All</Text>
+                </TouchableOpacity>
+              </View>
             }
           />
 
           {hasDeals ? (
-            sortedDeals.map((deal) => {
+            <View style={viewMode === "grid" ? styles.grid : null}>
+              {sortedDeals.map((deal) => {
               const expiryMs = getExpiryMs(deal);
               const viewsCountRaw = deal?.viewsCount ?? deal?.views ?? 0;
               const favoritesCountRaw =
@@ -203,8 +216,12 @@ export default function HomeScreen({ navigation }) {
                 !isPickupDeal(deal) &&
                 !isDealPaid(deal.id, myDeliveries);
               return (
-                <DealCard
+                <View
                   key={deal.id}
+                  style={viewMode === "grid" ? styles.gridItem : null}
+                >
+                <DealCard
+                  compact={viewMode === "grid"}
                   title={deal.title}
                   category={deal?.category || null}
                   images={getDealImages(deal)}
@@ -252,8 +269,10 @@ export default function HomeScreen({ navigation }) {
                     navigation.navigate("DealDetails", { dealId: deal.id })
                   }
                 />
+                </View>
               );
-            })
+              })}
+            </View>
           ) : (
             <View style={styles.emptyWrap}>
               <EmptyState
@@ -312,10 +331,25 @@ const createStyles = (theme) =>
     listWrapEmpty: {
       flex: 1,
     },
+    headerRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
     seeAllText: {
       color: theme.colors.primary,
       fontWeight: "700",
       fontSize: 12,
+    },
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      marginTop: 16,
+    },
+    gridItem: {
+      width: "48%",
+      marginBottom: 16,
     },
     emptyWrap: {
       flex: 1,

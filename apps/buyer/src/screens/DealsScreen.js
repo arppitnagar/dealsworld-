@@ -7,6 +7,7 @@ import {
   CardHeader,
   DealCard,
   DealBuddyLoadingScreen,
+  ViewModeToggle,
   getDealImages,
 } from "@dealsworld/shared";
 import { useDeals, useJoinedDeals } from "../hooks/useDeals";
@@ -71,11 +72,17 @@ export default function DealsScreen({ navigation }) {
     loading: dealStateLoading,
   } = useDealState();
   const { data: myDeliveries } = useMyDeliveries();
-  const { profile } = useUserProfile();
+  const { profile, updateProfile } = useUserProfile();
   const { unreadCount } = useNotifications();
   const controls = useDealSearchControls();
   const [selectedFilter, setSelectedFilter] = useState(null);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
+
+  const viewMode = profile?.dashboardViewMode === "grid" ? "grid" : "list";
+  const handleChangeViewMode = (mode) => {
+    if (mode === viewMode) return;
+    updateProfile({ dashboardViewMode: mode });
+  };
 
   const sets = { favoriteIds, viewedIds, joinedIds, deliveries: myDeliveries };
   const accentByKey = ACCENT_BY_KEY(theme);
@@ -176,10 +183,12 @@ export default function DealsScreen({ navigation }) {
         >
           <CardHeader
             title={`${sectionTitle} (${sortedDeals?.length || 0})`}
+            right={<ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />}
           />
 
           {sortedDeals?.length > 0 ? (
-            sortedDeals.map((deal) => {
+            <View style={viewMode === "grid" ? styles.grid : null}>
+              {sortedDeals.map((deal) => {
               const expiryMs = getExpiryMs(deal);
               const viewsCountRaw = deal?.viewsCount ?? deal?.views ?? 0;
               const favoritesCountRaw =
@@ -191,8 +200,12 @@ export default function DealsScreen({ navigation }) {
                 !isPickupDeal(deal) &&
                 !isDealPaid(deal.id, myDeliveries);
               return (
-                <DealCard
+                <View
                   key={deal.id}
+                  style={viewMode === "grid" ? styles.gridItem : null}
+                >
+                <DealCard
+                  compact={viewMode === "grid"}
                   title={deal.title}
                   category={deal?.category || null}
                   images={getDealImages(deal)}
@@ -246,8 +259,10 @@ export default function DealsScreen({ navigation }) {
                     navigation.navigate("DealDetails", { dealId: deal.id })
                   }
                 />
+                </View>
               );
-            })
+              })}
+            </View>
           ) : (
             <View style={styles.emptyWrap}>
               <EmptyState
@@ -305,6 +320,16 @@ const createStyles = (theme) =>
     },
     listWrapEmpty: {
       flex: 1,
+    },
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      marginTop: 16,
+    },
+    gridItem: {
+      width: "48%",
+      marginBottom: 16,
     },
     emptyWrap: {
       flex: 1,

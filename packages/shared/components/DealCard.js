@@ -41,6 +41,7 @@ export default function DealCard({
   isFavorite = false,
   onFavoritePress,
   deliveryBadge,
+  compact = false,
 }) {
   const { theme } = useTheme();
   const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
@@ -86,6 +87,10 @@ export default function DealCard({
           borderColor: accentColor || theme.colors.border,
           ...cardStyles.shadow,
         },
+        cardCompact: {
+          marginBottom: 0,
+          borderRadius: 16,
+        },
         // Image sits in an unclipped outer wrapper so the floating discount
         // badge (and the other overlay chips) can overhang its edges without
         // being cut off by the image's own overflow:hidden clip — only the
@@ -97,6 +102,9 @@ export default function DealCard({
           height: 160,
           backgroundColor: theme.colors.surfaceLight,
           overflow: "hidden",
+        },
+        imageClipCompact: {
+          height: 96,
         },
         image: {
           width: "100%",
@@ -135,12 +143,21 @@ export default function DealCard({
           borderRadius: 999,
           backgroundColor: accentColor || theme.colors.warningBright,
         },
+        badgeCompact: {
+          top: 8,
+          left: 8,
+          paddingHorizontal: 7,
+          paddingVertical: 3,
+        },
         badgeText: {
           color: theme.colors.onPrimary,
           fontSize: 10,
           fontWeight: "800",
           textTransform: "uppercase",
           letterSpacing: 0.6,
+        },
+        badgeTextCompact: {
+          fontSize: 8,
         },
         heartBadge: {
           position: "absolute",
@@ -154,6 +171,13 @@ export default function DealCard({
           borderColor: theme.colors.border,
           alignItems: "center",
           justifyContent: "center",
+        },
+        heartBadgeCompact: {
+          top: 8,
+          right: 8,
+          width: 28,
+          height: 28,
+          borderRadius: 14,
         },
         // Floating discount badge — always the app-independent `dealAccent`
         // orange (deal content, not app chrome). Positioned as a sibling of
@@ -170,11 +194,22 @@ export default function DealCard({
           transform: [{ rotate: "-6deg" }],
           ...cardStyles.shadow,
         },
+        discountBadgeCompact: {
+          bottom: -10,
+          right: 10,
+          borderRadius: 10,
+          paddingHorizontal: 8,
+          paddingVertical: 5,
+        },
         discountBadgeValue: {
           fontSize: 16,
           fontWeight: "900",
           color: theme.colors.onPrimary,
           lineHeight: 18,
+        },
+        discountBadgeValueCompact: {
+          fontSize: 11,
+          lineHeight: 12,
         },
         discountBadgeOff: {
           fontSize: 8,
@@ -183,9 +218,17 @@ export default function DealCard({
           letterSpacing: 1,
           marginTop: 2,
         },
+        discountBadgeOffCompact: {
+          fontSize: 6,
+          marginTop: 1,
+        },
         body: {
           padding: 16,
           gap: 8,
+        },
+        bodyCompact: {
+          padding: 10,
+          gap: 5,
         },
         titleRow: {
           flexDirection: "row",
@@ -211,6 +254,9 @@ export default function DealCard({
           fontWeight: "900",
           color: theme.colors.text,
         },
+        titleCompact: {
+          fontSize: 13,
+        },
         subtitleRow: {
           flexDirection: "row",
           alignItems: "center",
@@ -226,6 +272,9 @@ export default function DealCard({
           fontSize: 12,
           fontWeight: "800",
           color: theme.colors.warningBright,
+        },
+        expiryCompact: {
+          fontSize: 10,
         },
         metaRow: {
           flexDirection: "row",
@@ -260,16 +309,25 @@ export default function DealCard({
           fontWeight: "700",
           color: theme.colors.textMuted,
         },
+        progressLabelCompact: {
+          fontSize: 9,
+        },
         progressPercent: {
           fontSize: 11,
           fontWeight: "800",
           color: theme.colors.dealAccent,
+        },
+        progressPercentCompact: {
+          fontSize: 9,
         },
         progressTrack: {
           height: 8,
           borderRadius: 999,
           backgroundColor: theme.colors.surfaceLight,
           overflow: "hidden",
+        },
+        progressTrackCompact: {
+          height: 5,
         },
         progressFill: {
           height: "100%",
@@ -286,6 +344,10 @@ export default function DealCard({
           overflow: "hidden",
           ...theme.shadow.card,
         },
+        actionButtonCompact: {
+          borderRadius: 10,
+          flex: 1,
+        },
         actionButtonGradient: {
           borderRadius: 14,
           paddingHorizontal: 16,
@@ -293,10 +355,18 @@ export default function DealCard({
           alignItems: "center",
           justifyContent: "center",
         },
+        actionButtonGradientCompact: {
+          borderRadius: 10,
+          paddingHorizontal: 10,
+          paddingVertical: 7,
+        },
         actionText: {
           color: theme.colors.onPrimary,
           fontSize: 13,
           fontWeight: "800",
+        },
+        actionTextCompact: {
+          fontSize: 11,
         },
       }),
     [accentColor, cardStyles.shadow, theme],
@@ -306,10 +376,10 @@ export default function DealCard({
     // Not a TouchableOpacity: deal details must open only via the explicit
     // "View Deal" action button below, not from an accidental tap anywhere
     // on the card.
-    <View style={styles.card}>
+    <View style={[styles.card, compact && styles.cardCompact]}>
       <View style={styles.imageOuter}>
         <View
-          style={styles.imageClip}
+          style={[styles.imageClip, compact && styles.imageClipCompact]}
           onLayout={(event) => setImageWidth(event.nativeEvent.layout.width)}
         >
           {gallery.length ? (
@@ -357,13 +427,18 @@ export default function DealCard({
           )}
         </View>
         {resolvedBadgeLabel ? (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{resolvedBadgeLabel}</Text>
+          <View style={[styles.badge, compact && styles.badgeCompact]}>
+            <Text
+              style={[styles.badgeText, compact && styles.badgeTextCompact]}
+              numberOfLines={1}
+            >
+              {resolvedBadgeLabel}
+            </Text>
           </View>
         ) : null}
         {onFavoritePress ? (
           <TouchableOpacity
-            style={styles.heartBadge}
+            style={[styles.heartBadge, compact && styles.heartBadgeCompact]}
             onPress={(event) => {
               event?.stopPropagation?.();
               onFavoritePress?.();
@@ -371,27 +446,31 @@ export default function DealCard({
           >
             <Ionicons
               name={isFavorite ? "heart" : "heart-outline"}
-              size={18}
+              size={compact ? 14 : 18}
               color={isFavorite ? theme.colors.danger : theme.colors.textMuted}
             />
           </TouchableOpacity>
         ) : null}
         {discountPercent ? (
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountBadgeValue}>{discountPercent}%</Text>
-            <Text style={styles.discountBadgeOff}>OFF</Text>
+          <View style={[styles.discountBadge, compact && styles.discountBadgeCompact]}>
+            <Text style={[styles.discountBadgeValue, compact && styles.discountBadgeValueCompact]}>
+              {discountPercent}%
+            </Text>
+            <Text style={[styles.discountBadgeOff, compact && styles.discountBadgeOffCompact]}>
+              OFF
+            </Text>
           </View>
         ) : null}
       </View>
 
-      <View style={styles.body}>
+      <View style={[styles.body, compact && styles.bodyCompact]}>
         <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={2}>
             {title}
           </Text>
         </View>
 
-        {deliveryBadge?.label ? (
+        {!compact && deliveryBadge?.label ? (
           <View
             style={[
               styles.deliveryChip,
@@ -404,7 +483,13 @@ export default function DealCard({
           </View>
         ) : null}
 
-        {category || rightSubtitle ? (
+        {compact ? (
+          rightSubtitle ? (
+            <Text style={[styles.expiry, styles.expiryCompact]} numberOfLines={1}>
+              {rightSubtitle}
+            </Text>
+          ) : null
+        ) : category || rightSubtitle ? (
           <View style={styles.subtitleRow}>
             <Text style={styles.subtitle} numberOfLines={1}>
               {category}
@@ -417,46 +502,77 @@ export default function DealCard({
           </View>
         ) : null}
 
-        <View style={styles.metaRow}>
-          {Number.isFinite(Number(viewsCount)) ? (
+        {!compact ? (
+          <View style={styles.metaRow}>
+            {Number.isFinite(Number(viewsCount)) ? (
+              <View style={styles.metaChip}>
+                <Ionicons name="eye-outline" size={14} color={theme.colors.textMuted} />
+                <Text style={styles.metaText}>{formatCount(viewsCount)}</Text>
+              </View>
+            ) : null}
             <View style={styles.metaChip}>
-              <Ionicons name="eye-outline" size={14} color={theme.colors.textMuted} />
-              <Text style={styles.metaText}>{formatCount(viewsCount)}</Text>
+              <Ionicons name="people-outline" size={14} color={theme.colors.primary} />
+              <Text style={styles.metaText}>{formatCount(joinedCount)}</Text>
             </View>
-          ) : null}
-          <View style={styles.metaChip}>
-            <Ionicons name="people-outline" size={14} color={theme.colors.primary} />
-            <Text style={styles.metaText}>{formatCount(joinedCount)}</Text>
-          </View>
-          {Number.isFinite(Number(favoritesCount)) ? (
+            {Number.isFinite(Number(favoritesCount)) ? (
+              <View style={styles.metaChip}>
+                <Ionicons name="heart-outline" size={14} color={theme.colors.danger} />
+                <Text style={styles.metaText}>{formatCount(favoritesCount)}</Text>
+              </View>
+            ) : null}
             <View style={styles.metaChip}>
-              <Ionicons name="heart-outline" size={14} color={theme.colors.danger} />
-              <Text style={styles.metaText}>{formatCount(favoritesCount)}</Text>
+              <Ionicons name="star-outline" size={14} color={theme.colors.warningBright} />
+              <Text style={styles.metaText}>{ratingLabel}</Text>
             </View>
-          ) : null}
-          <View style={styles.metaChip}>
-            <Ionicons name="star-outline" size={14} color={theme.colors.warningBright} />
-            <Text style={styles.metaText}>{ratingLabel}</Text>
           </View>
-        </View>
+        ) : null}
 
         {showProgress ? (
           <View style={styles.progressWrap}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>
-                Joined {formatCount(joinedCount)} of {formatCount(target)}
+              <Text
+                style={[styles.progressLabel, compact && styles.progressLabelCompact]}
+                numberOfLines={1}
+              >
+                {compact
+                  ? `${formatCount(joinedCount)}/${formatCount(target)} joined`
+                  : `Joined ${formatCount(joinedCount)} of ${formatCount(target)}`}
               </Text>
-              <Text style={styles.progressPercent}>
+              <Text style={[styles.progressPercent, compact && styles.progressPercentCompact]}>
                 {Math.round(progressRatio * 100)}%
               </Text>
             </View>
-            <View style={styles.progressTrack}>
+            <View style={[styles.progressTrack, compact && styles.progressTrackCompact]}>
               <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
             </View>
           </View>
         ) : null}
 
-        {actionLabel || joinLabel || payLabel ? (
+        {compact ? (
+          // Grid cards drop the separate Join/Pay buttons - one primary CTA
+          // (View, falling back to Join/Pay) keeps the row from overflowing
+          // a half-width card; the full actions stay available in details.
+          actionLabel || joinLabel || payLabel ? (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                onPress={onActionPress || onJoinPress || onPayPress}
+                style={[styles.actionButton, styles.actionButtonCompact]}
+              >
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.primaryDeep]}
+                  style={[styles.actionButtonGradient, styles.actionButtonGradientCompact]}
+                >
+                  <Text
+                    style={[styles.actionText, styles.actionTextCompact]}
+                    numberOfLines={1}
+                  >
+                    {actionLabel || joinLabel || payLabel}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          ) : null
+        ) : actionLabel || joinLabel || payLabel ? (
           <View style={styles.actionRow}>
             {joinLabel ? (
               <TouchableOpacity

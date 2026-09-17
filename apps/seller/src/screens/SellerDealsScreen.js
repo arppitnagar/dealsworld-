@@ -7,6 +7,7 @@ import {
   CardHeader,
   DealCard,
   DealBuddyLoadingScreen,
+  ViewModeToggle,
   getStatusColor,
   getStatusLabel,
   getDealImages,
@@ -14,6 +15,7 @@ import {
 } from "@dealsworld/shared";
 import { useSellerLiveDeals } from "../hooks/useSellerLiveDeals";
 import { useNotifications } from "../hooks/useNotifications";
+import { useUserProfile } from "../hooks/useUserProfile";
 import { useDealSearchControls } from "../hooks/useDealSearchControls";
 import SellerDashboardHeader from "../components/SellerDashboardHeader";
 import SellerStatusModal from "../components/SellerStatusModal";
@@ -45,9 +47,16 @@ export default function SellerDealsScreen({ navigation }) {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { deals, loading, sellerDisplayName } = useSellerLiveDeals();
   const { unreadCount } = useNotifications();
+  const { profile, updateProfile } = useUserProfile();
   const [now, setNow] = useState(Date.now());
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
+
+  const viewMode = profile?.dashboardViewMode === "grid" ? "grid" : "list";
+  const handleChangeViewMode = (mode) => {
+    if (mode === viewMode) return;
+    updateProfile({ dashboardViewMode: mode });
+  };
 
   const getStatusValue = (deal) => getDealDisplayStatus(deal, now);
   const controls = useDealSearchControls(getStatusValue);
@@ -121,10 +130,12 @@ export default function SellerDealsScreen({ navigation }) {
         <View style={[styles.listWrap, !sortedDeals?.length && styles.listWrapEmpty]}>
           <CardHeader
             title={`${sectionTitle} (${sortedDeals?.length || 0})`}
+            right={<ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />}
           />
 
           {sortedDeals?.length > 0 ? (
-            sortedDeals.map((deal) => {
+            <View style={viewMode === "grid" ? styles.grid : null}>
+              {sortedDeals.map((deal) => {
               const displayStatus = getDealDisplayStatus(deal, now);
               const expiryDate = toDate(deal.expiresAt);
               const endsInLabel =
@@ -133,8 +144,12 @@ export default function SellerDealsScreen({ navigation }) {
                   : null;
 
               return (
-                <DealCard
+                <View
                   key={deal.id}
+                  style={viewMode === "grid" ? styles.gridItem : null}
+                >
+                <DealCard
+                  compact={viewMode === "grid"}
                   title={deal.title}
                   category={deal.category || null}
                   images={getDealImages(deal)}
@@ -153,8 +168,10 @@ export default function SellerDealsScreen({ navigation }) {
                   actionLabel="View Deal"
                   onActionPress={() => navigation.navigate("DealDetails", { deal })}
                 />
+                </View>
               );
-            })
+              })}
+            </View>
           ) : (
             <View style={styles.emptyWrap}>
               <EmptyState
@@ -207,6 +224,16 @@ const createStyles = (theme) =>
     },
     listWrapEmpty: {
       flex: 1,
+    },
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      marginTop: 16,
+    },
+    gridItem: {
+      width: "48%",
+      marginBottom: 16,
     },
     emptyWrap: {
       flex: 1,
