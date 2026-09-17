@@ -1,33 +1,20 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  RefreshControl,
-  StyleSheet,
-  StatusBar,
-} from "react-native";
-import { useDeals } from "../hooks/useDeals";
-import { useMyDeliveries, getDeliveryBadge } from "../hooks/useDeliveryStatus";
-import { useDealState } from "../hooks/useDealState";
-import { useNotifications } from "../hooks/useNotifications";
-import { useUserProfile } from "../hooks/useUserProfile";
-import { useDealSearchControls } from "../hooks/useDealSearchControls";
-import { useAuth } from "../context/AuthContext";
-import { db } from "../config/firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import {
-  SafeAreaView,
-} from "react-native-safe-area-context";
+import React, { useMemo } from "react";
+import { View, ScrollView, RefreshControl, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   useTheme,
   EmptyState,
   CardHeader,
-  DealBuddyLoadingScreen,
   DealCard,
+  DealBuddyLoadingScreen,
   getDealImages,
 } from "@dealsworld/shared";
+import { useDeals } from "../hooks/useDeals";
+import { useMyDeliveries, getDeliveryBadge } from "../hooks/useDeliveryStatus";
+import { useDealState } from "../hooks/useDealState";
+import { useUserProfile } from "../hooks/useUserProfile";
+import { useNotifications } from "../hooks/useNotifications";
+import { useDealSearchControls } from "../hooks/useDealSearchControls";
 import DashboardHeader from "../components/DashboardHeader";
 import DealSearchModals from "../components/DealSearchModals";
 import { searchMatchesDeal } from "../utils/dealSearch";
@@ -39,17 +26,17 @@ import {
   isDealActive,
   isDealPaid,
   isPickupDeal,
-  matchesCategory,
   formatEndsIn,
   getDealAccentColor,
 } from "../utils/dealCategories";
 
-export default function HomeScreen({ navigation }) {
-  const { data: deals, isLoading, refetch } = useDeals();
+// The Search tab: the only place the search box lives now - Home and Deals
+// keep their sort/filter icons but no longer show the input itself, so
+// searching is a deliberate action reached by tapping this tab.
+export default function SearchScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const [now, setNow] = useState(Date.now());
-  const controls = useDealSearchControls();
+  const { data: deals, isLoading, refetch } = useDeals();
   const {
     viewedIds,
     favoriteIds,
@@ -58,94 +45,23 @@ export default function HomeScreen({ navigation }) {
     loading: dealStateLoading,
   } = useDealState();
   const { data: myDeliveries } = useMyDeliveries();
-  const { user } = useAuth();
-  const { profile, updateProfile } = useUserProfile();
+  const { profile } = useUserProfile();
   const { unreadCount } = useNotifications();
-  const dealNotifyRef = useRef(0);
-  const dealNotifyBusyRef = useRef(false);
+  const controls = useDealSearchControls();
 
-  const handleToggleFavorite = (dealId) => {
-    if (!dealId) return;
-    toggleFavoriteDeal(dealId);
-  };
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
-    const profileMs = getTimeMs(profile?.lastNotifiedDealAt);
-    if (profileMs && profileMs > dealNotifyRef.current) {
-      dealNotifyRef.current = profileMs;
-    }
-  }, [profile?.lastNotifiedDealAt]);
-
-  useEffect(() => {
-    if (!user?.uid || !deals?.length || !profile) return;
-    if (dealNotifyBusyRef.current) return;
-    const lastNotified = dealNotifyRef.current || 0;
-    const nowMs = Date.now();
-    const newDeals = deals
-      .map((deal) => ({
-        deal,
-        createdMs: getTimeMs(deal?.createdAt),
-        expiryMs: getExpiryMs(deal),
-      }))
-      .filter(({ createdMs, expiryMs }) => {
-        if (!createdMs) return false;
-        if (createdMs <= lastNotified) return false;
-        if (typeof expiryMs === "number" && expiryMs <= nowMs) return false;
-        return true;
-      })
-      .sort((a, b) => a.createdMs - b.createdMs);
-
-    if (newDeals.length === 0) return;
-    dealNotifyBusyRef.current = true;
-
-    const notificationsRef = collection(db, "users", user.uid, "notifications");
-
-    const maxCreated = newDeals[newDeals.length - 1].createdMs;
-    dealNotifyRef.current = Math.max(dealNotifyRef.current, maxCreated);
-
-    Promise.all(
-      newDeals.map(({ deal }) =>
-        addDoc(notificationsRef, {
-          type: "deal",
-          dealId: deal.id,
-          title: "New deal published",
-          body: deal.title || "A new deal is available",
-          createdAt: serverTimestamp(),
-          isRead: false,
-        }),
-      ),
-    )
-      .then(() => {
-        updateProfile({ lastNotifiedDealAt: new Date(maxCreated) });
-      })
-      .finally(() => {
-        dealNotifyBusyRef.current = false;
-      });
-  }, [deals, profile, updateProfile, user?.uid]);
-
-  // Home always shows the fixed "New Deals" feed - the New/Hot/Viewed/
-  // Favourite/Joined switcher now lives on the Deals tab. A search still
-  // reaches every active deal regardless of category.
+  // Land on the same active deals everyone else sees - searching narrows
+  // that list down, it never starts from an empty one.
   const filteredDeals = useMemo(() => {
     if (!deals) return [];
-    const sets = { favoriteIds, viewedIds, joinedIds };
+    const now = Date.now();
     return deals.filter((deal) => {
       if (!isDealActive(deal, now)) return false;
       if (controls.isSearching) return searchMatchesDeal(deal, controls.searchText);
-      return matchesCategory(deal, "new", sets);
+      return true;
     });
-  }, [deals, controls.isSearching, controls.searchText, favoriteIds, viewedIds, joinedIds, now]);
+  }, [deals, controls.isSearching, controls.searchText]);
 
   const sortedDeals = controls.applyFieldFilterAndSort(filteredDeals);
-
-  const dealsHeaderTitle = controls.isSearching ? "Search Results" : "New Deals";
   const hasDeals = sortedDeals?.length > 0;
 
   if (isLoading || dealStateLoading) {
@@ -154,8 +70,6 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -165,7 +79,6 @@ export default function HomeScreen({ navigation }) {
       >
         <DashboardHeader
           navigation={navigation}
-          now={now}
           displayName={profile?.displayName}
           unreadCount={unreadCount}
           searchText={controls.searchText}
@@ -174,21 +87,12 @@ export default function HomeScreen({ navigation }) {
           onPressSort={() => controls.setIsSortVisible(true)}
           filterActive={controls.hasFieldFilter}
           onPressFilter={() => controls.setIsFilterVisible(true)}
+          showSearchControls
         />
 
         <View style={[styles.listWrap, !hasDeals && styles.listWrapEmpty]}>
           <CardHeader
-            title={dealsHeaderTitle}
-            right={
-              <TouchableOpacity
-                onPress={() => {
-                  controls.setSearchText("");
-                  navigation.navigate("Deals");
-                }}
-              >
-                <Text style={styles.seeAllText}>See All</Text>
-              </TouchableOpacity>
-            }
+            title={controls.isSearching ? "Search Results" : "All Deals"}
           />
 
           {hasDeals ? (
@@ -199,7 +103,7 @@ export default function HomeScreen({ navigation }) {
                 deal?.favoritesCount ?? deal?.favouritesCount ?? 0;
               const needsPay =
                 joinedIds.has(deal.id) &&
-                isDealActive(deal, now) &&
+                isDealActive(deal) &&
                 !isPickupDeal(deal) &&
                 !isDealPaid(deal.id, myDeliveries);
               return (
@@ -235,7 +139,7 @@ export default function HomeScreen({ navigation }) {
                   deliveryBadge={getDeliveryBadge(deal.id, myDeliveries, theme)}
                   expiryLabel={formatEndsIn(expiryMs)}
                   isFavorite={favoriteIds.has(deal.id)}
-                  onFavoritePress={() => handleToggleFavorite(deal.id)}
+                  onFavoritePress={() => toggleFavoriteDeal(deal.id)}
                   isJoined={joinedIds.has(deal.id)}
                   joinLabel={joinedIds.has(deal.id) ? "Joined" : "Join"}
                   onJoinPress={() =>
@@ -261,12 +165,12 @@ export default function HomeScreen({ navigation }) {
                 title={
                   controls.isSearching
                     ? "No deals match your search."
-                    : "No new deals right now."
+                    : "No active deals right now."
                 }
                 subtitle={
                   controls.isSearching
                     ? "Try a different search term."
-                    : "Check the Deals tab to browse everything."
+                    : "Pull to refresh or check back later."
                 }
               />
             </View>
@@ -277,22 +181,6 @@ export default function HomeScreen({ navigation }) {
       <DealSearchModals controls={controls} resultCount={sortedDeals?.length || 0} />
     </SafeAreaView>
   );
-}
-
-function getTimeMs(value) {
-  if (!value) return null;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value?.toDate === "function") return value.toDate().getTime();
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-  if (typeof value === "object") {
-    const seconds = value.seconds ?? value._seconds;
-    if (typeof seconds === "number") return seconds * 1000;
-  }
-  return null;
 }
 
 const createStyles = (theme) =>
@@ -311,11 +199,6 @@ const createStyles = (theme) =>
     },
     listWrapEmpty: {
       flex: 1,
-    },
-    seeAllText: {
-      color: theme.colors.primary,
-      fontWeight: "700",
-      fontSize: 12,
     },
     emptyWrap: {
       flex: 1,

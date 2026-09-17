@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,14 @@ import { useNotifications } from "../hooks/useNotifications";
 export default function NotificationsScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { notifications, loading, markNotificationRead } = useNotifications();
+  const {
+    notifications,
+    loading,
+    unreadCount,
+    markNotificationRead,
+    markAllNotificationsRead,
+  } = useNotifications();
+  const [clearing, setClearing] = useState(false);
 
   const handleOpen = async (item) => {
     if (!item) return;
@@ -22,6 +29,16 @@ export default function NotificationsScreen({ navigation }) {
     }
     if (item.dealId) {
       navigation.navigate("DealDetails", { dealId: item.dealId });
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (clearing || unreadCount === 0) return;
+    setClearing(true);
+    try {
+      await markAllNotificationsRead();
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -74,6 +91,21 @@ export default function NotificationsScreen({ navigation }) {
         title="Notifications"
         onBack={() => navigation.goBack()}
         rounded
+        rightContent={
+          unreadCount > 0 ? (
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={handleClearAll}
+              disabled={clearing}
+            >
+              <Ionicons
+                name="checkmark-done-outline"
+                size={20}
+                color={theme.colors.onPrimary}
+              />
+            </TouchableOpacity>
+          ) : null
+        }
       />
 
       {notifications.length === 0 && !loading ? (
@@ -113,6 +145,14 @@ const createStyles = (theme) =>
     screen: {
       flex: 1,
       backgroundColor: theme.colors.dashboardBg,
+    },
+    clearButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.onPrimarySoft,
+      alignItems: "center",
+      justifyContent: "center",
     },
     listContent: {
       padding: 20,

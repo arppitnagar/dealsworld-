@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
+import React, { useMemo, useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { getCardStyles } from "../styles/cards";
@@ -17,6 +17,7 @@ export default function DealCard({
   title,
   category,
   image,
+  images,
   joins,
   targetCount,
   accentColor,
@@ -30,14 +31,26 @@ export default function DealCard({
   countdown,
   expiryLabel,
   statusLabel,
-  onPress,
   actionLabel,
   onActionPress,
+  joinLabel,
+  onJoinPress,
+  payLabel,
+  onPayPress,
+  isJoined = false,
   isFavorite = false,
   onFavoritePress,
+  deliveryBadge,
 }) {
   const { theme } = useTheme();
   const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
+
+  const gallery = useMemo(() => {
+    if (Array.isArray(images) && images.length) return images.filter(Boolean);
+    return image ? [image] : [];
+  }, [images, image]);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [imageWidth, setImageWidth] = useState(0);
 
   const joinedCount = Number.isFinite(Number(joins)) ? Number(joins) : 0;
   const target = Number.isFinite(Number(targetCount)) ? Number(targetCount) : 0;
@@ -81,7 +94,7 @@ export default function DealCard({
           position: "relative",
         },
         imageClip: {
-          height: 190,
+          height: 160,
           backgroundColor: theme.colors.surfaceLight,
           overflow: "hidden",
         },
@@ -93,6 +106,25 @@ export default function DealCard({
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
+        },
+        imageDots: {
+          position: "absolute",
+          bottom: 10,
+          left: 0,
+          right: 0,
+          flexDirection: "row",
+          justifyContent: "center",
+          gap: 5,
+        },
+        imageDot: {
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: "rgba(255,255,255,0.5)",
+        },
+        imageDotActive: {
+          width: 16,
+          backgroundColor: theme.colors.onPrimary,
         },
         badge: {
           position: "absolute",
@@ -161,6 +193,18 @@ export default function DealCard({
           alignItems: "flex-start",
           gap: 10,
         },
+        deliveryChip: {
+          alignSelf: "flex-start",
+          paddingHorizontal: 8,
+          paddingVertical: 3,
+          borderRadius: 999,
+        },
+        deliveryChipText: {
+          fontSize: 10,
+          fontWeight: "800",
+          textTransform: "uppercase",
+          letterSpacing: 0.6,
+        },
         title: {
           flex: 1,
           fontSize: 18,
@@ -186,20 +230,20 @@ export default function DealCard({
         metaRow: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 8,
+          gap: 6,
           flexWrap: "wrap",
         },
         metaChip: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 8,
+          gap: 5,
           backgroundColor: theme.colors.surfaceLight,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          borderRadius: 8,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: 7,
         },
         metaText: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: "700",
           color: theme.colors.textMuted,
         },
@@ -233,7 +277,9 @@ export default function DealCard({
           backgroundColor: theme.colors.dealAccent,
         },
         actionRow: {
-          alignItems: "flex-end",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: joinLabel || payLabel ? "space-between" : "flex-end",
         },
         actionButton: {
           borderRadius: 14,
@@ -257,11 +303,53 @@ export default function DealCard({
   );
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
+    // Not a TouchableOpacity: deal details must open only via the explicit
+    // "View Deal" action button below, not from an accidental tap anywhere
+    // on the card.
+    <View style={styles.card}>
       <View style={styles.imageOuter}>
-        <View style={styles.imageClip}>
-          {image ? (
-            <Image source={{ uri: image }} style={styles.image} />
+        <View
+          style={styles.imageClip}
+          onLayout={(event) => setImageWidth(event.nativeEvent.layout.width)}
+        >
+          {gallery.length ? (
+            <>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                scrollEnabled={gallery.length > 1}
+                onMomentumScrollEnd={(event) => {
+                  if (!imageWidth) return;
+                  const index = Math.round(
+                    event.nativeEvent.contentOffset.x / imageWidth,
+                  );
+                  setActiveImageIndex(index);
+                }}
+              >
+                {gallery.map((uri, index) => (
+                  <Image
+                    key={`${uri}-${index}`}
+                    source={{ uri }}
+                    style={[styles.image, imageWidth ? { width: imageWidth } : null]}
+                    resizeMode="cover"
+                  />
+                ))}
+              </ScrollView>
+              {gallery.length > 1 ? (
+                <View style={styles.imageDots}>
+                  {gallery.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.imageDot,
+                        index === activeImageIndex && styles.imageDotActive,
+                      ]}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </>
           ) : (
             <View style={styles.imagePlaceholder}>
               <Ionicons name="image-outline" size={24} color={theme.colors.textMuted} />
@@ -273,20 +361,21 @@ export default function DealCard({
             <Text style={styles.badgeText}>{resolvedBadgeLabel}</Text>
           </View>
         ) : null}
-        <TouchableOpacity
-          style={styles.heartBadge}
-          disabled={!onFavoritePress}
-          onPress={(event) => {
-            event?.stopPropagation?.();
-            onFavoritePress?.();
-          }}
-        >
-          <Ionicons
-            name={isFavorite ? "heart" : "heart-outline"}
-            size={18}
-            color={isFavorite ? theme.colors.danger : theme.colors.textMuted}
-          />
-        </TouchableOpacity>
+        {onFavoritePress ? (
+          <TouchableOpacity
+            style={styles.heartBadge}
+            onPress={(event) => {
+              event?.stopPropagation?.();
+              onFavoritePress?.();
+            }}
+          >
+            <Ionicons
+              name={isFavorite ? "heart" : "heart-outline"}
+              size={18}
+              color={isFavorite ? theme.colors.danger : theme.colors.textMuted}
+            />
+          </TouchableOpacity>
+        ) : null}
         {discountPercent ? (
           <View style={styles.discountBadge}>
             <Text style={styles.discountBadgeValue}>{discountPercent}%</Text>
@@ -301,6 +390,19 @@ export default function DealCard({
             {title}
           </Text>
         </View>
+
+        {deliveryBadge?.label ? (
+          <View
+            style={[
+              styles.deliveryChip,
+              { backgroundColor: (deliveryBadge.color || theme.colors.primary) + "22" },
+            ]}
+          >
+            <Text style={[styles.deliveryChipText, { color: deliveryBadge.color || theme.colors.primary }]}>
+              {deliveryBadge.label}
+            </Text>
+          </View>
+        ) : null}
 
         {category || rightSubtitle ? (
           <View style={styles.subtitleRow}>
@@ -318,22 +420,22 @@ export default function DealCard({
         <View style={styles.metaRow}>
           {Number.isFinite(Number(viewsCount)) ? (
             <View style={styles.metaChip}>
-              <Ionicons name="eye-outline" size={18} color={theme.colors.textMuted} />
+              <Ionicons name="eye-outline" size={14} color={theme.colors.textMuted} />
               <Text style={styles.metaText}>{formatCount(viewsCount)}</Text>
             </View>
           ) : null}
           <View style={styles.metaChip}>
-            <Ionicons name="people-outline" size={18} color={theme.colors.primary} />
+            <Ionicons name="people-outline" size={14} color={theme.colors.primary} />
             <Text style={styles.metaText}>{formatCount(joinedCount)}</Text>
           </View>
           {Number.isFinite(Number(favoritesCount)) ? (
             <View style={styles.metaChip}>
-              <Ionicons name="heart-outline" size={18} color={theme.colors.danger} />
+              <Ionicons name="heart-outline" size={14} color={theme.colors.danger} />
               <Text style={styles.metaText}>{formatCount(favoritesCount)}</Text>
             </View>
           ) : null}
           <View style={styles.metaChip}>
-            <Ionicons name="star-outline" size={18} color={theme.colors.warningBright} />
+            <Ionicons name="star-outline" size={14} color={theme.colors.warningBright} />
             <Text style={styles.metaText}>{ratingLabel}</Text>
           </View>
         </View>
@@ -354,19 +456,57 @@ export default function DealCard({
           </View>
         ) : null}
 
-        {actionLabel ? (
+        {actionLabel || joinLabel || payLabel ? (
           <View style={styles.actionRow}>
-            <TouchableOpacity onPress={onActionPress} style={styles.actionButton}>
-              <LinearGradient
-                colors={[theme.colors.primary, theme.colors.primaryDeep]}
-                style={styles.actionButtonGradient}
+            {joinLabel ? (
+              <TouchableOpacity
+                onPress={(event) => {
+                  event?.stopPropagation?.();
+                  onJoinPress?.();
+                }}
+                style={styles.actionButton}
               >
-                <Text style={styles.actionText}>{actionLabel}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={
+                    isJoined
+                      ? [theme.colors.success, theme.colors.successDark]
+                      : [theme.colors.primary, theme.colors.primaryDeep]
+                  }
+                  style={styles.actionButtonGradient}
+                >
+                  <Text style={styles.actionText}>{joinLabel}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : null}
+            {payLabel ? (
+              <TouchableOpacity
+                onPress={(event) => {
+                  event?.stopPropagation?.();
+                  onPayPress?.();
+                }}
+                style={styles.actionButton}
+              >
+                <LinearGradient
+                  colors={[theme.colors.warningBright, theme.colors.dealAccent]}
+                  style={styles.actionButtonGradient}
+                >
+                  <Text style={styles.actionText}>{payLabel}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : null}
+            {actionLabel ? (
+              <TouchableOpacity onPress={onActionPress} style={styles.actionButton}>
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.primaryDeep]}
+                  style={styles.actionButtonGradient}
+                >
+                  <Text style={styles.actionText}>{actionLabel}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }

@@ -2,6 +2,7 @@
   "expo": {
     "name": "DealBuddy",
     "slug": "dealbuddy",
+    "version": "1.0.0",
     "icon": "../../packages/shared/components/ui/DealBuddy App Icon.png",
     "ios": {
       "infoPlist": {

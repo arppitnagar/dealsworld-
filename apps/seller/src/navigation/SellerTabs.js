@@ -2,9 +2,9 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabBar } from "@dealsworld/shared";
-import SellerDashboard from "../screens/SellerDashboard";
-import ProfileScreen from "../screens/ProfileScreen";
-import ComingSoonScreen from "../screens/ComingSoonScreen";
+import SellerHomeScreen from "../screens/SellerHomeScreen";
+import SellerDealsScreen from "../screens/SellerDealsScreen";
+import SellerSearchScreen from "../screens/SellerSearchScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -18,7 +18,7 @@ const icon = (name, outlineName) => (focused, color) => (
 const CreatePlaceholder = () => null;
 
 const TAB_CONFIG = [
-  { key: "Dashboard", label: "Dashboard", icon: icon("grid", "grid-outline") },
+  { key: "Dashboard", label: "Home", icon: icon("home", "home-outline") },
   { key: "Deals", label: "Deals", icon: icon("pricetag", "pricetag-outline") },
   {
     key: "Create",
@@ -27,12 +27,7 @@ const TAB_CONFIG = [
     icon: (focused, color) => <Ionicons name="add" size={22} color={color} />,
     onPress: (navigation) => navigation.getParent()?.navigate("CreateDeal"),
   },
-  {
-    key: "Chat",
-    label: "Chat",
-    icon: icon("chatbubble", "chatbubble-outline"),
-  },
-  { key: "Profile", label: "Profile", icon: icon("person", "person-outline") },
+  { key: "Search", label: "Search", icon: icon("search", "search-outline") },
 ];
 
 export default function SellerTabs() {
@@ -41,19 +36,10 @@ export default function SellerTabs() {
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <BottomTabBar {...props} tabs={TAB_CONFIG} />}
     >
-      <Tab.Screen name="Dashboard" component={SellerDashboard} />
-      <Tab.Screen
-        name="Deals"
-        component={ComingSoonScreen}
-        initialParams={{ title: "Deals", subtitle: "Your full deals list is on its way." }}
-      />
+      <Tab.Screen name="Dashboard" component={SellerHomeScreen} />
+      <Tab.Screen name="Deals" component={SellerDealsScreen} />
       <Tab.Screen name="Create" component={CreatePlaceholder} />
-      <Tab.Screen
-        name="Chat"
-        component={ComingSoonScreen}
-        initialParams={{ title: "Chat", subtitle: "A chat inbox is on its way." }}
-      />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Search" component={SellerSearchScreen} />
     </Tab.Navigator>
   );
 }

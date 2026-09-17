@@ -61,6 +61,14 @@ export default function AdminWorkbench({
   const [analyticsError, setAnalyticsError] = useState("");
   const [hasLoadedAnalytics, setHasLoadedAnalytics] = useState(false);
 
+  const [versionGate, setVersionGate] = useState({});
+  const [versionGateLoading, setVersionGateLoading] = useState(false);
+  const [versionGateError, setVersionGateError] = useState("");
+  const [hasLoadedVersionGate, setHasLoadedVersionGate] = useState(false);
+  const [versionGateSaving, setVersionGateSaving] = useState(false);
+  const [versionGateSaveError, setVersionGateSaveError] = useState("");
+  const [versionGateSaved, setVersionGateSaved] = useState(false);
+
   const loadDeals = async (force = false) => {
     if (dealsLoading) return;
     if (hasLoadedDeals && !force) return;
@@ -137,11 +145,60 @@ export default function AdminWorkbench({
     }
   };
 
+  const loadVersionGate = async (force = false) => {
+    if (versionGateLoading) return;
+    if (hasLoadedVersionGate && !force) return;
+    setVersionGateLoading(true);
+    setVersionGateError("");
+    try {
+      const response = await apiClient.get("/app-config/version-gate");
+      setVersionGate(response.data || {});
+    } catch (error) {
+      setVersionGateError(
+        error?.response?.data?.error ||
+          error.message ||
+          "Unable to load app update settings",
+      );
+    } finally {
+      setVersionGateLoading(false);
+      setHasLoadedVersionGate(true);
+    }
+  };
+
+  const updateVersionGateField = (appKey, field, value) => {
+    setVersionGate((current) => ({
+      ...current,
+      [appKey]: { ...(current[appKey] || {}), [field]: value },
+    }));
+    setVersionGateSaved(false);
+  };
+
+  const saveVersionGate = async () => {
+    setVersionGateSaving(true);
+    setVersionGateSaveError("");
+    setVersionGateSaved(false);
+    try {
+      const response = await apiClient.put(
+        "/admin/app-config/version-gate",
+        versionGate,
+      );
+      setVersionGate(response.data || versionGate);
+      setVersionGateSaved(true);
+    } catch (error) {
+      setVersionGateSaveError(
+        error?.response?.data?.error || error.message || "Save failed",
+      );
+    } finally {
+      setVersionGateSaving(false);
+    }
+  };
+
   const refreshCurrentTab = async () => {
     if (activeTab === "deals") return loadDeals(true);
     if (activeTab === "sellers" || activeTab === "buyers") return loadUsers(true);
     if (activeTab === "payments") return loadPayments(true);
     if (activeTab === "analytics") return loadAnalytics(true);
+    if (activeTab === "settings") return loadVersionGate(true);
     return null;
   };
 
@@ -156,6 +213,8 @@ export default function AdminWorkbench({
       loadPayments();
     } else if (activeTab === "analytics") {
       loadAnalytics();
+    } else if (activeTab === "settings") {
+      loadVersionGate();
     }
   }, [activeTab]);
 
@@ -464,6 +523,11 @@ export default function AdminWorkbench({
               active={activeTab === "analytics"}
               onPress={() => setActiveTab("analytics")}
             />
+            <TabButton
+              label="App Updates"
+              active={activeTab === "settings"}
+              onPress={() => setActiveTab("settings")}
+            />
           </View>
         </Card>
 
@@ -628,11 +692,19 @@ export default function AdminWorkbench({
                   </View>
                   <Text style={styles.bodyText}>Deal: {entry.dealId || "-"}</Text>
                   <Text style={styles.bodyText}>
-                    Buyer: {entry.buyerId || "-"} | Seller:{" "}
+                    Buyer:{" "}
+                    {formatUserLabelById(
+                      entry.buyerId,
+                      userDisplayNameById,
+                      entry.buyerName || entry.buyerDisplayName,
+                      "Unknown buyer",
+                    )}{" "}
+                    | Seller:{" "}
                     {formatUserLabelById(
                       entry.sellerId,
                       userDisplayNameById,
                       entry.sellerName || entry.sellerDisplayName || entry.vendorName,
+                      "Unknown seller",
                     )}
                   </Text>
                   <Text style={styles.bodyText}>
@@ -694,6 +766,57 @@ export default function AdminWorkbench({
                 <Text style={styles.bodyText}>
                   Updated: {formatDateTime(analytics.updatedAt)}
                 </Text>
+              </>
+            )}
+          </Card>
+        ) : null}
+
+        {activeTab === "settings" ? (
+          <Card>
+            <View style={styles.headerRow}>
+              <Text style={styles.sectionTitle}>Force App Update</Text>
+              <ActionButton title="Reload" onPress={() => loadVersionGate(true)} />
+            </View>
+            <Text style={styles.bodyText}>
+              Set the oldest app version still allowed to sign in. Anyone on
+              an older build is blocked with an update screen until they
+              upgrade.
+            </Text>
+            {versionGateError ? (
+              <Text style={styles.errorText}>{versionGateError}</Text>
+            ) : null}
+            {versionGateLoading && !hasLoadedVersionGate ? (
+              <ActivityIndicator />
+            ) : (
+              <>
+                <VersionGateAppFields
+                  label="Buyer app (DealBuddy)"
+                  values={versionGate.buyer || {}}
+                  onChange={(field, value) =>
+                    updateVersionGateField("buyer", field, value)
+                  }
+                />
+                <VersionGateAppFields
+                  label="Seller app (SellerBuddy)"
+                  values={versionGate.seller || {}}
+                  onChange={(field, value) =>
+                    updateVersionGateField("seller", field, value)
+                  }
+                />
+                {versionGateSaveError ? (
+                  <Text style={styles.errorText}>{versionGateSaveError}</Text>
+                ) : null}
+                {versionGateSaved ? (
+                  <Text style={styles.bodyText}>Saved.</Text>
+                ) : null}
+                <View style={styles.chipWrap}>
+                  <ActionButton
+                    title={versionGateSaving ? "Saving..." : "Save changes"}
+                    onPress={saveVersionGate}
+                    disabled={versionGateSaving}
+                    dark
+                  />
+                </View>
               </>
             )}
           </Card>
@@ -1054,6 +1177,45 @@ function Card({ children }) {
   return <View style={styles.card}>{children}</View>;
 }
 
+function VersionGateAppFields({ label, values, onChange }) {
+  return (
+    <View style={styles.listItem}>
+      <Text style={styles.itemTitle}>{label}</Text>
+      <Text style={styles.fieldLabel}>Minimum supported version</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. 1.2.0"
+        value={values.minVersion || ""}
+        onChangeText={(text) => onChange("minVersion", text)}
+        autoCapitalize="none"
+      />
+      <Text style={styles.fieldLabel}>Latest version (optional)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. 1.3.0"
+        value={values.latestVersion || ""}
+        onChangeText={(text) => onChange("latestVersion", text)}
+        autoCapitalize="none"
+      />
+      <Text style={styles.fieldLabel}>Update link</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="https://... (APK download or store listing)"
+        value={values.updateUrl || ""}
+        onChangeText={(text) => onChange("updateUrl", text)}
+        autoCapitalize="none"
+      />
+      <Text style={styles.fieldLabel}>Message shown to blocked users (optional)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Custom message, or leave blank for the default"
+        value={values.message || ""}
+        onChangeText={(text) => onChange("message", text)}
+      />
+    </View>
+  );
+}
+
 function formatSellerLabel(deal) {
   const sellerName = String(
     deal?.sellerName || deal?.sellerDisplayName || deal?.vendorName || "",
@@ -1065,13 +1227,14 @@ function formatUserLabelById(
   userId,
   userDisplayNameById = new Map(),
   preferredName = "",
+  fallbackLabel = "Unknown user",
 ) {
   const preferred = String(preferredName || "").trim();
   if (preferred) return preferred;
   const id = String(userId || "").trim();
   if (!id) return "-";
   const name = String(userDisplayNameById.get(id) || "").trim();
-  return name || "Unknown seller";
+  return name || fallbackLabel;
 }
 
 function safeNumber(value, fallback = 0) {
@@ -1263,6 +1426,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   errorText: { color: theme.colors.error, fontSize: 13, fontWeight: "600" },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+    marginTop: 8,
+  },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   headerActions: { flexDirection: "row", gap: 6 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },

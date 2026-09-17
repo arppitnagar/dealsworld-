@@ -12,11 +12,13 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { db } from "../config/firebase";
-import { doc, updateDoc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
+import apiClient from "../api/client";
 import {
   getStatusColor,
   getStatusLabel,
   DetailRow,
+  StatusPill,
   toDate,
   formatExpiryLabel,
   formatCountdown,
@@ -25,9 +27,18 @@ import {
   SkeletonBlock,
   DealDetailsLayout,
   InfoCard,
+  getDealImages,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
+import {
+  useDispatchDeal,
+  useDeliveryStatusList,
+  useMarkBuyerDelivered,
+  useCompleteDeal,
+  useExpireDealEarly,
+} from "../hooks/useDeliveryStatus";
+import { isUnsuccessfulDeal } from "../utils/dealStatus";
 
 const { width } = Dimensions.get("window");
 
@@ -46,9 +57,12 @@ export default function DealDetails({ route, navigation }) {
   const { profile } = useUserProfile();
   const initialDeal = route?.params?.deal;
   const [deal, setDeal] = useState(normalizeDeal(initialDeal));
-  const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(Date.now());
   const isDealLoading = !deal || !deal.title;
+  const { mutate: dispatchDeal, isPending: dispatching } = useDispatchDeal();
+  const { mutate: markBuyerDelivered } = useMarkBuyerDelivered();
+  const { mutate: completeDeal, isPending: completing } = useCompleteDeal();
+  const { mutate: expireDealEarly, isPending: expiringEarly } = useExpireDealEarly();
 
   const joinsCount =
     safeGet(deal, "joinedUsers") ??
@@ -104,6 +118,30 @@ export default function DealDetails({ route, navigation }) {
   const originalDisplay = discountPercent ? originalNumber : null;
   const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
   const isPickup = /pick/i.test(deliveryModeLabel);
+  const isExpiredNow = expiryDate ? expiryDate.getTime() <= now : true;
+  const isPersistedExpired =
+    String(deal?.status || "").toLowerCase() === "expired" ||
+    String(deal?.lifecycleStatus || "").toLowerCase() === "expired";
+  // A deal already persisted as expired (see expirySweep.js) was, by
+  // definition, not fully paid/qualified when its expiry hit - any blocked
+  // payments were already refunded, so it must never re-enter the dispatch
+  // flow even though its date-based expiry check below would otherwise say yes.
+  const canDispatch =
+    !isPickup &&
+    !isPersistedExpired &&
+    (lifecycleStatus === "completed" || isExpiredNow) &&
+    (!deal?.dispatchStatus || deal.dispatchStatus === "pending");
+  const dispatchThresholdReached = joinsCount >= target || Boolean(deal?.thresholdReachedAt);
+  const isUnsuccessful = isUnsuccessfulDeal(deal, now);
+  const isDispatched = Boolean(deal?.dispatchStatus) && deal.dispatchStatus !== "pending";
+  // Payment status only exists for delivery-mode deals; pickup deals never
+  // enter the payment-hold flow, so they're never gated on it.
+  const showLifecycleActions =
+    lifecycleStatus === "active" && !isPersistedExpired && !isExpiredNow;
+  const { data: deliveryStatusData } = useDeliveryStatusList(deal?.id, {
+    enabled: Boolean(deal?.id),
+  });
+  const allBuyersPaid = isPickup ? true : Boolean(deliveryStatusData?.allPaid);
   const storeAddress =
     formatAddressText(deal?.storeAddress) ||
     formatAddressText(deal?.pickupAddress) ||
@@ -184,7 +222,16 @@ export default function DealDetails({ route, navigation }) {
     const dealRef = doc(db, "deals", initialDeal.id);
     const unsubscribe = onSnapshot(dealRef, (snap) => {
       if (!snap.exists()) return;
-      setDeal(normalizeDeal({ id: snap.id, ...snap.data() }));
+      const data = snap.data();
+      setDeal(normalizeDeal({ id: snap.id, ...data }));
+      // This screen reads Firestore directly, bypassing the backend's lazy
+      // dealCode assignment (maybeAssignDealCode in apps/backend/src/lib.js)
+      // that normally runs on GET /api/deals/*. Ping it once so a deal
+      // opened before any list screen backfilled its code still gets one -
+      // the write lands back in Firestore and this listener picks it up.
+      if (!data?.dealCode) {
+        apiClient.get(`/deals/${snap.id}`).catch(() => {});
+      }
     });
     return () => unsubscribe();
   }, [initialDeal?.id]);
@@ -196,25 +243,100 @@ export default function DealDetails({ route, navigation }) {
     return () => clearInterval(intervalId);
   }, []);
 
-  const handleEndCampaign = () => {
+  const handleMarkCompleted = () => {
     Alert.alert(
-      "End Deal",
-      "Are you sure you want to end this deal early? It will be moved to 'Previous' deals.",
+      "Mark deal completed?",
+      "This moves the deal to Completed so you can dispatch it. Continue?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "End Now",
+          text: "Mark Completed",
+          onPress: () => {
+            completeDeal(deal.id, {
+              onError: (error) => {
+                const message =
+                  error?.response?.data?.error ||
+                  error?.message ||
+                  "Could not mark this deal as completed.";
+                Alert.alert("Failed", message);
+              },
+            });
+          },
+        },
+      ],
+    );
+  };
+
+  const handleExpireEarly = () => {
+    Alert.alert(
+      "Expire this deal early?",
+      "The minimum number of buyers hasn't joined yet. Ending it now refunds any buyers who already paid and cannot be undone. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Expire Early",
           style: "destructive",
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const dealRef = doc(db, "deals", deal.id);
-              await updateDoc(dealRef, { status: "completed" });
-            } catch (error) {
-              Alert.alert("Error", "Could not update deal status.");
-            } finally {
-              setLoading(false);
-            }
+          onPress: () => {
+            expireDealEarly(deal.id, {
+              onError: (error) => {
+                const message =
+                  error?.response?.data?.error ||
+                  error?.message ||
+                  "Could not expire this deal.";
+                Alert.alert("Failed", message);
+              },
+            });
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDispatch = () => {
+    Alert.alert(
+      "Mark deal as dispatched?",
+      "This notifies every joined buyer with their delivery confirmation code and cannot be undone. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Dispatch",
+          onPress: () => {
+            dispatchDeal(deal.id, {
+              onError: (error) => {
+                const message =
+                  error?.response?.data?.error ||
+                  error?.message ||
+                  "Could not dispatch this deal.";
+                Alert.alert("Dispatch failed", message);
+              },
+            });
+          },
+        },
+      ],
+    );
+  };
+
+  const handleMarkDelivered = (buyerId, buyerName) => {
+    Alert.alert(
+      "Mark delivered?",
+      `Mark ${buyerName || "this buyer"}'s delivery as complete without their OTP? Use this only if the buyer can't confirm themselves.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Mark Delivered",
+          onPress: () => {
+            markBuyerDelivered(
+              { dealId: deal.id, buyerId },
+              {
+                onError: (error) => {
+                  const message =
+                    error?.response?.data?.error ||
+                    error?.message ||
+                    "Could not mark this delivery.";
+                  Alert.alert("Failed", message);
+                },
+              },
+            );
           },
         },
       ],
@@ -341,6 +463,7 @@ export default function DealDetails({ route, navigation }) {
         onBack={() => navigation.goBack()}
         actions={null}
         headerBelow={headerBelowContent}
+        images={getDealImages(deal)}
         title={deal.title || "Deal"}
         description={deal.description}
         sellerName={sellerDisplayName}
@@ -353,8 +476,10 @@ export default function DealDetails({ route, navigation }) {
         joinedCount={joinsCount}
         targetCount={target}
         progressColor={accentColor}
-        statusLabel={lifecycleStatus === "completed" ? null : statusLabel}
-        statusColor={accentColor}
+        statusLabel={
+          isUnsuccessful ? "Unsuccessful" : lifecycleStatus === "completed" ? null : statusLabel
+        }
+        statusColor={isUnsuccessful ? theme.colors.error : accentColor}
         statusInline
         showHeroAccent={false}
         variant="dashboard"
@@ -418,6 +543,20 @@ export default function DealDetails({ route, navigation }) {
           <View style={styles.logisticsItem}>
             <View style={styles.logisticsIconWrap}>
               <Ionicons
+                name="pricetag-outline"
+                size={16}
+                color={theme.colors.primary}
+              />
+            </View>
+            <View style={styles.logisticsContent}>
+              <Text style={styles.logisticsLabel}>Deal ID</Text>
+              <Text style={styles.logisticsValue}>{deal.dealCode || deal.id}</Text>
+            </View>
+          </View>
+          <View style={styles.logisticsDivider} />
+          <View style={styles.logisticsItem}>
+            <View style={styles.logisticsIconWrap}>
+              <Ionicons
                 name="cube-outline"
                 size={16}
                 color={theme.colors.primary}
@@ -452,6 +591,47 @@ export default function DealDetails({ route, navigation }) {
           ) : null}
         </InfoCard>
 
+        {!isPickup && deliveryStatusData?.items?.length ? (
+          <InfoCard
+            title={isDispatched ? "Delivery Progress" : "Buyer Payments"}
+            style={styles.logisticsCard}
+          >
+            {deliveryStatusData.items.map((item, index) => (
+              <React.Fragment key={item.buyerId}>
+                {index > 0 ? <View style={styles.logisticsDivider} /> : null}
+                <View style={styles.buyerRow}>
+                  <View style={styles.buyerRowInfo}>
+                    <Text style={styles.logisticsValue}>{item.buyerName}</Text>
+                    {item.buyerCode ? (
+                      <Text style={styles.logisticsLabel}>{item.buyerCode}</Text>
+                    ) : null}
+                    {isDispatched && item.deliveryStatus === "delivered" && item.deliveredAt ? (
+                      <Text style={styles.logisticsLabel}>
+                        Delivered {formatShortDate(item.deliveredAt)}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {isDispatched ? (
+                    <StatusPill
+                      status={item.deliveryStatus === "delivered" ? "delivered" : "dispatched"}
+                      label={item.deliveryStatus === "delivered" ? "Delivered" : "In Transit"}
+                    />
+                  ) : (
+                    <StatusPill status={item.paymentStatus || "unpaid"} />
+                  )}
+                  {isDispatched && item.deliveryStatus !== "delivered" ? (
+                    <TouchableOpacity
+                      onPress={() => handleMarkDelivered(item.buyerId, item.buyerName)}
+                    >
+                      <Text style={styles.markDeliveredText}>Mark delivered</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </React.Fragment>
+            ))}
+          </InfoCard>
+        ) : null}
+
         {countdown ? (
           <DetailRow
             icon="time-outline"
@@ -463,17 +643,87 @@ export default function DealDetails({ route, navigation }) {
 
       </DealDetailsLayout>
 
-      {lifecycleStatus === "active" && (
+      {(showLifecycleActions || canDispatch || isDispatched || isUnsuccessful) && (
         <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.endBtn}
-            onPress={handleEndCampaign}
-            disabled={loading}
-          >
-            <Text style={styles.endBtnText}>
-              {loading ? "Processing..." : "End Campaign Early"}
-            </Text>
-          </TouchableOpacity>
+          {showLifecycleActions && dispatchThresholdReached ? (
+            <>
+              <TouchableOpacity
+                onPress={handleMarkCompleted}
+                disabled={completing || !allBuyersPaid}
+              >
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.primaryDeep]}
+                  style={[styles.dispatchBtn, !allBuyersPaid && styles.disabledBtn]}
+                >
+                  <Text style={styles.dispatchBtnText}>
+                    {completing ? "Processing..." : "Mark Completed"}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              {!allBuyersPaid ? (
+                <Text style={styles.helperNoteText}>
+                  Waiting for all buyers to complete payment before this deal can be marked completed.
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+
+          {showLifecycleActions && !dispatchThresholdReached ? (
+            <TouchableOpacity
+              style={styles.endBtn}
+              onPress={handleExpireEarly}
+              disabled={expiringEarly}
+            >
+              <Text style={styles.endBtnText}>
+                {expiringEarly ? "Processing..." : "Expire Early"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {isUnsuccessful ? (
+            <View style={styles.unsuccessfulBanner}>
+              <Ionicons name="alert-circle-outline" size={18} color={theme.colors.error} />
+              <Text style={styles.unsuccessfulBannerText}>
+                This deal ended without reaching the minimum {target} buyers ({joinsCount} joined)
+                and did not qualify for dispatch. Any blocked buyer payments have been refunded.
+              </Text>
+            </View>
+          ) : null}
+
+          {canDispatch && dispatchThresholdReached ? (
+            allBuyersPaid ? (
+              <TouchableOpacity onPress={handleDispatch} disabled={dispatching}>
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.primaryDeep]}
+                  style={styles.dispatchBtn}
+                >
+                  <Text style={styles.dispatchBtnText}>
+                    {dispatching ? "Dispatching..." : "Mark as Dispatched"}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.helperNoteText}>
+                Waiting for all buyers to complete payment before this deal can be dispatched.
+              </Text>
+            )
+          ) : null}
+
+          {deal?.dispatchStatus === "dispatched" ? (
+            <View style={styles.dispatchedChip}>
+              <Ionicons name="checkmark-circle-outline" size={16} color={theme.colors.primary} />
+              <Text style={styles.dispatchedChipText}>
+                Dispatched{deal?.dispatchedAt ? ` on ${formatShortDate(deal.dispatchedAt)}` : ""}
+              </Text>
+            </View>
+          ) : null}
+
+          {deal?.dispatchStatus === "delivered" ? (
+            <View style={styles.deliveredBanner}>
+              <Ionicons name="checkmark-done-circle" size={18} color={theme.colors.success} />
+              <Text style={styles.deliveredBannerText}>All buyers received their orders.</Text>
+            </View>
+          ) : null}
         </View>
       )}
     </View>
@@ -676,6 +926,7 @@ const createStyles = (theme) =>
     backgroundColor: theme.colors.background,
     borderTopWidth: 1,
     borderTopColor: theme.colors.surfaceLight,
+    gap: 12,
   },
   endBtn: {
     backgroundColor: theme.colors.dangerSoftAlt,
@@ -684,6 +935,80 @@ const createStyles = (theme) =>
     alignItems: "center",
   },
   endBtnText: { color: theme.colors.error, fontWeight: "800" },
+  disabledBtn: { opacity: 0.5 },
+  helperNoteText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.textMuted,
+    textAlign: "center",
+  },
+  buyerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  buyerRowInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  markDeliveredText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.primary,
+  },
+  unsuccessfulBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: theme.colors.dangerSoftLight,
+    borderRadius: 14,
+    padding: 12,
+  },
+  unsuccessfulBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.error,
+    lineHeight: 17,
+  },
+  dispatchBtn: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  dispatchBtnText: {
+    color: theme.colors.onPrimary,
+    fontWeight: "800",
+  },
+  dispatchedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: theme.colors.infoSoft,
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  dispatchedChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.primary,
+  },
+  deliveredBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: theme.colors.successSoft,
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  deliveredBannerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.success,
+  },
   skeletonContent: {
     padding: 20,
     gap: 12,
@@ -739,6 +1064,16 @@ function normalizeDeal(deal) {
     normalized.thresholdReachedAt = normalized.thresholdReachedAt.toDate();
   }
   return normalized;
+}
+
+function formatShortDate(value) {
+  const date = toDate(value);
+  if (!date) return "";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function formatDuration(seconds) {

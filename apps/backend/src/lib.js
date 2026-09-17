@@ -9,9 +9,14 @@ const {
   REVIEWS_COLLECTION,
   NOTIFICATIONS_COLLECTION,
   ADDRESS_COLLECTION,
+  COUNTERS_COLLECTION,
+  APP_CONFIG_COLLECTION,
   DEFAULT_DEAL_LIMIT,
   MAX_DEAL_LIMIT,
   DEFAULT_ADDRESS_COUNTRY,
+  VERSION_GATE_DOC_ID,
+  VERSION_GATE_APPS,
+  DEFAULT_MIN_APP_VERSIONS,
 } = require("./constants");
 
 function nowIso() {
@@ -230,24 +235,102 @@ async function attachSellerNamesToDeals(deals = []) {
   });
 }
 
+// Deals are created by a direct client-side Firestore write
+// (apps/seller/src/screens/CreateDealScreen.js addDoc), not through this
+// backend's POST /api/deals - so dealCode (a short sequential DEAL-0001
+// code, unlike the deal's own random Firestore doc ID) can't be assigned at
+// creation time. Instead it's assigned lazily, the first time the deal is
+// read through this backend, the same self-healing pattern used for a
+// buyer's missing role/buyerCode in ensureUserProfile.
+async function maybeAssignDealCode(dealId, deal) {
+  if (deal?.dealCode) return deal.dealCode;
+  try {
+    const dealRef = db.collection(DEALS_COLLECTION).doc(dealId);
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(dealRef);
+      if (!snap.exists) return null;
+      const data = snap.data() || {};
+      if (data.dealCode) return data.dealCode;
+
+      const counterRef = db.collection(COUNTERS_COLLECTION).doc("deals");
+      const counterSnap = await tx.get(counterRef);
+      const next = asNumber(counterSnap.exists ? counterSnap.data()?.value : 0, 0) + 1;
+      const dealCode = formatSequenceCode("DEAL", next);
+
+      tx.set(counterRef, { value: next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      tx.set(dealRef, { dealCode, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return dealCode;
+    });
+  } catch (error) {
+    console.warn("maybeAssignDealCode failed:", dealId, error.message || error);
+    return null;
+  }
+}
+
+// Batch version for list responses - only touches deals actually missing a
+// dealCode (i.e. every deal exactly once, ever).
+async function ensureDealCodes(deals = []) {
+  if (!Array.isArray(deals) || deals.length === 0) return deals;
+  return Promise.all(
+    deals.map(async (deal) => {
+      if (deal.dealCode) return deal;
+      const dealCode = await maybeAssignDealCode(deal.id, deal);
+      return dealCode ? { ...deal, dealCode } : deal;
+    }),
+  );
+}
+
+// Atomically increments a named counter doc (counters/{name}.value) and
+// returns the new integer - the building block for every short sequential
+// ID in the app (DEAL-0001, BUYER-0001, ...). A transaction is required
+// since multiple deals/signups can happen concurrently.
+async function getNextSequence(name) {
+  const ref = db.collection(COUNTERS_COLLECTION).doc(name);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const current = asNumber(snap.exists ? snap.data()?.value : 0, 0);
+    const next = current + 1;
+    tx.set(ref, { value: next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return next;
+  });
+}
+
+function formatSequenceCode(prefix, value, pad = 4) {
+  return `${prefix}-${String(value).padStart(pad, "0")}`;
+}
+
 async function ensureUserProfile(uid, seed = {}) {
   const ref = db.collection(USERS_COLLECTION).doc(uid);
   const snap = await ref.get();
-  if (snap.exists) {
-    return { id: snap.id, ...(snap.data() || {}) };
+  const existing = snap.exists ? snap.data() || {} : null;
+
+  // A doc can exist with no `role` - e.g. a client writing an unrelated
+  // field (push token, favorites) before its own profile-seeding logic
+  // runs, racing ahead of it. Backfill the missing defaults instead of
+  // leaving the account permanently stuck failing every requireRole check.
+  const needsRole = !existing || !existing.role;
+  const role = String((existing && existing.role) || seed?.role || "buyer").toLowerCase();
+  const needsBuyerCode = role === "buyer" && !existing?.buyerCode;
+
+  if (!needsRole && !needsBuyerCode) {
+    return { id: snap.id, ...existing };
   }
-  const role = String(seed?.role || "buyer").toLowerCase();
-  const defaultApprovalStatus = "approved";
-  const payload = {
-    role,
-    status: "active",
-    approvalStatus: defaultApprovalStatus,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-    ...seed,
-  };
-  await ref.set(payload, { merge: true });
-  return { id: uid, ...payload };
+
+  const payload = {};
+  if (needsRole) {
+    payload.role = role;
+    payload.status = existing?.status || "active";
+    payload.approvalStatus = existing?.approvalStatus || "approved";
+    payload.createdAt = existing?.createdAt || FieldValue.serverTimestamp();
+  }
+  if (needsBuyerCode) {
+    payload.buyerCode = formatSequenceCode("BUYER", await getNextSequence("buyers"));
+  }
+  payload.updatedAt = FieldValue.serverTimestamp();
+
+  const finalPayload = { ...payload, ...seed };
+  await ref.set(finalPayload, { merge: true });
+  return { id: uid, ...existing, ...finalPayload };
 }
 
 function normalizeUserApprovalStatus(profile = {}) {
@@ -392,6 +475,73 @@ function validateDealPublishability(deal = {}) {
   return "Pickup deals require a store address before publish";
 }
 
+const MAX_OTP_ATTEMPTS = 5;
+
+function generateSixDigitOtp() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+}
+
+// Only the deal's own seller (or an admin) may manage its delivery/lifecycle
+// actions (dispatch, mark-delivered, complete, expire-early). Shared by
+// routes/delivery.js and routes/deals.js.
+function assertSellerOwnsDeal(deal, req) {
+  const role = String(req.userProfile?.role || "").toLowerCase();
+  const sellerId = getSellerId(deal);
+  if (role !== "admin" && sellerId && sellerId !== req.user.uid) {
+    const error = new Error("Only the seller can manage this deal");
+    error.status = 403;
+    throw error;
+  }
+}
+
+// Shared by the OTP-confirm and seller-override delivery routes
+// (routes/delivery.js). Must be called inside an active transaction with
+// both dealRef/joinRef already read via tx.get() (deal and joinData are the
+// plain data, not the snapshots). Increments the deal's delivered count and,
+// once every joined buyer has confirmed, stamps the deal as fully delivered.
+// Also releases a held payment to the seller now that delivery is confirmed
+// (see the "pay" flag flow in routes/deals.js) - this is the one place both
+// confirmation paths funnel through, so it's the only place that needs to
+// know about the payment-hold release.
+function applyDeliveryConfirmation(tx, { dealRef, deal, joinRef, joinData, via }) {
+  const currentJoins = asNumber(deal.currentJoins ?? deal.joinedUsers, 0);
+  const nextDeliveredCount = asNumber(deal.deliveredCount, 0) + 1;
+  const rollupComplete = currentJoins > 0 && nextDeliveredCount >= currentJoins;
+
+  const dealUpdates = {
+    deliveredCount: FieldValue.increment(1),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  if (rollupComplete) {
+    dealUpdates.dispatchStatus = "delivered";
+    dealUpdates.allDeliveredAt = FieldValue.serverTimestamp();
+  }
+
+  const paymentReleaseUpdates =
+    joinData?.paymentStatus === "paid_blocked"
+      ? {
+          paymentStatus: "released_to_seller",
+          paymentReleasedAt: FieldValue.serverTimestamp(),
+          paymentReleaseReason: "delivered",
+        }
+      : {};
+
+  tx.set(
+    joinRef,
+    {
+      deliveryStatus: "delivered",
+      deliveredAt: FieldValue.serverTimestamp(),
+      deliveryConfirmedVia: via,
+      updatedAt: FieldValue.serverTimestamp(),
+      ...paymentReleaseUpdates,
+    },
+    { merge: true },
+  );
+  tx.set(dealRef, dealUpdates, { merge: true });
+
+  return { rollupComplete };
+}
+
 const EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send";
 
 // Sends real OS push notifications via Expo's push service. Tokens come
@@ -456,6 +606,17 @@ async function pushNotification({ userId, type, title, body, meta = {} }) {
   ]);
 }
 
+// Normalizes a deal's image gallery to an array of URL strings. Falls back
+// to a single legacy `image`/`imageUrl` value when no `images` array was
+// provided, so deals created before multi-image support still show one.
+function normalizeImages(images, fallbackSingle = null) {
+  if (Array.isArray(images)) {
+    const cleaned = images.filter((url) => typeof url === "string" && url.trim());
+    if (cleaned.length) return cleaned;
+  }
+  return fallbackSingle ? [fallbackSingle] : [];
+}
+
 function extractDealPayload(input = {}, sellerId = null) {
   const expiresAt = parseDate(input.expiresAt);
   const expiryTime = parseDate(input.expiryTime);
@@ -467,6 +628,7 @@ function extractDealPayload(input = {}, sellerId = null) {
     1,
   );
   const currentJoins = asNumber(input.currentJoins ?? input.joinedUsers, 0);
+  const images = normalizeImages(input.images, input.imageUrl ?? input.image);
 
   return {
     title: String(input.title || ""),
@@ -484,8 +646,9 @@ function extractDealPayload(input = {}, sellerId = null) {
     joinedUsers: Math.max(0, currentJoins),
     currentJoins: Math.max(0, currentJoins),
     location: String(input.location || ""),
-    image: input.image ?? null,
-    imageUrl: input.imageUrl ?? input.image ?? null,
+    images,
+    image: input.image ?? images[0] ?? null,
+    imageUrl: input.imageUrl ?? input.image ?? images[0] ?? null,
     sellerId: sellerId || input.sellerId || "",
     viewsCount: asNumber(input.viewsCount, 0),
     favoritesCount: asNumber(input.favoritesCount ?? input.favouritesCount, 0),
@@ -526,6 +689,7 @@ function applyDealUpdate(input = {}) {
     "location",
     "image",
     "imageUrl",
+    "images",
   ];
 
   updatableFields.forEach((field) => {
@@ -533,6 +697,13 @@ function applyDealUpdate(input = {}) {
       updates[field] = input[field];
     }
   });
+
+  if (input.images !== undefined) {
+    const images = normalizeImages(input.images);
+    updates.images = images;
+    if (input.image === undefined) updates.image = images[0] ?? null;
+    if (input.imageUrl === undefined) updates.imageUrl = images[0] ?? null;
+  }
 
   if (input.expiresAt !== undefined || input.expiryTime !== undefined) {
     const expiryDate = parseDate(input.expiresAt || input.expiryTime);
@@ -572,12 +743,19 @@ module.exports = {
   REVIEWS_COLLECTION,
   NOTIFICATIONS_COLLECTION,
   ADDRESS_COLLECTION,
+  COUNTERS_COLLECTION,
+  APP_CONFIG_COLLECTION,
   DEFAULT_DEAL_LIMIT,
   MAX_DEAL_LIMIT,
   DEFAULT_ADDRESS_COUNTRY,
+  VERSION_GATE_DOC_ID,
+  VERSION_GATE_APPS,
+  DEFAULT_MIN_APP_VERSIONS,
   nowIso,
   asNumber,
   asBoolean,
+  getNextSequence,
+  formatSequenceCode,
   parseDate,
   toMillis,
   getExpiryMs,
@@ -589,6 +767,8 @@ module.exports = {
   sanitizeDealForResponse,
   getUserDisplayName,
   attachSellerNamesToDeals,
+  maybeAssignDealCode,
+  ensureDealCodes,
   ensureUserProfile,
   normalizeUserApprovalStatus,
   normalizeAuthHeader,
@@ -608,5 +788,9 @@ module.exports = {
   pushNotification,
   extractDealPayload,
   applyDealUpdate,
+  MAX_OTP_ATTEMPTS,
+  generateSixDigitOtp,
+  assertSellerOwnsDeal,
+  applyDeliveryConfirmation,
 };
 

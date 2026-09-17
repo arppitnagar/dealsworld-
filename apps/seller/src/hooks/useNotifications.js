@@ -7,6 +7,7 @@ import {
   query,
   updateDoc,
   serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
@@ -54,10 +55,23 @@ export const useNotifications = () => {
     [user?.uid],
   );
 
+  const markAllNotificationsRead = useCallback(async () => {
+    if (!user) return;
+    const unread = notifications.filter((item) => !item.readAt && !item.isRead);
+    if (unread.length === 0) return;
+    const batch = writeBatch(db);
+    unread.forEach((item) => {
+      const ref = doc(db, "users", user.uid, "notifications", item.id);
+      batch.update(ref, { isRead: true, readAt: serverTimestamp() });
+    });
+    await batch.commit();
+  }, [user?.uid, notifications]);
+
   return {
     notifications,
     loading,
     unreadCount,
     markNotificationRead,
+    markAllNotificationsRead,
   };
 };

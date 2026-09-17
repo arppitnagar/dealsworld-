@@ -4,9 +4,10 @@ import {
   Text,
   TouchableOpacity,
   Image,
+  ScrollView,
   StyleSheet,
 } from "react-native";
-import { Camera } from "lucide-react-native";
+import { Camera, X } from "lucide-react-native";
 import AppInput from "./ui/AppInput";
 import FormSection from "./FormSection";
 import { useTheme } from "../theme/ThemeProvider";
@@ -15,7 +16,8 @@ import { getFormStyles } from "../styles/forms";
 export default function DealFormFields({
   form = {},
   errors = {},
-  image,
+  images = [],
+  maxImages = 6,
   isReadOnly = false,
   isExpiryLocked = false,
   showImage = true,
@@ -24,6 +26,7 @@ export default function DealFormFields({
   showPricing = true,
   showLogistics = true,
   onPickImage,
+  onRemoveImage,
   onFieldChange,
   onPriceChange,
   onMinBuyersChange,
@@ -56,14 +59,36 @@ export default function DealFormFields({
         half: {
           flex: 1,
         },
+        imageRow: {
+          flexDirection: "row",
+          gap: 10,
+        },
         imageBox: {
-          height: 160,
+          width: 110,
+          height: 110,
           backgroundColor: theme.colors.surfaceMuted,
           borderRadius: 18,
           justifyContent: "center",
           alignItems: "center",
         },
-        image: { width: "100%", height: "100%" },
+        image: { width: "100%", height: "100%", borderRadius: 18 },
+        imageThumbWrap: {
+          width: 110,
+          height: 110,
+          borderRadius: 18,
+          overflow: "hidden",
+        },
+        imageRemoveBtn: {
+          position: "absolute",
+          top: 6,
+          right: 6,
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          alignItems: "center",
+          justifyContent: "center",
+        },
         inputError: {
           borderColor: theme.colors.error,
         },
@@ -96,21 +121,37 @@ export default function DealFormFields({
     <>
       <FormSection title="Deal Details">
         {showImage ? (
-          <TouchableOpacity
-            style={[
-              styles.imageBox,
-              isReadOnly && { borderStyle: "solid", opacity: 0.8 },
-            ]}
-            onPress={onPickImage}
-            disabled={isReadOnly || !onPickImage}
-            activeOpacity={isReadOnly ? 1 : 0.7}
-          >
-            {image ? (
-              <Image source={{ uri: image }} style={styles.image} />
-            ) : (
-              <Camera size={40} color={theme.colors.iconMuted} />
-            )}
-          </TouchableOpacity>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.imageRow}>
+              {images.map((uri, index) => (
+                <View key={`${uri}-${index}`} style={styles.imageThumbWrap}>
+                  <Image source={{ uri }} style={styles.image} />
+                  {!isReadOnly && onRemoveImage ? (
+                    <TouchableOpacity
+                      style={styles.imageRemoveBtn}
+                      onPress={() => onRemoveImage(index)}
+                    >
+                      <X size={14} color="#fff" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ))}
+              {!isReadOnly && onPickImage && images.length < maxImages ? (
+                <TouchableOpacity
+                  style={styles.imageBox}
+                  onPress={onPickImage}
+                  activeOpacity={0.7}
+                >
+                  <Camera size={32} color={theme.colors.iconMuted} />
+                </TouchableOpacity>
+              ) : null}
+              {isReadOnly && images.length === 0 ? (
+                <View style={styles.imageBox}>
+                  <Camera size={32} color={theme.colors.iconMuted} />
+                </View>
+              ) : null}
+            </View>
+          </ScrollView>
         ) : null}
 
         {showTitle ? (

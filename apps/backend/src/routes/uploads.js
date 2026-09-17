@@ -33,24 +33,29 @@ const upload = multer({
   },
 });
 
-// Seller/admin uploads a deal image. Stored on the backend's own disk under
+const MAX_DEAL_IMAGES = 6;
+
+// Seller/admin uploads one or more deal images (a deal can carry a gallery
+// of up to MAX_DEAL_IMAGES). Stored on the backend's own disk under
 // uploads/deals/{sellerUid}/ and served back via the static /uploads route
 // registered in src/app.js - avoids needing Firebase Storage's Blaze plan.
 router.post(
-  "/api/uploads/deal-image",
+  "/api/uploads/deal-images",
   requireAuth,
   requireRole("seller", "admin"),
   (req, res) => {
-    upload.single("image")(req, res, (error) => {
+    upload.array("images", MAX_DEAL_IMAGES)(req, res, (error) => {
       if (error) {
         return res.status(400).json({ error: error.message || "Upload failed" });
       }
-      if (!req.file) {
-        return res.status(400).json({ error: "No image file provided" });
+      if (!req.files?.length) {
+        return res.status(400).json({ error: "No image files provided" });
       }
-      const relativePath = `deals/${req.user.uid}/${req.file.filename}`;
-      const url = `${req.protocol}://${req.get("host")}/uploads/${relativePath}`;
-      return res.json({ url });
+      const urls = req.files.map((file) => {
+        const relativePath = `deals/${req.user.uid}/${file.filename}`;
+        return `${req.protocol}://${req.get("host")}/uploads/${relativePath}`;
+      });
+      return res.json({ urls });
     });
   },
 );

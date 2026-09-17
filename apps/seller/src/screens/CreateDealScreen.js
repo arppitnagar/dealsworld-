@@ -183,7 +183,11 @@ export default function CreateDealScreen({ route, navigation }) {
     sellerId: deal?.sellerId || user?.uid || "",
   });
 
-  const [image, setImage] = useState(deal?.imageUrl || deal?.image || null);
+  const [images, setImages] = useState(() => {
+    if (Array.isArray(deal?.images) && deal.images.length) return deal.images;
+    const single = deal?.imageUrl || deal?.image;
+    return single ? [single] : [];
+  });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -373,42 +377,66 @@ export default function CreateDealScreen({ route, navigation }) {
 
   /* ---------- IMAGE ---------- */
 
+  const MAX_DEAL_IMAGES = 6;
+
   /**
-   * The function `pickImage` uses ImagePicker to launch the image library asynchronously and sets the
-   * image URI if an image is selected.
+   * `pickImages` opens the library for a multi-select pick, capped so the
+   * deal never exceeds MAX_DEAL_IMAGES total.
    */
-  const pickImage = async () => {
+  const pickImages = async () => {
+    const remaining = MAX_DEAL_IMAGES - images.length;
+    if (remaining <= 0) return;
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.6,
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
     });
-    if (!res.canceled) setImage(res.assets[0].uri);
+    if (!res.canceled) {
+      setImages((prev) => [...prev, ...res.assets.map((asset) => asset.uri)]);
+    }
+  };
+
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   /**
-   * `image` state holds a local device file:// URI right after picking a
-   * photo - that path only exists on this phone, so buyers on other devices
-   * can never load it. Upload it to the backend (see
+   * `images` state holds local device file:// URIs right after picking
+   * photos - those paths only exist on this phone, so buyers on other
+   * devices can never load them. Upload the local ones to the backend (see
    * apps/backend/src/routes/uploads.js, stored on its own disk under
-   * uploads/deals/{sellerUid}/) and swap in the public URL it returns
-   * before saving the deal. If the image is already an https:// URL
-   * (unchanged from an existing deal, or already uploaded), leave it as-is
-   * instead of re-uploading.
+   * uploads/deals/{sellerUid}/) and swap in the public URLs it returns
+   * before saving the deal, preserving the original order. URIs that are
+   * already https:// (unchanged from an existing deal, or already
+   * uploaded) are left as-is instead of being re-uploaded.
    */
-  const resolveImageForSave = async (uri) => {
-    if (!uri) return null;
-    if (/^https?:\/\//i.test(uri)) return uri;
+  const resolveImagesForSave = async (uris) => {
+    const list = (uris || []).filter(Boolean);
+    if (!list.length) return [];
+
+    const localUris = list.filter((uri) => !/^https?:\/\//i.test(uri));
+    if (!localUris.length) return list;
 
     const formData = new FormData();
-    formData.append("image", {
-      uri,
-      name: `deal-${Date.now()}.jpg`,
-      type: "image/jpeg",
+    localUris.forEach((uri, index) => {
+      formData.append("images", {
+        uri,
+        name: `deal-${Date.now()}-${index}.jpg`,
+        type: "image/jpeg",
+      });
     });
-    const response = await apiClient.post("/uploads/deal-image", formData, {
+    const response = await apiClient.post("/uploads/deal-images", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-    return response.data?.url || null;
+    const uploadedUrls = response.data?.urls || [];
+
+    let uploadIndex = 0;
+    return list
+      .map((uri) =>
+        /^https?:\/\//i.test(uri) ? uri : uploadedUrls[uploadIndex++] ?? null,
+      )
+      .filter(Boolean);
   };
 
   /* ---------- VALIDATION ---------- */
@@ -514,7 +542,7 @@ export default function CreateDealScreen({ route, navigation }) {
 
     setLoading(true);
     try {
-      const resolvedImageUrl = await resolveImageForSave(image);
+      const resolvedImages = await resolveImagesForSave(images);
 
       // 1. Prepare the data object ONCE
       const resolvedCategory =
@@ -547,7 +575,9 @@ export default function CreateDealScreen({ route, navigation }) {
         description: form.description || "", // Fixed typo from 'descrption'
         deliveryMode: form.deliveryMode,
         title: form.title,
-        image: resolvedImageUrl,
+        images: resolvedImages,
+        image: resolvedImages[0] || null,
+        imageUrl: resolvedImages[0] || null,
         deliveryCharge:
           form.deliveryMode === "Paid Home Delivery"
             ? Number(parseNumber(form.deliveryCharge)) || 0
@@ -737,10 +767,11 @@ export default function CreateDealScreen({ route, navigation }) {
           <DealFormFields
             form={form}
             errors={errors}
-            image={image}
+            images={images}
             isReadOnly={isReadOnly}
             isExpiryLocked={isExpiryLocked}
-            onPickImage={pickImage}
+            onPickImage={pickImages}
+            onRemoveImage={removeImage}
             onFieldChange={setFieldValue}
             onPriceChange={handlePriceChange}
             onMinBuyersChange={handleMinBuyersChange}

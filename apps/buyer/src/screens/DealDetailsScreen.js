@@ -27,18 +27,31 @@ import {
   useTheme,
   EmptyState,
   AppButton,
+  OtpDisplay,
+  OtpInput,
+  StatusPill,
+  getDealImages,
 } from "@dealsworld/shared";
 import {
   useDeals,
+  useJoinedDeals,
   useRecordDealView,
   useLeaveDeal,
   useJoinDeal,
 } from "../hooks/useDeals";
+import {
+  useMyDelivery,
+  useConfirmDelivery,
+  usePayForDeal,
+} from "../hooks/useDeliveryStatus";
+import { isUnsuccessfulDeal, isPastCampaign } from "../utils/dealCategories";
 import { useDealState } from "../hooks/useDealState";
 import { useAddresses } from "../hooks/useAddresses";
 import { useDealReviews } from "../hooks/useDealReviews";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
+
+const SHOW_RATINGS_AND_REVIEWS = false;
 
 const IST_OFFSET_MINUTES = 330;
 const MONTHS_SHORT = [
@@ -132,9 +145,14 @@ export default function DealDetailsScreen({ route, navigation }) {
     "https://play.google.com/store/apps/details?id=com.dealbuddy";
   const { dealId } = route.params || {};
   const { data: deals, isLoading } = useDeals();
+  const { data: joinedDeals } = useJoinedDeals();
   const { mutate: recordView } = useRecordDealView();
   const { mutate: joinDeal, isLoading: joining } = useJoinDeal();
   const { mutate: leaveDeal, isLoading: leaving } = useLeaveDeal();
+  const { data: myDelivery } = useMyDelivery(dealId);
+  const { mutate: confirmDelivery, isPending: confirmingDelivery } = useConfirmDelivery();
+  const { mutate: payForDeal, isPending: paying } = usePayForDeal();
+  const [otpValue, setOtpValue] = useState("");
   const { addresses, loading: addressesLoading } = useAddresses();
   const { user } = useAuth();
   const { profile } = useUserProfile();
@@ -170,8 +188,10 @@ export default function DealDetailsScreen({ route, navigation }) {
   const isBuyer = profile?.role ? profile.role === "buyer" : true;
 
   const deal = useMemo(
-    () => deals?.find((d) => d.id === dealId),
-    [deals, dealId],
+    () =>
+      deals?.find((d) => d.id === dealId) ||
+      joinedDeals?.find((d) => d.id === dealId),
+    [deals, joinedDeals, dealId],
   );
   const dealState = useMemo(
     () => (dealId ? dealStates.get(dealId) : null),
@@ -196,8 +216,13 @@ export default function DealDetailsScreen({ route, navigation }) {
   const minGroupSize = Number.isFinite(Number(minGroupSizeRaw))
     ? Number(minGroupSizeRaw)
     : 1;
-  const thresholdReached =
-    joinCount >= minGroupSize || Boolean(deal?.thresholdReachedAt);
+  // Live count only - deal.thresholdReachedAt is a permanent "this campaign
+  // hit its minimum at least once" milestone (kept even after someone later
+  // leaves, since the seller/unsuccessful-deal logic needs that history), so
+  // it must not be used here: a buyer who leaves after threshold was reached
+  // frees up a spot, and the join button should reflect that live headcount
+  // instead of staying "Locked" forever off a stale flag.
+  const thresholdReached = joinCount >= minGroupSize;
   const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
   const isPickup = /pick/i.test(deliveryModeLabel);
   const storeAddress =
@@ -209,6 +234,32 @@ export default function DealDetailsScreen({ route, navigation }) {
     getSellerDisplayName(deal);
   const requiresDeliveryAddress =
     deliveryModeLabel.length > 0 && !/pick/i.test(deliveryModeLabel);
+  const deliveryStatus = hasJoined ? myDelivery?.deliveryStatus || null : null;
+  const showDeliverySection = requiresDeliveryAddress && hasJoined && Boolean(deliveryStatus);
+  const isUnsuccessful = isUnsuccessfulDeal(deal);
+  const showUnsuccessfulSection = hasJoined && isUnsuccessful;
+  const myPaymentStatus = hasJoined ? myDelivery?.paymentStatus || "unpaid" : null;
+  const showPaymentSection =
+    hasJoined && requiresDeliveryAddress && !showUnsuccessfulSection && Boolean(myPaymentStatus);
+  // Once paid, the address is locked - the seller/delivery flow relies on
+  // whatever was on file at that point, so letting a buyer swap it out
+  // afterward (even post-OTP) would silently desync it from what's actually
+  // being shipped. The deal-level completed/expired check is a second,
+  // independent lock (not just the buyer's own payment status) so a deal
+  // that finished through any path - including older joins from before the
+  // payment/delivery flow existed, where paymentStatus may still read the
+  // "unpaid" default - still locks the address once its campaign has ended.
+  const isDealEnded = isPastCampaign(deal);
+  const canEditAddress =
+    !hasJoined ||
+    (!isDealEnded && (myPaymentStatus === null || myPaymentStatus === "unpaid"));
+  const deliveryHeroStatus = showUnsuccessfulSection
+    ? { label: "Unsuccessful", color: theme.colors.error }
+    : deliveryStatus === "delivered"
+      ? { label: "Delivered", color: theme.colors.success }
+      : deliveryStatus === "in_transit"
+        ? { label: "In Transit", color: theme.colors.primary }
+        : null;
   const hasAnyAddress = Array.isArray(addresses) && addresses.length > 0;
   const defaultAddress = useMemo(
     () => (hasAnyAddress ? addresses.find((item) => item.isDefault) || null : null),
@@ -335,6 +386,35 @@ export default function DealDetailsScreen({ route, navigation }) {
                 error?.message ||
                 "Unable to join this deal.";
           Alert.alert("Join failed", message);
+        },
+      },
+    );
+  };
+
+  const handlePay = () => {
+    if (!dealId || paying) return;
+    payForDeal(dealId, {
+      onError: (error) => {
+        const message =
+          error?.response?.data?.error || error?.message || "Unable to process payment.";
+        Alert.alert("Payment failed", message);
+      },
+    });
+  };
+
+  const handleConfirmDelivery = () => {
+    if (!dealId || otpValue.length !== 6 || confirmingDelivery) return;
+    confirmDelivery(
+      { dealId, otp: otpValue },
+      {
+        onSuccess: () => {
+          setOtpValue("");
+          setSuccessFeedback("delivered");
+        },
+        onError: (error) => {
+          const message =
+            error?.response?.data?.error || error?.message || "Unable to confirm delivery.";
+          Alert.alert("Incorrect code", message);
         },
       },
     );
@@ -612,82 +692,93 @@ export default function DealDetailsScreen({ route, navigation }) {
     handleJoin();
   };
 
-  const GradientIconButton = ({ onPress, children, disabled }) => (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled}
-      style={styles.headerIconButton}
-    >
-      <LinearGradient
-        colors={[theme.colors.primary, theme.colors.primaryDeep]}
-        style={styles.headerIconGradient}
+  const BarItem = ({ onPress, active, tone, label, children }) => {
+    const color =
+      tone === "danger"
+        ? theme.colors.danger
+        : active
+          ? theme.colors.primary
+          : theme.colors.textMuted;
+    return (
+      <TouchableOpacity
+        style={[styles.bottomBarItem, active && styles.bottomBarItemActive]}
+        activeOpacity={0.75}
+        onPress={onPress}
       >
-        <View style={styles.headerIconInner}>{children}</View>
-      </LinearGradient>
-    </TouchableOpacity>
-  );
+        {children(color)}
+        <Text style={[styles.bottomBarLabel, { color }]}>{label}</Text>
+      </TouchableOpacity>
+    );
+  };
 
-  const headerBelowContent = (
-    <View style={styles.headerBelowRow}>
-      <View style={styles.headerActionItem}>
-        <GradientIconButton
-          onPress={handleToggleJoin}
-          disabled={false}
-        >
-          {joining || leaving ? (
-            <ActivityIndicator color={theme.colors.onPrimary} size="small" />
+  const footerContent = (
+    <View
+      style={[
+        styles.bottomBar,
+        { paddingBottom: Math.max(insets.bottom, 16) },
+      ]}
+    >
+      <BarItem
+        onPress={() => navigation.navigate("MainTabs", { screen: "Home" })}
+        label="Home"
+      >
+        {(color) => <Ionicons name="home-outline" size={20} color={color} />}
+      </BarItem>
+      <BarItem
+        onPress={handleToggleJoin}
+        active={hasJoined}
+        tone={hasJoined ? "danger" : undefined}
+        label={hasJoined ? "Leave" : thresholdReached ? "Locked" : "Join"}
+      >
+        {(color) =>
+          joining || leaving ? (
+            <ActivityIndicator color={color} size="small" />
           ) : !hasJoined && thresholdReached ? (
-            <Ionicons
-              name="lock-closed-outline"
-              size={16}
-              color={theme.colors.onPrimary}
-            />
+            <Ionicons name="lock-closed-outline" size={20} color={color} />
           ) : (
             <Ionicons
               name={hasJoined ? "exit-outline" : "person-add-outline"}
-              size={16}
-              color={hasJoined ? theme.colors.danger : theme.colors.onPrimary}
+              size={20}
+              color={color}
             />
-          )}
-        </GradientIconButton>
-        <Text style={styles.headerActionLabel}>
-          {hasJoined ? "Leave" : thresholdReached ? "Locked" : "Join"}
-        </Text>
-      </View>
-      <View style={styles.headerActionItem}>
-        <GradientIconButton onPress={handleShareDeal}>
-          <Ionicons
-            name="share-social-outline"
-            size={16}
-            color={theme.colors.onPrimary}
-          />
-        </GradientIconButton>
-        <Text style={styles.headerActionLabel}>Share</Text>
-      </View>
-      <View style={styles.headerActionItem}>
-        <GradientIconButton
+          )
+        }
+      </BarItem>
+      <BarItem onPress={handleShareDeal} label="Share">
+        {(color) => (
+          <Ionicons name="share-social-outline" size={20} color={color} />
+        )}
+      </BarItem>
+      {hasJoined && (
+        <BarItem
           onPress={() =>
             navigation.navigate("DealChat", { dealId: deal.id, deal })
           }
+          label="Chat"
         >
-          <Ionicons
-            name="chatbubble-ellipses-outline"
-            size={16}
-            color={theme.colors.onPrimary}
-          />
-        </GradientIconButton>
-        <Text style={styles.headerActionLabel}>Chat</Text>
-      </View>
-      <View style={styles.headerActionItem}>
-        <GradientIconButton onPress={handleToggleFavorite}>
+          {(color) => (
+            <Ionicons
+              name="chatbubble-ellipses-outline"
+              size={20}
+              color={color}
+            />
+          )}
+        </BarItem>
+      )}
+      <BarItem
+        onPress={handleToggleFavorite}
+        active={isFavorite}
+        tone={isFavorite ? "danger" : undefined}
+        label="Liked"
+      >
+        {(color) => (
           <Heart
-            size={16}
-            color={isFavorite ? theme.colors.danger : theme.colors.onPrimary}
+            size={20}
+            color={color}
             fill={isFavorite ? theme.colors.danger : "transparent"}
           />
-        </GradientIconButton>
-        <Text style={styles.headerActionLabel}>Liked</Text>
-      </View>
+        )}
+      </BarItem>
     </View>
   );
 
@@ -697,7 +788,8 @@ export default function DealDetailsScreen({ route, navigation }) {
         headerTitle="Deal Details"
         onBack={() => navigation.goBack()}
         actions={null}
-        headerBelow={headerBelowContent}
+        footer={footerContent}
+        images={getDealImages(deal)}
         title={deal.title || "Deal"}
         description={deal.description}
         sellerName={sellerDisplayName}
@@ -710,6 +802,9 @@ export default function DealDetailsScreen({ route, navigation }) {
         joinedCount={joinCount}
         targetCount={minGroupSize}
         progressColor={theme.colors.primary}
+        statusLabel={deliveryHeroStatus?.label}
+        statusColor={deliveryHeroStatus?.color}
+        statusInline={Boolean(deliveryHeroStatus)}
         variant="dashboard"
         contentStyle={styles.scrollContent}
       >
@@ -766,6 +861,20 @@ export default function DealDetailsScreen({ route, navigation }) {
           <View style={styles.logisticsItem}>
             <View style={styles.logisticsIconWrap}>
               <Ionicons
+                name="pricetag-outline"
+                size={16}
+                color={theme.colors.primary}
+              />
+            </View>
+            <View style={styles.logisticsContent}>
+              <Text style={styles.logisticsLabel}>Deal ID</Text>
+              <Text style={styles.logisticsValue}>{deal.dealCode || deal.id}</Text>
+            </View>
+          </View>
+          <View style={styles.logisticsDivider} />
+          <View style={styles.logisticsItem}>
+            <View style={styles.logisticsIconWrap}>
+              <Ionicons
                 name="cube-outline"
                 size={16}
                 color={theme.colors.primary}
@@ -800,6 +909,97 @@ export default function DealDetailsScreen({ route, navigation }) {
           ) : null}
         </InfoCard>
 
+        {showPaymentSection ? (
+          <InfoCard title="Payment" style={styles.logisticsCard}>
+            {myPaymentStatus === "unpaid" ? (
+              <>
+                <Text style={styles.logisticsLabel}>
+                  Pay to secure your spot. Your payment is held by us and released to the seller
+                  only once you confirm delivery.
+                </Text>
+                <AppButton
+                  title={paying ? "Processing..." : `Pay ${formatINR(primaryPrice || 0)}`}
+                  onPress={handlePay}
+                  disabled={paying}
+                  loading={paying}
+                  style={styles.paymentButton}
+                />
+              </>
+            ) : (
+              <View style={styles.paymentStatusRow}>
+                <StatusPill status={myPaymentStatus} />
+                <Text style={styles.logisticsLabel}>
+                  {myPaymentStatus === "paid_blocked"
+                    ? "Held until you confirm delivery."
+                    : myPaymentStatus === "released_to_seller"
+                      ? "Released to the seller after delivery."
+                      : "Refunded back to you."}
+                </Text>
+              </View>
+            )}
+          </InfoCard>
+        ) : null}
+
+        {showUnsuccessfulSection ? (
+          <InfoCard title="Deal Unsuccessful" style={styles.unsuccessfulCard}>
+            <View style={styles.unsuccessfulRow}>
+              <Ionicons name="alert-circle-outline" size={20} color={theme.colors.error} />
+              <Text style={styles.unsuccessfulText}>
+                This deal ended without reaching its minimum group size, so it won't be
+                dispatched. You should receive a refund for your payment — contact the seller via
+                chat if you have questions.
+              </Text>
+            </View>
+          </InfoCard>
+        ) : null}
+
+        {showDeliverySection ? (
+          <InfoCard title="Delivery" style={styles.deliveryOtpCard}>
+            {deliveryStatus === "delivered" ? (
+              <View style={styles.deliveryOtpDoneRow}>
+                <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
+                <Text style={styles.deliveryOtpDoneText}>
+                  Delivered{myDelivery?.deliveredAt ? ` on ${formatReviewDate(myDelivery.deliveredAt)}` : ""}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.deliveryOtpLabel}>Your delivery confirmation code</Text>
+                <OtpDisplay code={myDelivery?.deliveryOtp || ""} />
+                <Text style={styles.deliveryOtpHint}>
+                  Don't share this code with anyone except your delivery person. Enter it below
+                  once your order arrives to confirm delivery.
+                </Text>
+
+                {myDelivery?.otpLocked ? (
+                  <Text style={styles.deliveryOtpLocked}>
+                    Too many incorrect attempts. Please contact the seller via chat to confirm
+                    delivery.
+                  </Text>
+                ) : (
+                  <>
+                    <OtpInput value={otpValue} onChangeText={setOtpValue} />
+                    {typeof myDelivery?.attemptsRemaining === "number" &&
+                    myDelivery.attemptsRemaining < 5 ? (
+                      <Text style={styles.deliveryOtpAttempts}>
+                        {myDelivery.attemptsRemaining} attempt(s) remaining
+                      </Text>
+                    ) : null}
+                    <AppButton
+                      title={confirmingDelivery ? "Confirming..." : "Confirm Delivery"}
+                      onPress={handleConfirmDelivery}
+                      disabled={otpValue.length !== 6 || confirmingDelivery}
+                      loading={confirmingDelivery}
+                      style={styles.deliveryOtpButton}
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </InfoCard>
+        ) : null}
+
+        {SHOW_RATINGS_AND_REVIEWS && (
         <InfoCard title="Ratings & Reviews" style={styles.reviewCard}>
           <View style={styles.reviewSummaryRow}>
             <View>
@@ -908,6 +1108,7 @@ export default function DealDetailsScreen({ route, navigation }) {
             )}
           </View>
         </InfoCard>
+        )}
 
         {requiresDeliveryAddress && hasJoined ? (
           <InfoCard title="Delivery Address" style={styles.deliveryCard}>
@@ -947,27 +1148,33 @@ export default function DealDetailsScreen({ route, navigation }) {
             )}
 
             <View style={styles.deliveryActions}>
-              <AppButton
-                title={deliveryAddress ? "Change Address" : "Add Address"}
-                onPress={() => {
-                  if (!addressesLoading && (!addresses || addresses.length === 0)) {
-                    Alert.alert(
-                      "No saved address",
-                      "Please add a delivery address to continue.",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Add Address",
-                          onPress: () => navigation.navigate("AddressForm"),
-                        },
-                      ],
-                    );
-                    return;
-                  }
-                  setShowAddressModal(true);
-                }}
-                style={styles.deliveryActionButton}
-              />
+              {canEditAddress ? (
+                <AppButton
+                  title={deliveryAddress ? "Change Address" : "Add Address"}
+                  onPress={() => {
+                    if (!addressesLoading && (!addresses || addresses.length === 0)) {
+                      Alert.alert(
+                        "No saved address",
+                        "Please add a delivery address to continue.",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Add Address",
+                            onPress: () => navigation.navigate("AddressForm"),
+                          },
+                        ],
+                      );
+                      return;
+                    }
+                    setShowAddressModal(true);
+                  }}
+                  style={styles.deliveryActionButton}
+                />
+              ) : (
+                <Text style={styles.deliveryMeta}>
+                  Address is locked after payment and can no longer be changed.
+                </Text>
+              )}
             </View>
           </InfoCard>
         ) : null}
@@ -1116,7 +1323,11 @@ export default function DealDetailsScreen({ route, navigation }) {
                 }
               />
               <Text style={styles.successText}>
-                {successFeedback === "leave" ? "Left deal!" : "Joined!"}
+                {successFeedback === "leave"
+                  ? "Left deal!"
+                  : successFeedback === "delivered"
+                    ? "Delivered!"
+                    : "Joined!"}
               </Text>
             </Animated.View>
           </View>
@@ -1134,41 +1345,31 @@ const createStyles = (theme) =>
     paddingBottom: 56,
     gap: 20,
   },
-  headerIconButton: {
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  headerIconGradient: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerIconInner: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: theme.colors.onPrimarySoft,
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerActionItem: {
-    alignItems: "center",
-    gap: 4,
-  },
-  headerActionLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: theme.colors.onPrimaryMuted,
-  },
-  headerBelowRow: {
+  bottomBar: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    ...theme.shadow.card,
+  },
+  bottomBarItem: {
+    alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  bottomBarItemActive: {
+    backgroundColor: theme.colors.primaryTintBg,
+  },
+  bottomBarLabel: {
+    fontSize: 10,
+    fontWeight: "700",
   },
   insightsCard: {
     backgroundColor: theme.colors.surfaceGlass,
@@ -1441,6 +1642,73 @@ const createStyles = (theme) =>
     backgroundColor: theme.colors.background,
     borderWidth: 1,
     borderColor: theme.colors.border,
+  },
+  deliveryOtpCard: {
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    gap: 10,
+  },
+  paymentButton: {
+    borderRadius: theme.radii.md,
+    marginTop: 10,
+  },
+  paymentStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  unsuccessfulCard: {
+    backgroundColor: theme.colors.dangerSoftLight,
+    borderWidth: 1,
+    borderColor: theme.colors.error,
+  },
+  unsuccessfulRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  unsuccessfulText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.error,
+    lineHeight: 18,
+  },
+  deliveryOtpLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  deliveryOtpHint: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    lineHeight: 16,
+  },
+  deliveryOtpLocked: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.danger,
+    lineHeight: 18,
+  },
+  deliveryOtpAttempts: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.colors.warningBright,
+  },
+  deliveryOtpButton: {
+    borderRadius: theme.radii.md,
+    marginTop: 4,
+  },
+  deliveryOtpDoneRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  deliveryOtpDoneText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.text,
   },
   deliveryLine: {
     color: theme.colors.text,

@@ -17,7 +17,13 @@ export const useUserProfile = () => {
 
     const ref = doc(db, "users", user.uid);
     const unsubscribe = onSnapshot(ref, (snap) => {
-      if (!snap.exists()) {
+      const existing = snap.exists() ? snap.data() || {} : null;
+      // Seed missing defaults even when the doc already exists - a doc can
+      // exist with no `role` if another writer (e.g. usePushToken.js saving
+      // expoPushToken) created it first, racing ahead of this seed. Without
+      // this, that account is permanently stuck failing every
+      // requireRole("seller") backend check with no way to self-heal.
+      if (!existing || !existing.role) {
         const seed = {
           email: user.email || "",
           role: "seller",
@@ -29,9 +35,9 @@ export const useUserProfile = () => {
         setDoc(ref, seed, { merge: true }).catch((error) => {
           console.warn("Failed to seed seller profile:", error);
         });
-        setProfile({ id: user.uid, ...seed });
+        setProfile({ id: user.uid, ...existing, ...seed });
       } else {
-        setProfile({ id: snap.id, ...snap.data() });
+        setProfile({ id: snap.id, ...existing });
       }
       setLoading(false);
     });

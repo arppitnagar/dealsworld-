@@ -3,7 +3,8 @@ setlocal enabledelayedexpansion
 
 REM ============================================================
 REM DealsWorld - End-to-End Runner
-REM Starts: Backend API + Seller app (create/publish deals)
+REM Starts: Backend API + Admin portal (approvals)
+REM         + Seller app (create/publish deals)
 REM         + Buyer app (view/join deals)
 REM Run this from the repo root (or double-click it there).
 REM ============================================================
@@ -75,22 +76,28 @@ if "!BACKEND_READY!"=="0" (
 )
 echo.
 
-REM --- 5) Start Seller app (used to create + publish deals) ---
+REM --- 5) Start Admin portal (approvals) - web-only, opens in the browser ---
+call :KillPort 8082
+echo Starting Admin portal - web on http://localhost:8082 ...
+start "DealsWorld - Admin (approvals)" cmd /k "cd /d "%CD%" && npm run admin:web:fast"
+
+REM --- 6) Start Seller app (used to create + publish deals) ---
 call :KillPort 8084
 echo Starting Seller app ^(SellerBuddy^) - Expo port 8084 ...
 start "DealsWorld - Seller (create/publish deals)" cmd /k "cd /d "%CD%" && npm run seller:mobile"
 
-REM --- 6) Start Buyer app (used to view + join deals) ---
+REM --- 7) Start Buyer app (used to view + join deals) ---
 call :KillPort 8083
 echo Starting Buyer app ^(DealBuddy^) - Expo port 8083 ...
 start "DealsWorld - Buyer (view/join deals)" cmd /k "cd /d "%CD%" && npm run buyer:mobile"
 
 echo.
 echo ============================================================
-echo  Three windows are now starting:
+echo  Four windows are now starting:
 echo    1. Backend    -^> http://127.0.0.1:5000/api/health
-echo    2. Seller app -^> scan the QR code with Expo Go
-echo    3. Buyer app  -^> scan the QR code with Expo Go
+echo    2. Admin      -^> http://localhost:8082 (opens in your browser)
+echo    3. Seller app -^> scan the QR code with Expo Go
+echo    4. Buyer app  -^> scan the QR code with Expo Go
 echo.
 echo  On your phone: install "Expo Go" and make sure it's on the
 echo  SAME Wi-Fi network as this PC before scanning either QR code.
@@ -102,6 +109,8 @@ echo    2. Buyer app   -^> log in / sign up as a buyer
 echo                    -^> pull to refresh on Home
 echo                    -^> the new deal appears -^> tap it to view
 echo                       details, chat, and join
+echo    3. Admin portal -^> log in as admin to review/approve deals
+echo                        and sellers if your flow needs it
 echo ============================================================
 echo.
 pause

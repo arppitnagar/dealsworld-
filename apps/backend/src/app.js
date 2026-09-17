@@ -3,6 +3,8 @@ const path = require("path");
 const cors = require("cors");
 
 const healthRoutes = require("./routes/health");
+const appConfigRoutes = require("./routes/appConfig");
+const deliveryRoutes = require("./routes/delivery");
 const dealsRoutes = require("./routes/deals");
 const usersRoutes = require("./routes/users");
 const adminRoutes = require("./routes/admin");
@@ -19,6 +21,8 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 app.use(healthRoutes);
+app.use(appConfigRoutes);
+app.use(deliveryRoutes);
 app.use(dealsRoutes);
 app.use(usersRoutes);
 app.use(adminRoutes);

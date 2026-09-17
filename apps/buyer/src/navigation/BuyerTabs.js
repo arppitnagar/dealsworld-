@@ -3,8 +3,8 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabBar } from "@dealsworld/shared";
 import HomeScreen from "../screens/HomeScreen";
-import ProfileScreen from "../screens/ProfileScreen";
-import ComingSoonScreen from "../screens/ComingSoonScreen";
+import DealsScreen from "../screens/DealsScreen";
+import SearchScreen from "../screens/SearchScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -12,16 +12,13 @@ const icon = (name, outlineName) => (focused, color) => (
   <Ionicons name={focused ? name : outlineName} size={20} color={color} />
 );
 
+// Profile lives behind the avatar in the dashboard header, and chat only
+// makes sense once you've joined a deal (reached from that deal's own
+// screen) - so neither gets a permanent slot in the bottom bar.
 const TAB_CONFIG = [
   { key: "Home", label: "Home", icon: icon("home", "home-outline") },
-  { key: "Search", label: "Search", icon: icon("search", "search-outline") },
   { key: "Deals", label: "Deals", icon: icon("pricetag", "pricetag-outline") },
-  {
-    key: "Chat",
-    label: "Chat",
-    icon: icon("chatbubble", "chatbubble-outline"),
-  },
-  { key: "Profile", label: "Profile", icon: icon("person", "person-outline") },
+  { key: "Search", label: "Search", icon: icon("search", "search-outline") },
 ];
 
 export default function BuyerTabs() {
@@ -31,22 +28,8 @@ export default function BuyerTabs() {
       tabBar={(props) => <BottomTabBar {...props} tabs={TAB_CONFIG} />}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen
-        name="Search"
-        component={ComingSoonScreen}
-        initialParams={{ title: "Search", subtitle: "Search is on its way." }}
-      />
-      <Tab.Screen
-        name="Deals"
-        component={ComingSoonScreen}
-        initialParams={{ title: "Deals", subtitle: "Your deals list is on its way." }}
-      />
-      <Tab.Screen
-        name="Chat"
-        component={ComingSoonScreen}
-        initialParams={{ title: "Chat", subtitle: "A chat inbox is on its way." }}
-      />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Deals" component={DealsScreen} />
+      <Tab.Screen name="Search" component={SearchScreen} />
     </Tab.Navigator>
   );
 }

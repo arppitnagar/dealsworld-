@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
+import apiClient from "../api/client";
 
 export const useUserProfile = () => {
   const { user } = useAuth();
@@ -14,9 +15,22 @@ export const useUserProfile = () => {
       setLoading(false);
       return undefined;
     }
+    // Fire-and-forget: this makes the backend's ensureUserProfile() run
+    // promptly (it assigns the sequential buyerCode via an atomic counter -
+    // see apps/backend/src/lib.js), instead of only happening lazily the
+    // first time this buyer hits a requireRole("buyer")-gated endpoint. The
+    // onSnapshot listener below picks up the resulting write automatically.
+    apiClient.get("/users/me").catch(() => {});
+
     const ref = doc(db, "users", user.uid);
     const unsubscribe = onSnapshot(ref, (snap) => {
-      if (!snap.exists()) {
+      const existing = snap.exists() ? snap.data() || {} : null;
+      // Seed missing defaults even when the doc already exists - a doc can
+      // exist with no `role` if another writer (e.g. usePushToken.js saving
+      // expoPushToken) created it first, racing ahead of this seed. Without
+      // this, that account is permanently stuck failing every
+      // requireRole("buyer") backend check with no way to self-heal.
+      if (!existing || !existing.role) {
         const seed = {
           email: user.email || "",
           role: "buyer",
@@ -26,9 +40,9 @@ export const useUserProfile = () => {
           createdAt: serverTimestamp(),
         };
         setDoc(ref, seed, { merge: true });
-        setProfile({ id: user.uid, ...seed });
+        setProfile({ id: user.uid, ...existing, ...seed });
       } else {
-        setProfile({ id: snap.id, ...snap.data() });
+        setProfile({ id: snap.id, ...existing });
       }
       setLoading(false);
     });

@@ -41,6 +41,20 @@ service cloud.firestore {
       return isSignedIn() && (isDealSeller(dealId) || isJoinedBuyer(dealId));
     }
 
+    // A buyer favoriting/unfavoriting a deal (apps/buyer/src/hooks/useDealState.js
+    // toggleFavorite) runs a transaction that also bumps deals/{dealId}.favoritesCount
+    // by +-1 - it's not the deal's seller, so it needs its own narrow allowance
+    // rather than the seller-only update rule below. Only favoritesCount (and
+    // updatedAt) may change, and only by exactly one, so this can't be used to
+    // rewrite the rest of the deal doc or jump the count.
+    function isFavoritesCountStep() {
+      let affected = request.resource.data.diff(resource.data).affectedKeys();
+      return affected.hasOnly(['favoritesCount', 'updatedAt']) &&
+        request.resource.data.favoritesCount is int &&
+        (request.resource.data.favoritesCount == resource.data.favoritesCount + 1 ||
+         request.resource.data.favoritesCount == resource.data.favoritesCount - 1);
+    }
+
     // Each user's own profile doc (apps/*/src/context/AuthContext.js,
     // apps/*/src/hooks/useUserProfile.js). Read/write restricted to the
     // profile's own owner.
@@ -63,15 +77,39 @@ service cloud.firestore {
       }
     }
 
+    // Dispatch/delivery fields (apps/backend/src/routes/delivery.js) must
+    // only ever be written by the backend's admin SDK, which fans out
+    // per-buyer OTPs into dealJoins in the same transaction - a seller's
+    // client flipping dispatchStatus directly (the way "End Campaign Early"
+    // flips status today) would leave buyers with no OTP to confirm.
+    function isDispatchFieldWrite() {
+      let affected = request.resource.data.diff(resource.data).affectedKeys();
+      return affected.hasAny(['dispatchStatus', 'dispatchedAt', 'deliveredCount', 'allDeliveredAt']);
+    }
+
+    // Lifecycle fields (apps/backend/src/routes/deals.js "complete"/
+    // "expire-early" endpoints, and the automatic expiry sweep in
+    // apps/backend/src/expirySweep.js) must only ever be written by the
+    // backend's admin SDK, which also fans payment-hold refunds/releases
+    // into dealJoins in the same transaction - a seller's client flipping
+    // status directly (the way "End Campaign Early" used to) would bypass
+    // the all-buyers-paid gate and leave payment holds unresolved.
+    function isLifecycleFieldWrite() {
+      let affected = request.resource.data.diff(resource.data).affectedKeys();
+      return affected.hasAny(['status', 'lifecycleStatus', 'expiredAt', 'expiryReason', 'completedAt']);
+    }
+
     // Deal listings (apps/seller/src/screens/SellerDashboard.js reads the
     // whole collection unfiltered and filters client-side, so read access
     // must not depend on document contents). Writes are restricted to the
     // deal's own seller; the backend's admin SDK bypasses this entirely for
-    // join/review-aggregate writes.
+    // join/review-aggregate/dispatch writes.
     match /deals/{dealId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.sellerId == request.auth.uid;
+      allow update: if isSignedIn() &&
+        ((resource.data.sellerId == request.auth.uid && !isDispatchFieldWrite() && !isLifecycleFieldWrite()) || isFavoritesCountStep());
+      allow delete: if isSignedIn() && resource.data.sellerId == request.auth.uid;
 
       // Chat messages and typing indicators (apps/*/src/screens/DealChat*.js)
       // - only the deal's seller or a buyer who has actively joined it.

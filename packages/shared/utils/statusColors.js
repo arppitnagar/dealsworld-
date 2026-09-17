@@ -8,6 +8,13 @@ export const getStatusColors = (theme = defaultTheme) => ({
   scheduled: theme.colors.statusScheduled,
   pending: theme.colors.statusScheduled,
   draft: theme.colors.statusDraft,
+  dispatched: theme.colors.primary,
+  delivered: theme.colors.success,
+  unsuccessful: theme.colors.error,
+  unpaid: theme.colors.textMuted,
+  paid_blocked: theme.colors.primary,
+  released_to_seller: theme.colors.success,
+  refunded_to_buyer: theme.colors.textMuted,
 });
 
 export const statusColors = getStatusColors(defaultTheme);

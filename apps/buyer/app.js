@@ -5,6 +5,7 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   DealBuddyLoadingScreen,
+  UpdateRequiredScreen,
   AppButton,
   theme,
   ThemeProvider,
@@ -26,6 +27,7 @@ import RoleMismatchScreen from "./src/screens/RoleMismatchScreen";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { usePushToken } from "./src/hooks/usePushToken";
 import { useUserProfile } from "./src/hooks/useUserProfile";
+import { useVersionGate } from "./src/hooks/useVersionGate";
 import {
   getStoredThemeMode,
   setStoredThemeMode,
@@ -41,9 +43,25 @@ function LoadingScreen() {
 function AppNavigator() {
   const { user, loading, logout } = useAuth();
   const { profile, loading: profileLoading } = useUserProfile();
+  const versionGate = useVersionGate();
   usePushToken();
   const role = String(profile?.role || "").toLowerCase();
   const accountStatus = String(profile?.status || "").toLowerCase();
+
+  if (versionGate.blocked) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="UpdateRequired">
+          {() => (
+            <UpdateRequiredScreen
+              message={versionGate.message || undefined}
+              updateUrl={versionGate.updateUrl}
+            />
+          )}
+        </Stack.Screen>
+      </Stack.Navigator>
+    );
+  }
 
   if (loading || (user && profileLoading)) {
     return <LoadingScreen />;

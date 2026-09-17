@@ -39,10 +39,14 @@ export { default as ImageHeader } from "./components/ImageHeader";
 export { default as ComponentGallery } from "./components/ComponentGallery";
 export { default as DealDetailsView } from "./components/DealDetailsView";
 export { default as DealDetailsLayout } from "./components/DealDetailsLayout";
+export { default as OtpDisplay } from "./components/OtpDisplay";
+export { default as OtpInput } from "./components/OtpInput";
 export { default as DealFormFields } from "./components/DealFormFields";
 export { default as AuthScreen } from "./components/AuthScreen.js";
 export { default as DealBuddyLoader } from "./components/DealBuddyLoader";
 export { default as DealBuddyLoadingScreen } from "./components/DealBuddyLoadingScreen";
+export { default as UpdateRequiredScreen } from "./components/UpdateRequiredScreen";
+export { compareVersions, isVersionBelow } from "./utils/version";
 export {
   DealSortModal,
   DealFilterModal,
@@ -55,6 +59,7 @@ export {
   formatDuration,
 } from "./utils/dateTime";
 export { formatINR } from "./utils/formatters";
+export { getDealImages } from "./utils/dealImages";
 export { validatePassword } from "./utils/passwordPolicy";
 export {
   DEAL_SORT_FIELDS,

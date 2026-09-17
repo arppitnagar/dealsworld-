@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -54,9 +55,19 @@ export default function DealDetailsLayout({
   children,
   contentStyle,
   heroStyle,
+  footer,
+  image,
+  images,
 }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const gallery = useMemo(() => {
+    if (Array.isArray(images) && images.length) return images.filter(Boolean);
+    return image ? [image] : [];
+  }, [images, image]);
+  const hasImageProp = images !== undefined || image !== undefined;
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [heroImageWidth, setHeroImageWidth] = useState(0);
   const statusBarHeight =
     Platform.OS === "android" ? StatusBar.currentHeight || 0 : 0;
   const topInset = Math.max(insets.top, statusBarHeight, 16);
@@ -128,11 +139,45 @@ export default function DealDetailsLayout({
         heroCard: {
           backgroundColor: isDashboard ? theme.colors.surface : theme.colors.primary,
           borderRadius: 24,
-          padding: 20,
           overflow: "hidden",
           borderWidth: isDashboard ? 1 : 0,
           borderColor: isDashboard ? theme.colors.border : "transparent",
           ...theme.shadow.card,
+        },
+        heroImageWrap: {
+          height: 180,
+          backgroundColor: theme.colors.surfaceLight,
+        },
+        heroImage: {
+          width: "100%",
+          height: "100%",
+        },
+        heroImagePlaceholder: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        heroImageDots: {
+          position: "absolute",
+          bottom: 10,
+          left: 0,
+          right: 0,
+          flexDirection: "row",
+          justifyContent: "center",
+          gap: 5,
+        },
+        heroImageDot: {
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: "rgba(255,255,255,0.5)",
+        },
+        heroImageDotActive: {
+          width: 16,
+          backgroundColor: theme.colors.onPrimary,
+        },
+        heroBody: {
+          padding: 20,
         },
         heroAccent: {
           width: 56,
@@ -353,6 +398,64 @@ export default function DealDetailsLayout({
         contentContainerStyle={[styles.scrollContent, contentStyle]}
       >
         <View style={[styles.heroCard, heroStyle]}>
+          {hasImageProp ? (
+            <View
+              style={styles.heroImageWrap}
+              onLayout={(event) => setHeroImageWidth(event.nativeEvent.layout.width)}
+            >
+              {gallery.length ? (
+                <>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    scrollEnabled={gallery.length > 1}
+                    onMomentumScrollEnd={(event) => {
+                      if (!heroImageWidth) return;
+                      const index = Math.round(
+                        event.nativeEvent.contentOffset.x / heroImageWidth,
+                      );
+                      setActiveImageIndex(index);
+                    }}
+                  >
+                    {gallery.map((uri, index) => (
+                      <Image
+                        key={`${uri}-${index}`}
+                        source={{ uri }}
+                        style={[
+                          styles.heroImage,
+                          heroImageWidth ? { width: heroImageWidth } : null,
+                        ]}
+                        resizeMode="cover"
+                      />
+                    ))}
+                  </ScrollView>
+                  {gallery.length > 1 ? (
+                    <View style={styles.heroImageDots}>
+                      {gallery.map((_, index) => (
+                        <View
+                          key={index}
+                          style={[
+                            styles.heroImageDot,
+                            index === activeImageIndex && styles.heroImageDotActive,
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
+                </>
+              ) : (
+                <View style={styles.heroImagePlaceholder}>
+                  <Ionicons
+                    name="image-outline"
+                    size={28}
+                    color={theme.colors.textMuted}
+                  />
+                </View>
+              )}
+            </View>
+          ) : null}
+          <View style={styles.heroBody}>
           {showHeroAccent ? <View style={styles.heroAccent} /> : null}
           <Text style={styles.heroTitle}>{title || "Deal"}</Text>
           {description ? (
@@ -439,10 +542,13 @@ export default function DealDetailsLayout({
               </View>
             </View>
           ) : null}
+          </View>
         </View>
 
         {children}
       </ScrollView>
+
+      {footer}
     </View>
   );
 }

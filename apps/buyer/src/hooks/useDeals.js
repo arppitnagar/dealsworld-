@@ -62,6 +62,27 @@ export const useDeals = () => {
   });
 };
 
+// Every deal the buyer has joined, regardless of the deal's own status -
+// unlike useDeals() (active-only), this is what keeps a deal reachable
+// (its details screen, and the dispatch/OTP flow on it) after the seller
+// ends the campaign or it expires.
+export const useJoinedDeals = () => {
+  return useQuery({
+    queryKey: ["joined-deals"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/deals/joined");
+      return data;
+    },
+    staleTime: 2_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
+    refetchInterval: 8_000,
+    refetchIntervalInBackground: false,
+    placeholderData: (previous) => previous,
+  });
+};
+
 // Hook to join a group deal
 export const useJoinDeal = () => {
   const queryClient = useQueryClient();
