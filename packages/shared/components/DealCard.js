@@ -20,6 +20,7 @@ export default function DealCard({
   images,
   joins,
   targetCount,
+  maxCount,
   accentColor,
   viewsCount,
   favoritesCount,
@@ -55,8 +56,30 @@ export default function DealCard({
 
   const joinedCount = Number.isFinite(Number(joins)) ? Number(joins) : 0;
   const target = Number.isFinite(Number(targetCount)) ? Number(targetCount) : 0;
+  const maxRaw = Number(maxCount);
+  const max = Number.isFinite(maxRaw) && maxRaw > target ? maxRaw : null;
   const showProgress = target > 0;
-  const progressRatio = showProgress ? Math.min(joinedCount / target, 1) : 0;
+  const thresholdReached = showProgress && joinedCount >= target;
+  // Past the minimum with no seller-set cap there's no "out of" ceiling left
+  // to show - without this, once joins run past target this used to render
+  // as a nonsensical "Joined 3 of 2".
+  const isUncappedPastMin = thresholdReached && !max;
+  const progressRatio = showProgress
+    ? max
+      ? Math.min(joinedCount, max) / max
+      : isUncappedPastMin
+        ? 1
+        : joinedCount / target
+    : 0;
+  const progressLabel = max
+    ? compact
+      ? `${formatCount(Math.min(joinedCount, max))}/${formatCount(max)} joined`
+      : `${Math.min(joinedCount, max)} of ${formatCount(max)} joined`
+    : isUncappedPastMin
+      ? `${formatCount(joinedCount)} joined`
+      : compact
+        ? `${formatCount(joinedCount)}/${formatCount(target)} joined`
+        : `Joined ${formatCount(joinedCount)} of ${formatCount(target)}`;
   const rightSubtitle = expiryLabel || countdown || null;
   const resolvedBadgeLabel = badgeLabel || statusLabel || null;
   const avgRating = Number.isFinite(Number(ratingAvg)) ? Number(ratingAvg) : null;
@@ -534,16 +557,30 @@ export default function DealCard({
                 style={[styles.progressLabel, compact && styles.progressLabelCompact]}
                 numberOfLines={1}
               >
-                {compact
-                  ? `${formatCount(joinedCount)}/${formatCount(target)} joined`
-                  : `Joined ${formatCount(joinedCount)} of ${formatCount(target)}`}
+                {progressLabel}
               </Text>
-              <Text style={[styles.progressPercent, compact && styles.progressPercentCompact]}>
-                {Math.round(progressRatio * 100)}%
+              <Text
+                style={[
+                  styles.progressPercent,
+                  compact && styles.progressPercentCompact,
+                  thresholdReached && { color: theme.colors.success },
+                ]}
+              >
+                {isUncappedPastMin ? "Guaranteed" : `${Math.round(progressRatio * 100)}%`}
               </Text>
             </View>
             <View style={[styles.progressTrack, compact && styles.progressTrackCompact]}>
-              <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${progressRatio * 100}%`,
+                    backgroundColor: thresholdReached
+                      ? theme.colors.success
+                      : theme.colors.dealAccent,
+                  },
+                ]}
+              />
             </View>
           </View>
         ) : null}

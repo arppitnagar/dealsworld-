@@ -6,12 +6,15 @@ import {
   Image,
   ScrollView,
   StyleSheet,
+  Switch,
 } from "react-native";
 import { Camera, X } from "lucide-react-native";
 import AppInput from "./ui/AppInput";
 import FormSection from "./FormSection";
+import PriceBreakupCard from "./PriceBreakupCard";
 import { useTheme } from "../theme/ThemeProvider";
 import { getFormStyles } from "../styles/forms";
+import { calculatePriceBreakup, MAX_PRICING_TIERS } from "../utils/priceBreakup";
 
 export default function DealFormFields({
   form = {},
@@ -30,12 +33,18 @@ export default function DealFormFields({
   onFieldChange,
   onPriceChange,
   onMinBuyersChange,
+  onMaxBuyersChange,
   onCategoryPress,
   onDeliveryModePress,
   onExpiresAtPress,
   onBlurPrice,
   onBlurDeliveryCharge,
   onDeliveryChargeChange,
+  onGstChange,
+  onTogglePricingTiers,
+  onAddTier,
+  onRemoveTier,
+  onTierFieldChange,
 }) {
   const { theme } = useTheme();
   const formStyles = useMemo(() => getFormStyles(theme), [theme]);
@@ -100,6 +109,58 @@ export default function DealFormFields({
           color: theme.colors.textMuted,
           borderColor: theme.colors.border,
         },
+        breakupHint: {
+          fontSize: 11,
+          color: theme.colors.textMuted,
+          marginBottom: 8,
+        },
+        tierToggleRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+        },
+        tierHint: {
+          fontSize: 11,
+          color: theme.colors.textMuted,
+          marginTop: 2,
+        },
+        tierList: {
+          gap: 10,
+        },
+        tierRow: {
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          borderRadius: theme.radii.md,
+          padding: 12,
+          gap: 4,
+        },
+        tierRowHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        },
+        tierRangeLabel: {
+          fontSize: 12,
+          fontWeight: "700",
+          color: theme.colors.text,
+        },
+        addTierButton: {
+          alignSelf: "flex-start",
+          paddingVertical: 8,
+          paddingHorizontal: 14,
+          borderRadius: theme.radii.md,
+          borderWidth: 1,
+          borderColor: theme.colors.primary,
+        },
+        addTierText: {
+          fontSize: 12,
+          fontWeight: "700",
+          color: theme.colors.primary,
+        },
+        tierBreakupBlock: {
+          gap: 6,
+          marginBottom: 12,
+        },
       }),
     [formStyles, theme],
   );
@@ -116,6 +177,72 @@ export default function DealFormFields({
     if (!onFieldChange) return;
     onFieldChange(key, value);
   };
+
+  const parsePriceNumber = (value) =>
+    Number(String(value ?? "").replace(/[₹,]/g, "")) || 0;
+
+  const priceBreakup = useMemo(
+    () =>
+      calculatePriceBreakup({
+        basePrice: parsePriceNumber(form.discountPrice),
+        gstPercent: form.gstPercent,
+        deliveryMode,
+        deliveryCharge: parsePriceNumber(form.deliveryCharge),
+      }),
+    [form.discountPrice, form.gstPercent, deliveryMode, form.deliveryCharge],
+  );
+  const showBreakupPreview =
+    showPricing && showLogistics && parsePriceNumber(form.discountPrice) > 0;
+
+  const tierRows =
+    Array.isArray(form.pricingTiers) && form.pricingTiers.length
+      ? form.pricingTiers
+      : [{ maxBuyers: "", price: "" }];
+  // With 2+ tiers, tier 1's own cap is exactly "how many buyers make this
+  // deal guaranteed to ship" - so once a seller splits pricing into tiers,
+  // Minimum Buyers stops being a second, independently-set number and just
+  // follows tier 1's "Up to buyers" value instead (kept in sync by
+  // handleTierFieldChange in the screen, same as tier 1's price already
+  // mirrors Deal Price). A single, still-open-ended tier has no boundary to
+  // derive from, so Minimum Buyers stays manually editable in that case.
+  const minGroupSizeDerived = Boolean(form.pricingTiersEnabled) && tierRows.length > 1;
+  // Each row only stores its own maxBuyers - minBuyers is always one past
+  // wherever the previous row left off, so it's derived here for display
+  // rather than kept in sync in form state.
+  const tierMinBuyersAt = (index) => {
+    let min = 1;
+    for (let i = 0; i < index; i += 1) {
+      const prevMax = Number(tierRows[i]?.maxBuyers);
+      min = Number.isFinite(prevMax) && prevMax > 0 ? prevMax + 1 : min + 1;
+    }
+    return min;
+  };
+
+  // With tiers on, a single breakup preview (always tier 1's price) would
+  // hide what the buyer actually sees once the price has dropped a few
+  // tiers - so each tier gets its own breakup card instead of just one.
+  const showTierBreakupPreview =
+    showPricing &&
+    showLogistics &&
+    Boolean(form.pricingTiersEnabled) &&
+    tierRows.length > 1;
+  const tierBreakups = showTierBreakupPreview
+    ? tierRows.map((row, index) => {
+        const minBuyers = tierMinBuyersAt(index);
+        const isLast = index === tierRows.length - 1;
+        const price =
+          index === 0 ? parsePriceNumber(form.discountPrice) : parsePriceNumber(row.price);
+        return {
+          label: isLast ? `${minBuyers}+ buyers` : `${minBuyers}–${row.maxBuyers || "?"} buyers`,
+          breakup: calculatePriceBreakup({
+            basePrice: price,
+            gstPercent: form.gstPercent,
+            deliveryMode,
+            deliveryCharge: parsePriceNumber(form.deliveryCharge),
+          }),
+        };
+      })
+    : [];
 
   return (
     <>
@@ -152,6 +279,9 @@ export default function DealFormFields({
               ) : null}
             </View>
           </ScrollView>
+        ) : null}
+        {showImage && errors.images ? (
+          <Text style={styles.error}>{errors.images}</Text>
         ) : null}
 
         {showTitle ? (
@@ -206,15 +336,129 @@ export default function DealFormFields({
             />
           </View>
 
-          <AppInput
-            label="Minimum Buyers"
-            keyboardType="numeric"
-            placeholder="Minimum 2 buyers"
-            value={form.minGroupSize}
-            editable={!isReadOnly}
-            onChangeText={(value) => onMinBuyersChange?.(value)}
-            error={errors.minGroupSize}
-          />
+          <View style={styles.row}>
+            <AppInput
+              containerStyle={styles.half}
+              label="Minimum Buyers"
+              keyboardType="numeric"
+              placeholder="Minimum 2 buyers"
+              value={minGroupSizeDerived ? tierRows[0]?.maxBuyers || "" : form.minGroupSize}
+              editable={!isReadOnly && !minGroupSizeDerived}
+              onChangeText={(value) => onMinBuyersChange?.(value)}
+              error={errors.minGroupSize}
+            />
+
+            <AppInput
+              containerStyle={styles.half}
+              label="Max Buyers (optional)"
+              keyboardType="numeric"
+              placeholder="No limit"
+              value={form.maxGroupSize}
+              editable={!isReadOnly}
+              onChangeText={(value) => onMaxBuyersChange?.(value)}
+              error={errors.maxGroupSize}
+            />
+          </View>
+          {minGroupSizeDerived ? (
+            <Text style={styles.tierHint}>
+              Auto-set from your first pricing tier below - edit "Up to
+              buyers" on Tier 1 to change it.
+            </Text>
+          ) : null}
+        </FormSection>
+      ) : null}
+
+      {showPricing ? (
+        <FormSection title="Group Pricing (optional)">
+          <View style={styles.tierToggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Price drops as more buyers join</Text>
+              <Text style={styles.tierHint}>
+                Off: everyone pays the Deal Price above. On: set cheaper
+                prices once more buyers join.
+              </Text>
+            </View>
+            <Switch
+              value={Boolean(form.pricingTiersEnabled)}
+              onValueChange={(value) => onTogglePricingTiers?.(value)}
+              disabled={isReadOnly}
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              thumbColor={theme.colors.onPrimary}
+            />
+          </View>
+
+          {form.pricingTiersEnabled ? (
+            <View style={styles.tierList}>
+              {tierRows.map((row, index) => {
+                const isFirst = index === 0;
+                const isLast = index === tierRows.length - 1;
+                const minBuyers = tierMinBuyersAt(index);
+                return (
+                  <View key={index} style={styles.tierRow}>
+                    <View style={styles.tierRowHeader}>
+                      <Text style={styles.tierRangeLabel}>
+                        {isLast
+                          ? `${minBuyers}+ buyers`
+                          : `${minBuyers}–${row.maxBuyers || "?"} buyers`}
+                      </Text>
+                      {!isFirst && !isReadOnly ? (
+                        <TouchableOpacity
+                          onPress={() => onRemoveTier?.(index)}
+                          accessibilityLabel={`Remove tier ${index + 1}`}
+                        >
+                          <X size={16} color={theme.colors.error} />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    <View style={styles.row}>
+                      {!isLast ? (
+                        <AppInput
+                          containerStyle={styles.half}
+                          label="Up to buyers"
+                          keyboardType="numeric"
+                          placeholder="e.g. 5"
+                          value={row.maxBuyers}
+                          editable={!isReadOnly}
+                          onChangeText={(value) =>
+                            onTierFieldChange?.(index, "maxBuyers", value)
+                          }
+                          error={errors[`pricingTiers.${index}.maxBuyers`]}
+                        />
+                      ) : (
+                        <View style={styles.half} />
+                      )}
+                      <AppInput
+                        containerStyle={styles.half}
+                        label={isFirst ? "Price at this tier (= Deal Price)" : "Price at this tier"}
+                        keyboardType="decimal-pad"
+                        placeholder="Rs 0.00"
+                        value={isFirst ? form.discountPrice : row.price}
+                        editable={!isReadOnly}
+                        onChangeText={(value) =>
+                          isFirst
+                            ? onPriceChange?.("discountPrice", value)
+                            : onTierFieldChange?.(index, "price", value)
+                        }
+                        error={
+                          isFirst ? errors.discountPrice : errors[`pricingTiers.${index}.price`]
+                        }
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+
+              {tierRows.length < MAX_PRICING_TIERS && !isReadOnly ? (
+                <TouchableOpacity style={styles.addTierButton} onPress={onAddTier}>
+                  <Text style={styles.addTierText}>+ Add another tier</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {errors.pricingTiers ? (
+                <Text style={styles.error}>{errors.pricingTiers}</Text>
+              ) : null}
+            </View>
+          ) : null}
         </FormSection>
       ) : null}
 
@@ -324,6 +568,20 @@ export default function DealFormFields({
             <Text style={styles.error}>{errors.deliveryMode}</Text>
           ) : null}
 
+          <AppInput
+            label="GST (%)"
+            keyboardType="decimal-pad"
+            placeholder="e.g. 18"
+            value={form.gstPercent}
+            editable={!isReadOnly}
+            onChangeText={(value) =>
+              onGstChange
+                ? onGstChange(value)
+                : handleFieldChange("gstPercent", value)
+            }
+            error={errors.gstPercent}
+          />
+
           {showDeliveryCharge ? (
             <AppInput
               label="Delivery Charge"
@@ -340,6 +598,27 @@ export default function DealFormFields({
               error={errors.deliveryCharge}
             />
           ) : null}
+        </FormSection>
+      ) : null}
+
+      {showTierBreakupPreview ? (
+        <FormSection title="Buyer Price Breakup Preview">
+          <Text style={styles.breakupHint}>
+            Exactly what the buyer sees at each tier before paying.
+          </Text>
+          {tierBreakups.map((tier, index) => (
+            <View key={index} style={styles.tierBreakupBlock}>
+              <Text style={styles.tierRangeLabel}>{tier.label}</Text>
+              <PriceBreakupCard breakup={tier.breakup} />
+            </View>
+          ))}
+        </FormSection>
+      ) : showBreakupPreview ? (
+        <FormSection title="Buyer Price Breakup Preview">
+          <Text style={styles.breakupHint}>
+            This is exactly what the buyer will see before paying.
+          </Text>
+          <PriceBreakupCard breakup={priceBreakup} />
         </FormSection>
       ) : null}
     </>

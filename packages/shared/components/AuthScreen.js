@@ -68,6 +68,8 @@ export default function AuthScreen({
   onGoogleLogin,
   onAppleLogin,
   showSocialButtons = true,
+  showGoogleButton = true,
+  showAppleButton = true,
   allowSignup = true,
   signInLabel = "Sign In",
   signUpLabel = "Create Account",
@@ -143,16 +145,27 @@ export default function AuthScreen({
     Alert.alert("Forgot password", "Password reset is not configured yet.");
   };
 
-  const handleSocialLogin = (provider) => {
-    if (provider === "google" && typeof onGoogleLogin === "function") {
-      onGoogleLogin();
+  const handleSocialLogin = async (provider) => {
+    const handler =
+      provider === "google"
+        ? onGoogleLogin
+        : provider === "apple"
+          ? onAppleLogin
+          : null;
+    if (typeof handler !== "function") {
+      Alert.alert("Coming soon", "Social login is not available yet.");
       return;
     }
-    if (provider === "apple" && typeof onAppleLogin === "function") {
-      onAppleLogin();
-      return;
+    setLoading(true);
+    try {
+      await handler();
+    } catch (error) {
+      if (error?.code !== "SIGN_IN_CANCELLED" && error?.code !== "-5") {
+        Alert.alert("Sign-in failed", getAuthErrorMessage(error, "login"));
+      }
+    } finally {
+      setLoading(false);
     }
-    Alert.alert("Coming soon", "Social login is not available yet.");
   };
 
   const Wrapper = backgroundImage ? ImageBackground : View;
@@ -315,28 +328,34 @@ export default function AuthScreen({
                   <View style={styles.dividerLine} />
                 </View>
                 <View style={styles.socialRow}>
-                  <TouchableOpacity
-                    style={styles.socialButtonLight}
-                    onPress={() => handleSocialLogin("google")}
-                  >
-                    <Ionicons
-                      name="logo-google"
-                      size={18}
-                      color={theme.colors.text}
-                    />
-                    <Text style={styles.socialTextDark}>Google</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.socialButtonDark}
-                    onPress={() => handleSocialLogin("apple")}
-                  >
-                    <Ionicons
-                      name="logo-apple"
-                      size={18}
-                      color={theme.colors.onPrimary}
-                    />
-                    <Text style={styles.socialTextLight}>Apple</Text>
-                  </TouchableOpacity>
+                  {showGoogleButton ? (
+                    <TouchableOpacity
+                      style={styles.socialButtonLight}
+                      onPress={() => handleSocialLogin("google")}
+                      disabled={loading}
+                    >
+                      <Ionicons
+                        name="logo-google"
+                        size={18}
+                        color={theme.colors.text}
+                      />
+                      <Text style={styles.socialTextDark}>Google</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {showAppleButton ? (
+                    <TouchableOpacity
+                      style={styles.socialButtonDark}
+                      onPress={() => handleSocialLogin("apple")}
+                      disabled={loading}
+                    >
+                      <Ionicons
+                        name="logo-apple"
+                        size={18}
+                        color={theme.colors.onPrimary}
+                      />
+                      <Text style={styles.socialTextLight}>Apple</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </>
             ) : null}

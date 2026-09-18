@@ -18,3 +18,8 @@ const app = initializeApp(firebaseConfig);
 // Export the Firestore database instance
 export const db = getFirestore(app);
 export const auth = getAuth(app); // Export auth
+
+// From Firebase console: Authentication > Sign-in method > Google > Web SDK configuration
+// (Google Sign-In must be enabled for this project before this is usable.)
+export const GOOGLE_WEB_CLIENT_ID =
+  "472465378383-kl2r12cj4sse31qmoao8eg5u6fcn444d.apps.googleusercontent.com";

@@ -31,6 +31,8 @@ import {
   getFormStyles,
   DealFormFields,
   TopPageHeader,
+  validatePricingTiers,
+  MAX_PRICING_TIERS,
 } from "@dealsworld/shared";
 import { useAddresses } from "../hooks/useAddresses";
 import { useAuth } from "../context/AuthContext";
@@ -59,22 +61,29 @@ const DELIVERY_MODES = [
 validation rules for various properties of a deal such as title, description, category, original
 price, discount price, minimum group size, expiry date, location, delivery mode, and delivery
 charge. */
+const trimString = (value) =>
+  typeof value === "string" ? value.trim() : value;
+
 const dealSchema = Yup.object().shape({
   title: Yup.string()
+    .transform(trimString)
     .required("Deal title is required")
     .min(5, "Title must be at least 5 characters"),
   description: Yup.string()
+    .transform(trimString)
     .required("Description is required")
     .min(10, "Description must be at least 10 characters"),
   category: Yup.string().required("Please select a category"),
-  categoryOther: Yup.string().when("category", {
-    is: "Other",
-    then: (schema) =>
-      schema
-        .required("Please specify the category")
-        .min(2, "Category must be at least 2 characters"),
-    otherwise: (schema) => schema.nullable(),
-  }),
+  categoryOther: Yup.string()
+    .transform(trimString)
+    .when("category", {
+      is: "Other",
+      then: (schema) =>
+        schema
+          .required("Please specify the category")
+          .min(2, "Category must be at least 2 characters"),
+      otherwise: (schema) => schema.nullable(),
+    }),
   originalPrice: Yup.number()
     .transform((value, originalValue) =>
       originalValue === "" ||
@@ -110,10 +119,28 @@ const dealSchema = Yup.object().shape({
   minGroupSize: Yup.number()
     .required("Minimum buyers count is required")
     .min(2, "Minimum buyers must be at least 2"),
+  maxGroupSize: Yup.number()
+    .transform((value, originalValue) =>
+      originalValue === "" || originalValue === null || originalValue === undefined
+        ? undefined
+        : value,
+    )
+    .typeError("Max buyers must be a number")
+    .nullable()
+    .test(
+      "gte-min",
+      "Max buyers must be greater than or equal to minimum buyers",
+      function (value) {
+        if (value === undefined || value === null) return true;
+        const { minGroupSize } = this.parent;
+        if (!Number.isFinite(Number(minGroupSize))) return true;
+        return Number(value) >= Number(minGroupSize);
+      },
+    ),
   expiresAt: Yup.date()
     .required("Expiry date is required")
     .min(new Date(), "Expiry date cannot be in the past"),
-  location: Yup.string().required("Location is required"),
+  location: Yup.string().transform(trimString).required("Location is required"),
   deliveryMode: Yup.string().required("Delivery mode is required"),
   deliveryCharge: Yup.number().when("deliveryMode", {
     is: "Paid Home Delivery",
@@ -123,6 +150,16 @@ const dealSchema = Yup.object().shape({
         .min(1, "Charge must be at least ₹1"),
     otherwise: (schema) => schema.nullable(),
   }),
+  gstPercent: Yup.number()
+    .transform((value, originalValue) =>
+      originalValue === "" || originalValue === null || originalValue === undefined
+        ? undefined
+        : value,
+    )
+    .typeError("GST must be a number")
+    .required("GST is required (enter 0 if not applicable)")
+    .min(0, "GST cannot be negative")
+    .max(100, "GST cannot be more than 100%"),
 });
 
 /**
@@ -173,7 +210,19 @@ export default function CreateDealScreen({ route, navigation }) {
     deliveryCharge: deal?.deliveryCharge?.toString() || "",
     originalPrice: deal?.originalPrice?.toString() || "",
     discountPrice: deal?.discountPrice?.toString() || "",
+    gstPercent: deal?.gstPercent?.toString() || "",
     minGroupSize: deal?.minGroupSize?.toString() || "2",
+    maxGroupSize: deal?.maxGroupSize?.toString() || "",
+    pricingTiersEnabled: Boolean(
+      Array.isArray(deal?.pricingTiers) && deal.pricingTiers.length > 1,
+    ),
+    pricingTiers:
+      Array.isArray(deal?.pricingTiers) && deal.pricingTiers.length
+        ? deal.pricingTiers.map((tier) => ({
+            maxBuyers: tier?.maxBuyers != null ? String(tier.maxBuyers) : "",
+            price: tier?.price != null ? String(tier.price) : "",
+          }))
+        : [{ maxBuyers: "", price: "" }],
     expiresAt: deal?.expiresAt?.toDate
       ? deal.expiresAt.toDate() // Firestore helper to get JS Date
       : deal?.expiresAt
@@ -375,6 +424,99 @@ export default function CreateDealScreen({ route, navigation }) {
     clearFieldErrors("minGroupSize");
   };
 
+  /* ---------- MAX BUYERS ---------- */
+
+  const handleMaxBuyersChange = (value) => {
+    const clean = value.replace(/[^0-9]/g, "");
+    setForm((p) => ({ ...p, maxGroupSize: clean }));
+    clearFieldErrors("maxGroupSize");
+  };
+
+  /* ---------- GST ---------- */
+
+  const handleGstChange = (value) => {
+    const clean = value.replace(/[^0-9.]/g, "");
+    if (!/^\d*\.?\d*$/.test(clean)) return;
+    setForm((p) => ({ ...p, gstPercent: clean }));
+    clearFieldErrors("gstPercent");
+  };
+
+  /* ---------- GROUP PRICING TIERS ---------- */
+
+  const handleTogglePricingTiers = (enabled) => {
+    setForm((p) => {
+      const next = { ...p, pricingTiersEnabled: enabled };
+      // Turning tiers on with an already-split tier list (e.g. re-enabling
+      // after a toggle-off) should immediately re-derive Minimum Buyers
+      // from tier 1's cap, same as editing that field would.
+      if (enabled && Array.isArray(p.pricingTiers) && p.pricingTiers.length > 1) {
+        const tier1Max = p.pricingTiers[0]?.maxBuyers;
+        if (tier1Max) next.minGroupSize = tier1Max;
+      }
+      return next;
+    });
+    clearFieldErrors("pricingTiers", "minGroupSize");
+  };
+
+  const handleAddTier = () => {
+    setForm((p) => {
+      if (!Array.isArray(p.pricingTiers) || p.pricingTiers.length >= MAX_PRICING_TIERS) {
+        return p;
+      }
+      return { ...p, pricingTiers: [...p.pricingTiers, { maxBuyers: "", price: "" }] };
+    });
+    clearFieldErrors("pricingTiers");
+  };
+
+  const handleRemoveTier = (index) => {
+    setForm((p) => {
+      if (!Array.isArray(p.pricingTiers) || p.pricingTiers.length <= 1) return p;
+      return { ...p, pricingTiers: p.pricingTiers.filter((_, i) => i !== index) };
+    });
+    clearFieldErrors("pricingTiers");
+  };
+
+  const handleTierFieldChange = (index, field, value) => {
+    const clean =
+      field === "maxBuyers" ? value.replace(/[^0-9]/g, "") : value.replace(/[^0-9.]/g, "");
+    setForm((p) => {
+      const tiers = Array.isArray(p.pricingTiers) ? p.pricingTiers : [];
+      const nextTiers = tiers.map((tier, i) => (i === index ? { ...tier, [field]: clean } : tier));
+      const next = { ...p, pricingTiers: nextTiers };
+      // Tier 1's cap IS Minimum Buyers once there's more than one tier (see
+      // the matching note in DealFormFields.js) - keep them in sync the
+      // moment the seller edits it, same direction as tier 1's price
+      // mirroring Deal Price.
+      if (index === 0 && field === "maxBuyers" && nextTiers.length > 1) {
+        next.minGroupSize = clean;
+      }
+      return next;
+    });
+    clearFieldErrors("pricingTiers", "minGroupSize");
+  };
+
+  // Row 0's minBuyers is always 1 and its price always mirrors discountPrice
+  // (both required by firestore.rules isValidPricingTiers), and the last
+  // row's maxBuyers is always forced open-ended - the form only ever lets a
+  // seller edit the pieces that can actually vary.
+  const buildPricingTiersPayload = (formState) => {
+    if (!formState.pricingTiersEnabled) return null;
+    const rows = Array.isArray(formState.pricingTiers) ? formState.pricingTiers : [];
+    if (!rows.length) return null;
+    let minBuyers = 1;
+    return rows.map((row, index) => {
+      const isLast = index === rows.length - 1;
+      const maxBuyers = isLast ? null : Number(row.maxBuyers) || null;
+      const price =
+        index === 0
+          ? Number(parseNumber(formState.discountPrice)) || 0
+          : Number(row.price) || 0;
+      const tier = { minBuyers, maxBuyers, price };
+      minBuyers = maxBuyers != null ? maxBuyers + 1 : minBuyers;
+      return tier;
+    });
+  };
+
   /* ---------- IMAGE ---------- */
 
   const MAX_DEAL_IMAGES = 6;
@@ -448,23 +590,58 @@ export default function CreateDealScreen({ route, navigation }) {
    * and `false` if there are validation errors.
    */
   const validate = async () => {
-    try {
-      // Clean data before validation (removing currency symbols)
-      const cleanData = {
-        ...form,
-        originalPrice: form.originalPrice
-          ? Number(parseNumber(form.originalPrice))
-          : undefined,
-        discountPrice: form.discountPrice
-          ? Number(parseNumber(form.discountPrice))
-          : undefined,
-        deliveryCharge: form.deliveryCharge
-          ? Number(parseNumber(form.deliveryCharge))
-          : 0,
-        minGroupSize: Number(form.minGroupSize),
-      };
+    // Clean data before validation (removing currency symbols)
+    const cleanData = {
+      ...form,
+      originalPrice: form.originalPrice
+        ? Number(parseNumber(form.originalPrice))
+        : undefined,
+      discountPrice: form.discountPrice
+        ? Number(parseNumber(form.discountPrice))
+        : undefined,
+      deliveryCharge: form.deliveryCharge
+        ? Number(parseNumber(form.deliveryCharge))
+        : 0,
+      minGroupSize: Number(form.minGroupSize),
+      maxGroupSize:
+        form.maxGroupSize === "" || form.maxGroupSize === null || form.maxGroupSize === undefined
+          ? undefined
+          : Number(form.maxGroupSize),
+      gstPercent:
+        form.gstPercent === "" || form.gstPercent === null || form.gstPercent === undefined
+          ? undefined
+          : Number(form.gstPercent),
+    };
 
+    const newErrors = {};
+    if (!Array.isArray(images) || images.length === 0) {
+      newErrors.images = "Please add at least one deal image";
+    }
+    if (form.pricingTiersEnabled) {
+      const tierError = validatePricingTiers(buildPricingTiersPayload(form));
+      if (tierError) newErrors.pricingTiers = tierError;
+    }
+
+    try {
       await dealSchema.validate(cleanData, { abortEarly: false });
+    } catch (err) {
+      if (Array.isArray(err?.inner) && err.inner.length > 0) {
+        err.inner.forEach((error) => {
+          if (error?.path) {
+            newErrors[error.path] = error.message;
+          }
+        });
+      } else if (err?.path) {
+        newErrors[err.path] = err.message;
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return false;
+    }
+
+    try {
       if (cleanData.deliveryMode === "Pick from Store") {
         if (addressesLoading) {
           Alert.alert(
@@ -514,17 +691,10 @@ export default function CreateDealScreen({ route, navigation }) {
       setErrors({});
       return true;
     } catch (err) {
-      const newErrors = {};
-      if (Array.isArray(err?.inner) && err.inner.length > 0) {
-        err.inner.forEach((error) => {
-          if (error?.path) {
-            newErrors[error.path] = error.message;
-          }
-        });
-      } else if (err?.path) {
-        newErrors[err.path] = err.message;
-      }
-      setErrors(newErrors);
+      Alert.alert(
+        "Validation failed",
+        err?.message || "Something went wrong while validating this deal.",
+      );
       return false;
     }
   };
@@ -571,10 +741,14 @@ export default function CreateDealScreen({ route, navigation }) {
         category: resolvedCategory,
         originalPrice: Number(parseNumber(form.originalPrice)) || 0,
         discountPrice: Number(parseNumber(form.discountPrice)) || 0,
+        gstPercent: Number(form.gstPercent) || 0,
         minGroupSize: Number(form.minGroupSize) || 1,
-        description: form.description || "", // Fixed typo from 'descrption'
+        maxGroupSize: form.maxGroupSize ? Number(form.maxGroupSize) || null : null,
+        pricingTiers: buildPricingTiersPayload(form),
+        description: form.description?.trim() || "", // Fixed typo from 'descrption'
         deliveryMode: form.deliveryMode,
-        title: form.title,
+        title: form.title?.trim() || "",
+        location: form.location?.trim() || "",
         images: resolvedImages,
         image: resolvedImages[0] || null,
         imageUrl: resolvedImages[0] || null,
@@ -590,6 +764,10 @@ export default function CreateDealScreen({ route, navigation }) {
           form.deliveryMode === "Pick from Store" ? storeAddressText : null,
         updatedAt: serverTimestamp(),
       };
+      // pricingTiersEnabled is form-only UI state (the tier editor's on/off
+      // toggle) - whether a deal is tiered is derived from pricingTiers
+      // itself at read time, so this never belongs in the persisted doc.
+      delete dealData.pricingTiersEnabled;
 
       // 2. Choose whether to UPDATE or ADD
       if (isEditMode) {
@@ -775,6 +953,12 @@ export default function CreateDealScreen({ route, navigation }) {
             onFieldChange={setFieldValue}
             onPriceChange={handlePriceChange}
             onMinBuyersChange={handleMinBuyersChange}
+            onMaxBuyersChange={handleMaxBuyersChange}
+            onTogglePricingTiers={handleTogglePricingTiers}
+            onAddTier={handleAddTier}
+            onRemoveTier={handleRemoveTier}
+            onTierFieldChange={handleTierFieldChange}
+            onGstChange={handleGstChange}
             onCategoryPress={() => setCategoryModalVisible(true)}
             onDeliveryModePress={() => setDeliveryModalVisible(true)}
             onExpiresAtPress={() => setShowDatePicker(true)}

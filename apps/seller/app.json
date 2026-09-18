@@ -21,7 +21,8 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-asset",
-      "expo-notifications"
+      "expo-notifications",
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "eas": {

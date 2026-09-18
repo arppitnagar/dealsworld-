@@ -117,6 +117,7 @@ async function expireDealTransactional(dealId, { via = "sweep" } = {}) {
             paymentStatus: "refunded_to_buyer",
             paymentReleasedAt: FieldValue.serverTimestamp(),
             paymentReleaseReason: `expired_${expiryReason}`,
+            refundedAmount: asNumber(data.paidAmount ?? data.amount, 0),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },

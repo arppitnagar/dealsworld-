@@ -17,6 +17,8 @@ export { default as EmptyState } from "./components/EmptyState";
 export { default as DealCard } from "./components/DealCard";
 export { default as SearchBar } from "./components/SearchBar";
 export { default as PriceBlock } from "./components/PriceBlock";
+export { default as PriceBreakupCard } from "./components/PriceBreakupCard";
+export { default as PriceBreakupModal } from "./components/PriceBreakupModal";
 export { default as StatsCard } from "./components/StatsCard";
 export { default as HeaderBar } from "./components/HeaderBar";
 export { default as TopPageHeader } from "./components/TopPageHeader";
@@ -60,6 +62,15 @@ export {
   formatDuration,
 } from "./utils/dateTime";
 export { formatINR } from "./utils/formatters";
+export {
+  calculatePriceBreakup,
+  PLATFORM_FEE_PERCENT,
+  PAID_DELIVERY_MODE,
+  resolveTierPrice,
+  getNextTierInfo,
+  validatePricingTiers,
+  MAX_PRICING_TIERS,
+} from "./utils/priceBreakup";
 export { getDealImages } from "./utils/dealImages";
 export { validatePassword } from "./utils/passwordPolicy";
 export {

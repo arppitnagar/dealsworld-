@@ -42,9 +42,12 @@ export default function DealDetailsLayout({
   price,
   original,
   discountPercent,
+  priceNote,
   expiryLabel,
   joinedCount,
   targetCount,
+  maxCount,
+  tierBoundaries,
   progressColor,
   statusLabel,
   statusColor,
@@ -281,6 +284,12 @@ export default function DealDetailsLayout({
           fontSize: 12,
           color: isDashboard ? theme.colors.textMuted : theme.colors.onPrimaryMuted,
         },
+        heroPriceNote: {
+          marginTop: 6,
+          fontSize: 12,
+          fontWeight: "700",
+          color: theme.colors.dealAccent,
+        },
         heroProgress: {
           marginTop: 14,
           gap: 8,
@@ -311,6 +320,33 @@ export default function DealDetailsLayout({
           height: "100%",
           borderRadius: 999,
         },
+        heroProgressFillExtra: {
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          borderRadius: 999,
+        },
+        heroProgressMarker: {
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          width: 2,
+          backgroundColor: isDashboard
+            ? theme.colors.surface
+            : theme.colors.onPrimary,
+        },
+        heroProgressBadge: {
+          alignSelf: "flex-start",
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          borderRadius: 999,
+          backgroundColor: theme.colors.successSoft,
+        },
+        heroProgressBadgeText: {
+          fontSize: 11,
+          fontWeight: "700",
+          color: theme.colors.successDark,
+        },
         statusWrap: {
           marginTop: 10,
         },
@@ -337,13 +373,56 @@ export default function DealDetailsLayout({
     (statusInline && Boolean(statusLabel));
   const joinedValue = toNumber(joinedCount) ?? 0;
   const targetValue = toNumber(targetCount);
+  const maxValueRaw = toNumber(maxCount);
+  const maxValue = maxValueRaw && maxValueRaw > (targetValue || 0) ? maxValueRaw : null;
   const showProgress = targetValue !== null && targetValue > 0;
-  const progressRatio = showProgress
-    ? Math.min(joinedValue / targetValue, 1)
+  const thresholdReached = showProgress && joinedValue >= targetValue;
+  const isFull = Boolean(maxValue) && joinedValue >= maxValue;
+  // Past the minimum with no seller-set cap, there's no meaningful "out of"
+  // denominator left to show (the deal just keeps growing) - this state gets
+  // its own label/percent instead of falling through to "Joined X of {min}",
+  // which used to read as a nonsensical "Joined 3 of 2" once buyers kept
+  // joining past a reached minimum.
+  const isUncappedPastMin = thresholdReached && !maxValue;
+  // Once the minimum is hit the deal keeps accepting joiners (up to an
+  // optional maxGroupSize cap) instead of closing, so the bar's denominator
+  // becomes the cap when one exists - the min is then just a marker inside
+  // it, not the finish line.
+  const basis = showProgress ? maxValue || targetValue : 0;
+  const guaranteedRatio = showProgress
+    ? Math.min(joinedValue, targetValue) / basis
+    : 0;
+  // Only meaningful when there's a cap to be proportional against - without
+  // one this would compute a width that overflows the (clipped) track and
+  // never actually render, so it's just skipped.
+  const extraRatio =
+    showProgress && maxValue
+      ? Math.max(0, Math.min(joinedValue, maxValue) - targetValue) / basis
+      : 0;
+  const markerRatio = showProgress && maxValue ? targetValue / basis : null;
+  // Tier-price drop points, only meaningful once there's a cap giving the
+  // bar a fixed width to be proportional against (see basis above) - in an
+  // uncapped deal the bar past the minimum has no fixed scale left to place
+  // these on, so they're skipped there.
+  const tierMarkerRatios =
+    showProgress && maxValue && Array.isArray(tierBoundaries)
+      ? tierBoundaries
+          .map((b) => toNumber(b))
+          .filter((b) => b !== null && b > 0 && b < maxValue)
+          .map((b) => b / basis)
+      : [];
+  const percentLabel = showProgress
+    ? Math.round((maxValue ? Math.min(joinedValue, maxValue) / maxValue : Math.min(joinedValue / targetValue, 1)) * 100)
     : 0;
   const resolvedProgressColor =
     progressColor ||
     (isDashboard ? theme.colors.primary : theme.colors.onPrimary);
+  const fillColor = thresholdReached ? theme.colors.success : resolvedProgressColor;
+  const headerLabel = maxValue
+    ? `${Math.min(joinedValue, maxValue)} of ${maxValue} joined`
+    : isUncappedPastMin
+      ? `${joinedValue} buyer${joinedValue === 1 ? "" : "s"} joined`
+      : `Joined ${joinedValue} of ${targetValue}`;
 
   const headerContent = (
     <>
@@ -511,22 +590,16 @@ export default function DealDetailsLayout({
               ) : null}
             </View>
           ) : null}
+          {priceNote ? <Text style={styles.heroPriceNote}>{priceNote}</Text> : null}
           {expiryLabel ? (
             <Text style={styles.heroExpiry}>{expiryLabel}</Text>
           ) : null}
           {showProgress ? (
             <View style={styles.heroProgress}>
               <View style={styles.heroProgressHeader}>
-                <Text style={styles.heroProgressLabel}>
-                  Joined {joinedValue} of {targetValue}
-                </Text>
-                <Text
-                  style={[
-                    styles.heroProgressPercent,
-                    { color: resolvedProgressColor },
-                  ]}
-                >
-                  {Math.round(progressRatio * 100)}%
+                <Text style={styles.heroProgressLabel}>{headerLabel}</Text>
+                <Text style={[styles.heroProgressPercent, { color: fillColor }]}>
+                  {isUncappedPastMin ? "Guaranteed" : `${percentLabel}%`}
                 </Text>
               </View>
               <View style={styles.heroProgressTrack}>
@@ -534,12 +607,51 @@ export default function DealDetailsLayout({
                   style={[
                     styles.heroProgressFill,
                     {
-                      width: `${progressRatio * 100}%`,
-                      backgroundColor: resolvedProgressColor,
+                      width: `${guaranteedRatio * 100}%`,
+                      backgroundColor: fillColor,
                     },
                   ]}
                 />
+                {extraRatio > 0 ? (
+                  <View
+                    style={[
+                      styles.heroProgressFillExtra,
+                      {
+                        left: `${guaranteedRatio * 100}%`,
+                        width: `${extraRatio * 100}%`,
+                        backgroundColor: fillColor,
+                        opacity: 0.45,
+                      },
+                    ]}
+                  />
+                ) : null}
+                {markerRatio !== null && markerRatio < 1 ? (
+                  <View
+                    style={[
+                      styles.heroProgressMarker,
+                      { left: `${markerRatio * 100}%` },
+                    ]}
+                  />
+                ) : null}
+                {tierMarkerRatios.map((ratio, index) => (
+                  <View
+                    key={`tier-marker-${index}`}
+                    style={[
+                      styles.heroProgressMarker,
+                      { left: `${ratio * 100}%`, opacity: 0.5 },
+                    ]}
+                  />
+                ))}
               </View>
+              {thresholdReached ? (
+                <View style={styles.heroProgressBadge}>
+                  <Text style={styles.heroProgressBadgeText}>
+                    {isFull
+                      ? "Deal full — max buyers reached"
+                      : "🎉 Minimum reached — guaranteed to ship"}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
           </View>

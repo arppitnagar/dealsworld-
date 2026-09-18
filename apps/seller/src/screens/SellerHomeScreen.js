@@ -125,6 +125,7 @@ export default function SellerHomeScreen({ navigation }) {
                   images={getDealImages(deal)}
                   joins={deal.currentJoins ?? deal.joinedUsers ?? 0}
                   targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
+                  maxCount={deal.maxGroupSize ?? null}
                   accentColor={getStatusColor(displayStatus, theme)}
                   badgeLabel={getStatusLabel(displayStatus)}
                   statusLabel={getStatusLabel(displayStatus)}

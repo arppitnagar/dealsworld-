@@ -189,6 +189,14 @@ router.get("/api/deals/:dealId/my-delivery", requireAuth, async (req, res) => {
       paymentStatus: data.paymentStatus || "unpaid",
       paidAt: data.paidAt || null,
       paymentReleasedAt: data.paymentReleasedAt || null,
+      // paidAmount: captured live at /pay time. settledAmount/priceAdjustment:
+      // only set once the deal's tiered-pricing settlement step has run (see
+      // /complete in routes/deals.js) - null until then, or for a deal that
+      // was never tiered.
+      paidAmount: data.paidAmount ?? null,
+      settledAmount: data.settledAmount ?? null,
+      priceAdjustment: data.priceAdjustment ?? null,
+      refundedAmount: data.refundedAmount ?? null,
     });
   } catch (error) {
     return res.status(500).json({ error: error.message });
@@ -345,6 +353,14 @@ router.get(
           deliveredAt: data.deliveredAt || null,
           paymentStatus: data.paymentStatus || "unpaid",
           paidAt: data.paidAt || null,
+          // paidAmount: captured live at /pay time. settledAmount/
+          // priceAdjustment: only set once the deal's tiered-pricing
+          // settlement step has run (see /complete in routes/deals.js) -
+          // null until then, or for a deal that was never tiered, in which
+          // case the seller should just read paidAmount as the true amount.
+          paidAmount: data.paidAmount ?? null,
+          settledAmount: data.settledAmount ?? null,
+          priceAdjustment: data.priceAdjustment ?? null,
         };
       });
 

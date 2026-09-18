@@ -31,6 +31,10 @@ import {
   OtpInput,
   StatusPill,
   getDealImages,
+  PriceBreakupModal,
+  calculatePriceBreakup,
+  resolveTierPrice,
+  getNextTierInfo,
 } from "@dealsworld/shared";
 import {
   useDeals,
@@ -176,6 +180,7 @@ export default function DealDetailsScreen({ route, navigation }) {
   } = useDealState();
   const hasRecorded = useRef(false);
   const [successFeedback, setSuccessFeedback] = useState(null);
+  const [showBreakupModal, setShowBreakupModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [ratingValue, setRatingValue] = useState(0);
@@ -216,13 +221,16 @@ export default function DealDetailsScreen({ route, navigation }) {
   const minGroupSize = Number.isFinite(Number(minGroupSizeRaw))
     ? Number(minGroupSizeRaw)
     : 1;
-  // Live count only - deal.thresholdReachedAt is a permanent "this campaign
-  // hit its minimum at least once" milestone (kept even after someone later
-  // leaves, since the seller/unsuccessful-deal logic needs that history), so
-  // it must not be used here: a buyer who leaves after threshold was reached
-  // frees up a spot, and the join button should reflect that live headcount
-  // instead of staying "Locked" forever off a stale flag.
-  const thresholdReached = joinCount >= minGroupSize;
+  const maxGroupSizeRaw = deal?.maxGroupSize;
+  const maxGroupSize =
+    maxGroupSizeRaw === null || maxGroupSizeRaw === undefined || maxGroupSizeRaw === ""
+      ? null
+      : Number(maxGroupSizeRaw);
+  // Reaching the minimum no longer closes the deal - it keeps accepting
+  // buyers (giving the seller more scope to sell) until an optional seller
+  // set cap is hit, which is the only thing that actually blocks joining.
+  const dealFull =
+    Number.isFinite(maxGroupSize) && maxGroupSize > 0 && joinCount >= maxGroupSize;
   const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
   const isPickup = /pick/i.test(deliveryModeLabel);
   const storeAddress =
@@ -547,16 +555,31 @@ export default function DealDetailsScreen({ route, navigation }) {
   const expiryDate = toDate(deal.expiresAt || deal.expiryTime);
   const expiryLabel = expiryDate ? formatExpiryLabel(expiryDate) : null;
   const originalValue = Number(deal.originalPrice);
-  const discountValue = Number(deal.discountPrice);
   const hasOriginal = Number.isFinite(originalValue) && originalValue > 0;
-  const hasDiscount = Number.isFinite(discountValue) && discountValue > 0;
+  // The live price at the current headcount - equal to deal.discountPrice
+  // for a flat-price deal, or the active tier's price for a dynamically
+  // priced one. This is what /pay actually charges (see routes/deals.js),
+  // so showing anything else here would mislead the buyer about what
+  // they're about to pay.
+  const livePrice = resolveTierPrice(deal, joinCount);
+  const hasDiscount = Number.isFinite(livePrice) && livePrice > 0;
   const percentOff =
-    hasOriginal && hasDiscount && originalValue > discountValue
-      ? Math.round(((originalValue - discountValue) / originalValue) * 100)
+    hasOriginal && hasDiscount && originalValue > livePrice
+      ? Math.round(((originalValue - livePrice) / originalValue) * 100)
       : null;
   const primaryPrice =
-    hasDiscount ? discountValue : hasOriginal ? originalValue : null;
+    hasDiscount ? livePrice : hasOriginal ? originalValue : null;
   const originalDisplay = percentOff ? originalValue : null;
+  const nextTierInfo = getNextTierInfo(deal, joinCount);
+  const tierBoundaries = Array.isArray(deal?.pricingTiers)
+    ? deal.pricingTiers.slice(1).map((tier) => tier?.minBuyers)
+    : null;
+  const priceBreakup = calculatePriceBreakup({
+    basePrice: primaryPrice || 0,
+    gstPercent: deal.gstPercent,
+    deliveryMode: deal.deliveryMode,
+    deliveryCharge: deal.deliveryCharge,
+  });
   const ratingCountRaw = deal?.ratingCount ?? 0;
   const ratingCount = Number.isFinite(Number(ratingCountRaw))
     ? Number(ratingCountRaw)
@@ -604,10 +627,10 @@ export default function DealDetailsScreen({ route, navigation }) {
       );
       return;
     }
-    if (!hasJoined && thresholdReached) {
+    if (!hasJoined && dealFull) {
       Alert.alert(
-        "Deal unlocked",
-        "Minimum group size already reached. Joining is closed for this deal.",
+        "Deal full",
+        "This deal has reached its maximum number of buyers.",
       );
       return;
     }
@@ -728,12 +751,12 @@ export default function DealDetailsScreen({ route, navigation }) {
         onPress={handleToggleJoin}
         active={hasJoined}
         tone={hasJoined ? "danger" : undefined}
-        label={hasJoined ? "Leave" : thresholdReached ? "Locked" : "Join"}
+        label={hasJoined ? "Leave" : dealFull ? "Full" : "Join"}
       >
         {(color) =>
           joining || leaving ? (
             <ActivityIndicator color={color} size="small" />
-          ) : !hasJoined && thresholdReached ? (
+          ) : !hasJoined && dealFull ? (
             <Ionicons name="lock-closed-outline" size={20} color={color} />
           ) : (
             <Ionicons
@@ -798,9 +821,16 @@ export default function DealDetailsScreen({ route, navigation }) {
         price={primaryPrice}
         original={originalDisplay}
         discountPercent={percentOff}
+        priceNote={
+          nextTierInfo
+            ? `Need ${nextTierInfo.buyersNeeded} more buyer${nextTierInfo.buyersNeeded === 1 ? "" : "s"} so everyone pays ${formatINR(nextTierInfo.nextPrice)}`
+            : null
+        }
         expiryLabel={expiryLabel}
         joinedCount={joinCount}
         targetCount={minGroupSize}
+        maxCount={maxGroupSize}
+        tierBoundaries={tierBoundaries}
         progressColor={theme.colors.primary}
         statusLabel={deliveryHeroStatus?.label}
         statusColor={deliveryHeroStatus?.color}
@@ -917,25 +947,56 @@ export default function DealDetailsScreen({ route, navigation }) {
                   Pay to secure your spot. Your payment is held by us and released to the seller
                   only once you confirm delivery.
                 </Text>
-                <AppButton
-                  title={paying ? "Processing..." : `Pay ${formatINR(primaryPrice || 0)}`}
-                  onPress={handlePay}
-                  disabled={paying}
-                  loading={paying}
-                  style={styles.paymentButton}
-                />
+                <View style={styles.paymentActionsRow}>
+                  <AppButton
+                    title={paying ? "Processing..." : `Pay ${formatINR(primaryPrice || 0)}`}
+                    onPress={handlePay}
+                    disabled={paying}
+                    loading={paying}
+                    style={[styles.paymentButton, styles.paymentButtonFlex]}
+                  />
+                  <TouchableOpacity
+                    style={styles.breakupButton}
+                    onPress={() => setShowBreakupModal(true)}
+                    accessibilityLabel="View price breakup"
+                  >
+                    <Ionicons
+                      name="receipt-outline"
+                      size={18}
+                      color={theme.colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
               </>
             ) : (
-              <View style={styles.paymentStatusRow}>
-                <StatusPill status={myPaymentStatus} />
-                <Text style={styles.logisticsLabel}>
-                  {myPaymentStatus === "paid_blocked"
-                    ? "Held until you confirm delivery."
-                    : myPaymentStatus === "released_to_seller"
-                      ? "Released to the seller after delivery."
-                      : "Refunded back to you."}
-                </Text>
-              </View>
+              <>
+                <View style={styles.paymentStatusRow}>
+                  <StatusPill status={myPaymentStatus} />
+                  <Text style={[styles.logisticsLabel, styles.paymentStatusText]}>
+                    {myPaymentStatus === "paid_blocked"
+                      ? "Held until you confirm delivery."
+                      : myPaymentStatus === "released_to_seller"
+                        ? "Released to the seller after delivery."
+                        : "Refunded back to you."}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.breakupButton}
+                    onPress={() => setShowBreakupModal(true)}
+                    accessibilityLabel="View price breakup"
+                  >
+                    <Ionicons
+                      name="receipt-outline"
+                      size={18}
+                      color={theme.colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
+                {Number(myDelivery?.priceAdjustment) > 0 ? (
+                  <Text style={styles.priceAdjustmentNote}>
+                    {`🎉 ${formatINR(myDelivery.priceAdjustment)} refunded — more buyers joined and the group price dropped after you paid.`}
+                  </Text>
+                ) : null}
+              </>
             )}
           </InfoCard>
         ) : null}
@@ -1179,6 +1240,12 @@ export default function DealDetailsScreen({ route, navigation }) {
           </InfoCard>
         ) : null}
       </DealDetailsLayout>
+
+      <PriceBreakupModal
+        visible={showBreakupModal}
+        onClose={() => setShowBreakupModal(false)}
+        breakup={priceBreakup}
+      />
 
       {showAddressModal && (
         <Modal
@@ -1653,10 +1720,39 @@ const createStyles = (theme) =>
     borderRadius: theme.radii.md,
     marginTop: 10,
   },
+  paymentActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+  },
+  paymentButtonFlex: {
+    flex: 1,
+    marginTop: 0,
+  },
+  breakupButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.surface,
+  },
   paymentStatusRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  paymentStatusText: {
+    flex: 1,
+  },
+  priceAdjustmentNote: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.success,
   },
   unsuccessfulCard: {
     backgroundColor: theme.colors.dangerSoftLight,

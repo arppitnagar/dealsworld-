@@ -55,6 +55,71 @@ service cloud.firestore {
          request.resource.data.favoritesCount == resource.data.favoritesCount - 1);
     }
 
+    // Server-side mirror of the client-side Yup schema in
+    // apps/seller/src/screens/CreateDealScreen.js (dealSchema) plus the
+    // image-count check added to its validate() function. Deals are created
+    // and edited via a direct client addDoc/updateDoc (see the comment above
+    // the extractDealPayload note in apps/backend/src/lib.js), so this rule
+    // is the only real server-side enforcement of these constraints - the
+    // client-side checks alone would not stop someone from writing straight
+    // to Firestore with the SDK/console and skipping the app entirely.
+    function isNonBlankString(value, minLen) {
+      return value is string && value.matches('.*\\S.*') && value.size() >= minLen;
+    }
+
+    // Dynamic group pricing (packages/shared/utils/priceBreakup.js
+    // resolveTierPrice / validatePricingTiers - keep all three in sync).
+    // pricingTiers is an ordered, contiguous list of { minBuyers, maxBuyers,
+    // price }, capped at 5 entries so it can be validated by index without a
+    // loop (Firestore rules have none) - only the last tier present may
+    // leave maxBuyers null (open-ended); every earlier tier must hand off
+    // exactly where the next one starts, at a price that's never higher.
+    function isValidTierEntry(tier) {
+      return tier is map &&
+        tier.minBuyers is number && tier.minBuyers >= 1 &&
+        (tier.maxBuyers == null || (tier.maxBuyers is number && tier.maxBuyers >= tier.minBuyers)) &&
+        tier.price is number && tier.price > 0;
+    }
+
+    function isValidPricingTiers(tiers) {
+      return tiers is list && tiers.size() >= 1 && tiers.size() <= 5 &&
+        isValidTierEntry(tiers[0]) && tiers[0].minBuyers == 1 &&
+        (tiers.size() < 2 || (isValidTierEntry(tiers[1]) &&
+          tiers[0].maxBuyers != null && tiers[1].minBuyers == tiers[0].maxBuyers + 1 &&
+          tiers[1].price <= tiers[0].price)) &&
+        (tiers.size() < 3 || (isValidTierEntry(tiers[2]) &&
+          tiers[1].maxBuyers != null && tiers[2].minBuyers == tiers[1].maxBuyers + 1 &&
+          tiers[2].price <= tiers[1].price)) &&
+        (tiers.size() < 4 || (isValidTierEntry(tiers[3]) &&
+          tiers[2].maxBuyers != null && tiers[3].minBuyers == tiers[2].maxBuyers + 1 &&
+          tiers[3].price <= tiers[2].price)) &&
+        (tiers.size() < 5 || (isValidTierEntry(tiers[4]) &&
+          tiers[3].maxBuyers != null && tiers[4].minBuyers == tiers[3].maxBuyers + 1 &&
+          tiers[4].price <= tiers[3].price));
+    }
+
+    function isValidDealPayload(data) {
+      return isNonBlankString(data.title, 5) &&
+        isNonBlankString(data.description, 10) &&
+        data.category is string && data.category.size() > 0 &&
+        (data.category != 'Other' || isNonBlankString(data.categoryOther, 2)) &&
+        data.originalPrice is number && data.originalPrice > 0 &&
+        data.discountPrice is number && data.discountPrice > 0 &&
+        data.discountPrice < data.originalPrice &&
+        data.minGroupSize is number && data.minGroupSize >= 2 &&
+        (!('maxGroupSize' in data) || data.maxGroupSize == null ||
+          (data.maxGroupSize is number && data.maxGroupSize >= data.minGroupSize)) &&
+        (!('pricingTiers' in data) || data.pricingTiers == null ||
+          (isValidPricingTiers(data.pricingTiers) && data.pricingTiers[0].price == data.discountPrice)) &&
+        data.expiresAt is timestamp && data.expiresAt > request.time &&
+        isNonBlankString(data.location, 1) &&
+        data.deliveryMode in ['Free Home Delivery', 'Paid Home Delivery', 'Pick from Store'] &&
+        (data.deliveryMode != 'Paid Home Delivery' ||
+          (data.deliveryCharge is number && data.deliveryCharge >= 1)) &&
+        data.gstPercent is number && data.gstPercent >= 0 && data.gstPercent <= 100 &&
+        data.images is list && data.images.size() >= 1;
+    }
+
     // Each user's own profile doc (apps/*/src/context/AuthContext.js,
     // apps/*/src/hooks/useUserProfile.js). Read/write restricted to the
     // profile's own owner.
@@ -106,9 +171,11 @@ service cloud.firestore {
     // join/review-aggregate/dispatch writes.
     match /deals/{dealId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid &&
+        isValidDealPayload(request.resource.data);
       allow update: if isSignedIn() &&
-        ((resource.data.sellerId == request.auth.uid && !isDispatchFieldWrite() && !isLifecycleFieldWrite()) || isFavoritesCountStep());
+        ((resource.data.sellerId == request.auth.uid && !isDispatchFieldWrite() && !isLifecycleFieldWrite() &&
+          isValidDealPayload(request.resource.data)) || isFavoritesCountStep());
       allow delete: if isSignedIn() && resource.data.sellerId == request.auth.uid;
 
       // Chat messages and typing indicators (apps/*/src/screens/DealChat*.js)

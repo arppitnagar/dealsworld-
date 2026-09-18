@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { AuthScreen } from "@dealsworld/shared";
 
 export default function LoginScreen() {
-  const { login, register } = useAuth();
+  const { login, register, loginWithGoogle } = useAuth();
   return (
     <AuthScreen
       title="Seller Login"
@@ -13,6 +13,8 @@ export default function LoginScreen() {
       brandTitle="Seller Buddy"
       onLogin={login}
       onRegister={register}
+      onGoogleLogin={loginWithGoogle}
+      showAppleButton={false}
     />
   );
 }

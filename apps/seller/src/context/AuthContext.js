@@ -1,12 +1,17 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
-import { auth, db } from "../config/firebase"; // Ensure your firebase config exports 'auth'
+import { auth, db, GOOGLE_WEB_CLIENT_ID } from "../config/firebase"; // Ensure your firebase config exports 'auth'
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithCredential,
+  GoogleAuthProvider,
   signOut,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
+
+GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
 
 const AuthContext = createContext({});
 
@@ -79,10 +84,24 @@ export const AuthProvider = ({ children }) => {
     }
     return credential;
   };
-  const logout = () => signOut(auth);
+  const loginWithGoogle = async () => {
+    await GoogleSignin.hasPlayServices();
+    const response = await GoogleSignin.signIn();
+    if (response.type !== "success") return;
+    const credential = GoogleAuthProvider.credential(response.data.idToken);
+    return signInWithCredential(auth, credential);
+  };
+  const logout = async () => {
+    if (GoogleSignin.hasPreviousSignIn()) {
+      await GoogleSignin.signOut();
+    }
+    return signOut(auth);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+    <AuthContext.Provider
+      value={{ user, login, register, loginWithGoogle, logout, loading }}
+    >
       {children}
     </AuthContext.Provider>
   );

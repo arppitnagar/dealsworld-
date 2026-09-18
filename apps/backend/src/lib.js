@@ -523,6 +523,10 @@ function applyDeliveryConfirmation(tx, { dealRef, deal, joinRef, joinData, via }
           paymentStatus: "released_to_seller",
           paymentReleasedAt: FieldValue.serverTimestamp(),
           paymentReleaseReason: "delivered",
+          // settledAmount is set by /complete's tiered-pricing settlement
+          // step (falls back to whatever was actually paid for a deal that
+          // was never tiered, or completed before that step existed).
+          releasedAmount: asNumber(joinData.settledAmount ?? joinData.paidAmount ?? joinData.amount, 0),
         }
       : {};
 
@@ -617,6 +621,49 @@ function normalizeImages(images, fallbackSingle = null) {
   return fallbackSingle ? [fallbackSingle] : [];
 }
 
+// A deal opts into dynamic group pricing via pricingTiers: an ordered,
+// contiguous list of { minBuyers, maxBuyers, price }, where only the last
+// tier may leave maxBuyers null (open-ended). Real enforcement of the shape
+// (contiguity, non-increasing prices, first tier == discountPrice) lives in
+// firestore.rules isValidPricingTiers, since deals are created/edited via a
+// direct client write - this just normalizes types for whatever's stored.
+function normalizePricingTiers(tiers) {
+  if (!Array.isArray(tiers) || tiers.length === 0) return null;
+  return tiers
+    .map((tier) => ({
+      minBuyers: Math.max(1, Math.round(asNumber(tier?.minBuyers, 1))),
+      maxBuyers:
+        tier?.maxBuyers === null || tier?.maxBuyers === undefined || tier?.maxBuyers === ""
+          ? null
+          : Math.max(1, Math.round(asNumber(tier.maxBuyers, 1))),
+      price: Math.max(0, asNumber(tier?.price, 0)),
+    }))
+    .sort((a, b) => a.minBuyers - b.minBuyers);
+}
+
+// The live price for a deal at a given headcount. Mirrors
+// packages/shared/utils/priceBreakup.js resolveTierPrice - the backend can't
+// import that RN/Expo package directly (different runtime), so this is
+// intentionally duplicated; keep both in sync.
+function resolveTierPrice(deal, joinCount) {
+  const tiers = Array.isArray(deal?.pricingTiers) ? deal.pricingTiers : null;
+  const basePrice = Math.max(0, asNumber(deal?.discountPrice, 0));
+  if (!tiers || !tiers.length) return basePrice;
+  const count = Math.max(0, asNumber(joinCount, 0));
+  // A plain 0 sits below every tier's minBuyers (tier 1 always starts at
+  // 1), so it must fall back to tier 1 - not the .find()'s -1 falling
+  // through to the LAST (cheapest) tier, which would hand out the best
+  // price to a deal nobody has joined yet.
+  const matchedIndex = tiers.findIndex((t) => {
+    const min = asNumber(t?.minBuyers, 1);
+    const max = t?.maxBuyers === null || t?.maxBuyers === undefined ? null : asNumber(t.maxBuyers, min);
+    return count >= min && (max === null || count <= max);
+  });
+  const tier = tiers[matchedIndex !== -1 ? matchedIndex : 0];
+  const price = asNumber(tier?.price, 0);
+  return price > 0 ? price : basePrice;
+}
+
 function extractDealPayload(input = {}, sellerId = null) {
   const expiresAt = parseDate(input.expiresAt);
   const expiryTime = parseDate(input.expiryTime);
@@ -627,6 +674,11 @@ function extractDealPayload(input = {}, sellerId = null) {
     input.minGroupSize ?? input.minThreshold,
     1,
   );
+  const maxGroupSizeRaw = input.maxGroupSize;
+  const maxGroupSize =
+    maxGroupSizeRaw === null || maxGroupSizeRaw === undefined || maxGroupSizeRaw === ""
+      ? null
+      : Math.max(Math.max(1, minGroupSize), asNumber(maxGroupSizeRaw, 0));
   const currentJoins = asNumber(input.currentJoins ?? input.joinedUsers, 0);
   const images = normalizeImages(input.images, input.imageUrl ?? input.image);
 
@@ -641,8 +693,11 @@ function extractDealPayload(input = {}, sellerId = null) {
     pickupAddress: String(input.pickupAddress || "").trim(),
     originalPrice: asNumber(input.originalPrice, 0),
     discountPrice: asNumber(input.discountPrice ?? input.price, 0),
+    gstPercent: asNumber(input.gstPercent, 0),
     minGroupSize: Math.max(1, minGroupSize),
     minThreshold: Math.max(1, minGroupSize),
+    maxGroupSize,
+    pricingTiers: normalizePricingTiers(input.pricingTiers),
     joinedUsers: Math.max(0, currentJoins),
     currentJoins: Math.max(0, currentJoins),
     location: String(input.location || ""),
@@ -684,8 +739,11 @@ function applyDealUpdate(input = {}) {
     "pickupAddress",
     "originalPrice",
     "discountPrice",
+    "gstPercent",
     "minGroupSize",
     "minThreshold",
+    "maxGroupSize",
+    "pricingTiers",
     "location",
     "image",
     "imageUrl",
@@ -718,6 +776,15 @@ function applyDealUpdate(input = {}) {
     updates.minGroupSize = min;
     updates.minThreshold = min;
   }
+  if (updates.maxGroupSize !== undefined) {
+    const rawMax = updates.maxGroupSize;
+    const minFloor = Math.max(1, asNumber(updates.minGroupSize, 1));
+    updates.maxGroupSize =
+      rawMax === null || rawMax === "" ? null : Math.max(minFloor, asNumber(rawMax, minFloor));
+  }
+  if (updates.pricingTiers !== undefined) {
+    updates.pricingTiers = normalizePricingTiers(updates.pricingTiers);
+  }
   if (updates.deliveryCharge !== undefined) {
     updates.deliveryCharge = asNumber(updates.deliveryCharge, 0);
   }
@@ -726,6 +793,9 @@ function applyDealUpdate(input = {}) {
   }
   if (updates.discountPrice !== undefined) {
     updates.discountPrice = asNumber(updates.discountPrice, 0);
+  }
+  if (updates.gstPercent !== undefined) {
+    updates.gstPercent = asNumber(updates.gstPercent, 0);
   }
   updates.updatedAt = FieldValue.serverTimestamp();
   return updates;
@@ -788,6 +858,8 @@ module.exports = {
   pushNotification,
   extractDealPayload,
   applyDealUpdate,
+  normalizePricingTiers,
+  resolveTierPrice,
   MAX_OTP_ATTEMPTS,
   generateSixDigitOtp,
   assertSellerOwnsDeal,

@@ -3,7 +3,7 @@ import { AuthScreen } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginScreen() {
-  const { login, register } = useAuth();
+  const { login, register, loginWithGoogle } = useAuth();
 
   return (
     <AuthScreen
@@ -12,6 +12,8 @@ export default function LoginScreen() {
       signupSubtitle="Create your account"
       onLogin={login}
       onRegister={register}
+      onGoogleLogin={loginWithGoogle}
+      showAppleButton={false}
     />
   );
 }

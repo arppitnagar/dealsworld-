@@ -28,6 +28,7 @@ const {
   validateDealPublishability,
   extractDealPayload,
   applyDealUpdate,
+  resolveTierPrice,
   assertSellerOwnsDeal,
   pushNotification,
   getNextSequence,
@@ -306,12 +307,18 @@ router.post("/api/deals/:dealId/join", optionalAuth, async (req, res) => {
       }
 
       const minGroupSize = Math.max(1, asNumber(deal.minGroupSize ?? deal.minThreshold, 1));
-      // Live count only, unlike the sticky deal.thresholdReachedAt milestone
-      // (kept forever once set, for the seller's complete/unsuccessful-deal
-      // logic) - a spot freed up by someone leaving must be joinable again,
-      // not blocked off by a flag from a headcount that no longer holds.
-      const thresholdReached = currentJoins >= minGroupSize;
-      if (thresholdReached) throw new Error("Minimum threshold reached");
+      // Reaching minGroupSize no longer closes the deal to new joiners - it
+      // only guarantees the deal will ship (see thresholdReachedAt below).
+      // The seller can optionally cap the group with maxGroupSize; only that
+      // cap blocks further joins, and it's re-checked live (not sticky) so a
+      // spot freed up by someone leaving is joinable again.
+      const maxGroupSizeRaw = deal.maxGroupSize;
+      const maxGroupSize =
+        maxGroupSizeRaw === null || maxGroupSizeRaw === undefined
+          ? null
+          : Math.max(minGroupSize, asNumber(maxGroupSizeRaw, minGroupSize));
+      const dealFull = maxGroupSize !== null && currentJoins >= maxGroupSize;
+      if (dealFull) throw new Error("This deal has reached its maximum buyers");
 
       if (isDeliveryMode(deal.deliveryMode) && !validateAddress(deliveryAddress)) {
         throw new Error("Delivery address is required");
@@ -350,7 +357,11 @@ router.post("/api/deals/:dealId/join", optionalAuth, async (req, res) => {
           deliveryAddressSnapshot: deliveryAddress || null,
           paymentStatus: "unpaid",
           paymentId: paymentId || null,
-          amount: asNumber(deal.discountPrice ?? deal.price, 0),
+          // The live tier price at the moment of joining - informational
+          // only (the buyer hasn't paid yet). The actual charge is captured
+          // separately at /pay time as paidAmount, since the tier - and
+          // therefore the live price - can keep moving between join and pay.
+          amount: resolveTierPrice(deal, nextJoins),
           currency: "INR",
           updatedAt: FieldValue.serverTimestamp(),
           createdAt: FieldValue.serverTimestamp(),
@@ -463,11 +474,20 @@ router.post("/api/deals/:dealId/pay", requireAuth, requireRole("buyer", "admin")
         throw new Error("Payment already finalized for this deal");
       }
 
+      // Captured live, at the moment of payment, not frozen from join time -
+      // the tier (and so the price) can keep dropping as more buyers join in
+      // between. This is what actually gets held; any gap versus the deal's
+      // eventual final tier price is trued up as a settlement refund when
+      // the seller marks the deal completed (see /complete below).
+      const currentJoins = asNumber(deal.currentJoins ?? deal.joinedUsers, 0);
+      const paidAmount = resolveTierPrice(deal, currentJoins);
+
       tx.set(
         joinRef,
         {
           paymentStatus: "paid_blocked",
           paidAt: FieldValue.serverTimestamp(),
+          paidAmount,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
@@ -532,6 +552,37 @@ router.post(
           }
         }
 
+        // Settlement: with dynamic tiered pricing, whatever a buyer paid at
+        // /pay time may be higher than the tier the deal actually finished
+        // at (more buyers kept joining afterward). Completion is the moment
+        // the headcount is locked for good, so it's the right point to true
+        // everyone up to the same final price rather than making them wait
+        // for delivery - the gap goes back to them as an immediate refund.
+        const settlementAdjustments = [];
+        if (isDeliveryMode(deal.deliveryMode) && Array.isArray(deal.pricingTiers) && deal.pricingTiers.length) {
+          const finalPrice = resolveTierPrice(deal, currentJoins);
+          joinsSnap.docs.forEach((joinDoc) => {
+            const data = joinDoc.data() || {};
+            if (String(data.paymentStatus || "").toLowerCase() !== "paid_blocked") return;
+            const paidAmount = asNumber(data.paidAmount ?? data.amount, finalPrice);
+            const settledAmount = Math.min(paidAmount, finalPrice);
+            const adjustment = Math.max(0, paidAmount - settledAmount);
+            tx.set(
+              joinDoc.ref,
+              {
+                settledAmount,
+                priceAdjustment: adjustment,
+                priceAdjustedAt: adjustment > 0 ? FieldValue.serverTimestamp() : data.priceAdjustedAt || null,
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true },
+            );
+            if (adjustment > 0 && data.buyerId) {
+              settlementAdjustments.push({ buyerId: data.buyerId, adjustment });
+            }
+          });
+        }
+
         tx.set(
           dealRef,
           {
@@ -553,11 +604,12 @@ router.post(
         return {
           buyerIds: joinsSnap.docs.map((doc) => doc.data().buyerId).filter(Boolean),
           title: deal.title || "your deal",
+          settlementAdjustments,
         };
       });
 
-      await Promise.all(
-        result.buyerIds.map((buyerId) =>
+      await Promise.all([
+        ...result.buyerIds.map((buyerId) =>
           pushNotification({
             userId: buyerId,
             type: "deal_completed",
@@ -566,7 +618,16 @@ router.post(
             meta: { dealId },
           }),
         ),
-      );
+        ...result.settlementAdjustments.map(({ buyerId, adjustment }) =>
+          pushNotification({
+            userId: buyerId,
+            type: "price_adjusted",
+            title: "Price dropped!",
+            body: `More buyers joined "${result.title}" - ₹${adjustment} has been refunded to you as the group price dropped.`,
+            meta: { dealId },
+          }),
+        ),
+      ]);
 
       return res.json({ ok: true });
     } catch (error) {
@@ -624,6 +685,7 @@ router.post(
                 paymentStatus: "refunded_to_buyer",
                 paymentReleasedAt: FieldValue.serverTimestamp(),
                 paymentReleaseReason: "seller_manual_expire",
+                refundedAmount: asNumber(data.paidAmount ?? data.amount, 0),
                 updatedAt: FieldValue.serverTimestamp(),
               },
               { merge: true },

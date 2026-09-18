@@ -28,6 +28,10 @@ import {
   DealDetailsLayout,
   InfoCard,
   getDealImages,
+  PriceBreakupCard,
+  calculatePriceBreakup,
+  resolveTierPrice,
+  getNextTierInfo,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -102,20 +106,29 @@ export default function DealDetails({ route, navigation }) {
     lifecycleStatus === "pending"
       ? "Pending"
       : getStatusLabel(lifecycleStatus);
-  const priceValue =
-    safeGet(deal, "discountPrice") ?? safeGet(deal, "dealPrice");
   const originalValue = safeGet(deal, "originalPrice");
-  const priceNumber = Number.isFinite(Number(priceValue))
-    ? Number(priceValue)
-    : null;
   const originalNumber = Number.isFinite(Number(originalValue))
     ? Number(originalValue)
     : null;
+  // The live price at the current headcount - equal to discountPrice for a
+  // flat-price deal, or the active tier's price for a dynamically priced
+  // one (mirrors the same computation on the buyer's own deal screen).
+  const priceNumber = resolveTierPrice(deal, joinsCount);
   const discountPercent =
     originalNumber && priceNumber && originalNumber > priceNumber
       ? Math.round(((originalNumber - priceNumber) / originalNumber) * 100)
       : null;
   const originalDisplay = discountPercent ? originalNumber : null;
+  const nextTierInfo = getNextTierInfo(deal, joinsCount);
+  const tierBoundaries = Array.isArray(deal?.pricingTiers)
+    ? deal.pricingTiers.slice(1).map((tier) => tier?.minBuyers)
+    : null;
+  const priceBreakup = calculatePriceBreakup({
+    basePrice: priceNumber || 0,
+    gstPercent: deal?.gstPercent,
+    deliveryMode: deal?.deliveryMode,
+    deliveryCharge: deal?.deliveryCharge,
+  });
   const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
   const isPickup = /pick/i.test(deliveryModeLabel);
   const isExpiredNow = expiryDate ? expiryDate.getTime() <= now : true;
@@ -472,9 +485,16 @@ export default function DealDetails({ route, navigation }) {
         price={priceNumber}
         original={originalDisplay}
         discountPercent={discountPercent}
+        priceNote={
+          nextTierInfo
+            ? `Buyers unlock ${formatINR(nextTierInfo.nextPrice)} at ${nextTierInfo.buyersNeeded} more buyer${nextTierInfo.buyersNeeded === 1 ? "" : "s"}`
+            : null
+        }
         expiryLabel={expiryLabel}
         joinedCount={joinsCount}
         targetCount={target}
+        maxCount={safeGet(deal, "maxGroupSize")}
+        tierBoundaries={tierBoundaries}
         progressColor={accentColor}
         statusLabel={
           isUnsuccessful ? "Unsuccessful" : lifecycleStatus === "completed" ? null : statusLabel
@@ -591,6 +611,40 @@ export default function DealDetails({ route, navigation }) {
           ) : null}
         </InfoCard>
 
+        {Array.isArray(deal?.pricingTiers) && deal.pricingTiers.length > 1 ? (
+          <InfoCard title="Group Pricing Tiers" style={styles.logisticsCard}>
+            {deal.pricingTiers.map((tier, index) => {
+              const isActive =
+                joinsCount >= tier.minBuyers &&
+                (tier.maxBuyers == null || joinsCount <= tier.maxBuyers);
+              return (
+                <React.Fragment key={index}>
+                  {index > 0 ? <View style={styles.logisticsDivider} /> : null}
+                  <View style={styles.tierInfoRow}>
+                    <View style={styles.logisticsContent}>
+                      <Text style={styles.logisticsLabel}>
+                        {tier.maxBuyers == null
+                          ? `${tier.minBuyers}+ buyers`
+                          : `${tier.minBuyers}–${tier.maxBuyers} buyers`}
+                      </Text>
+                      <Text style={styles.logisticsValue}>{formatINR(tier.price)}</Text>
+                    </View>
+                    {isActive ? (
+                      <View style={styles.tierActiveBadge}>
+                        <Text style={styles.tierActiveBadgeText}>Active now</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </React.Fragment>
+              );
+            })}
+          </InfoCard>
+        ) : null}
+
+        <InfoCard title="Price Breakup" style={styles.logisticsCard}>
+          <PriceBreakupCard breakup={priceBreakup} />
+        </InfoCard>
+
         {!isPickup && deliveryStatusData?.items?.length ? (
           <InfoCard
             title={isDispatched ? "Delivery Progress" : "Buyer Payments"}
@@ -604,6 +658,13 @@ export default function DealDetails({ route, navigation }) {
                     <Text style={styles.logisticsValue}>{item.buyerName}</Text>
                     {item.buyerCode ? (
                       <Text style={styles.logisticsLabel}>{item.buyerCode}</Text>
+                    ) : null}
+                    {!isDispatched && item.paidAmount != null ? (
+                      <Text style={styles.buyerAmountText}>
+                        {item.settledAmount != null && item.settledAmount !== item.paidAmount
+                          ? `${formatINR(item.paidAmount)} → ${formatINR(item.settledAmount)} settled`
+                          : `Paid ${formatINR(item.paidAmount)}`}
+                      </Text>
                     ) : null}
                     {isDispatched && item.deliveryStatus === "delivered" && item.deliveredAt ? (
                       <Text style={styles.logisticsLabel}>
@@ -956,6 +1017,28 @@ const createStyles = (theme) =>
     fontSize: 11,
     fontWeight: "700",
     color: theme.colors.primary,
+  },
+  buyerAmountText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.colors.success,
+  },
+  tierInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  tierActiveBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: theme.colors.successSoft,
+  },
+  tierActiveBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.successDark,
   },
   unsuccessfulBanner: {
     flexDirection: "row",

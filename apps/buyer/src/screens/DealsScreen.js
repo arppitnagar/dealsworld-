@@ -24,6 +24,7 @@ import {
   getExpiryMs,
   getJoinCount,
   getMinGroupSize,
+  getMaxGroupSize,
   isHotDeal,
   isDealActive,
   isDealOrder,
@@ -211,6 +212,7 @@ export default function DealsScreen({ navigation }) {
                   images={getDealImages(deal)}
                   joins={getJoinCount(deal)}
                   targetCount={getMinGroupSize(deal)}
+                  maxCount={getMaxGroupSize(deal)}
                   accentColor={getDealAccentColor({
                     isJoined: joinedIds.has(deal.id),
                     isFavorite: favoriteIds.has(deal.id),

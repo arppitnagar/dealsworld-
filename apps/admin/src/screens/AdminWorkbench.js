@@ -963,6 +963,14 @@ function DealDetailsModal({
                 label="Deal Price"
                 value={formatCurrency(deal.discountPrice || deal.price)}
               />
+              <DetailLine
+                label="GST"
+                value={
+                  deal.gstPercent || deal.gstPercent === 0
+                    ? `${deal.gstPercent}%`
+                    : "-"
+                }
+              />
               <DetailLine label="Min Buyers" value={detail.target} />
               <DetailLine label="Joined" value={detail.joined} />
               <DetailLine label="Expires At" value={detail.expiresAtLabel} />

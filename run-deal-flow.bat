@@ -9,6 +9,44 @@ REM         + Buyer app (view/join deals)
 REM Run this from the repo root (or double-click it there).
 REM ============================================================
 
+REM ============================================================
+REM  Prefer to run just ONE app instead of the full stack below?
+REM  Open a plain cmd window and copy the two/three lines for it.
+REM ============================================================
+REM
+REM  Backend / API server
+REM    Location: C:\Dev\DealsWorld\apps\backend
+REM    cd /d C:\Dev\DealsWorld\apps\backend
+REM    npm run dev
+REM
+REM  Admin portal (web - deal/seller approvals)
+REM    Location: C:\Dev\DealsWorld\apps\admin
+REM    cd /d C:\Dev\DealsWorld\apps\admin
+REM    npm run admin:web -- --port 8082
+REM
+REM  Seller app (Expo Go on your phone - create/publish deals)
+REM    Location: C:\Dev\DealsWorld\apps\seller
+REM    cd /d C:\Dev\DealsWorld\apps\seller
+REM    set EXPO_PUBLIC_API_BASE_URL=http://YOUR_LAN_IP:5000/api
+REM    npm start -- --host lan --port 8084
+REM
+REM  Buyer app (Expo Go on your phone - view/join deals)
+REM    Location: C:\Dev\DealsWorld\apps\buyer
+REM    cd /d C:\Dev\DealsWorld\apps\buyer
+REM    set EXPO_PUBLIC_API_BASE_URL=http://YOUR_LAN_IP:5000/api
+REM    npm start -- --host lan --port 8083
+REM
+REM  Notes:
+REM   - Replace YOUR_LAN_IP with this PC's LAN IPv4 (run `ipconfig`,
+REM     look for "IPv4 Address") - it must be on the same Wi-Fi as
+REM     your phone. Skip the "set EXPO_PUBLIC_API_BASE_URL" line
+REM     entirely if you're only using the web Admin portal.
+REM   - Start the backend first - the buyer/seller apps have nothing
+REM     to load until http://127.0.0.1:5000/api/health responds.
+REM   - Each "set"/"npm start" pair must run in the SAME cmd window
+REM     (the env var only applies to that session), one app per window.
+REM ============================================================
+
 cd /d "%~dp0"
 
 echo.

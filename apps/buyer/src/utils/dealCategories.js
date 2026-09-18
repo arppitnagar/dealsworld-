@@ -42,6 +42,11 @@ export function getMinGroupSize(deal) {
   return Number.isFinite(Number(minGroupSizeRaw)) ? Number(minGroupSizeRaw) : 0;
 }
 
+export function getMaxGroupSize(deal) {
+  const maxGroupSizeRaw = deal?.maxGroupSize;
+  return Number.isFinite(Number(maxGroupSizeRaw)) ? Number(maxGroupSizeRaw) : null;
+}
+
 export function isHotDeal(deal) {
   const minGroupSize = getMinGroupSize(deal);
   if (!minGroupSize) return false;
