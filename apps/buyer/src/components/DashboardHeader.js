@@ -202,20 +202,22 @@ const createStyles = (theme) =>
       color: theme.colors.onPrimary,
     },
     greetingBlock: {
+      flexDirection: "row",
+      alignItems: "baseline",
       paddingHorizontal: 20,
       marginTop: 12,
-      gap: 2,
+      gap: 6,
     },
     greetingLabel: {
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: "600",
       color: theme.colors.textMuted,
     },
     greetingName: {
-      fontSize: 24,
+      fontSize: 18,
       fontWeight: "800",
       color: theme.colors.text,
-      letterSpacing: -0.4,
+      letterSpacing: -0.3,
     },
     searchRow: {
       flexDirection: "row",
