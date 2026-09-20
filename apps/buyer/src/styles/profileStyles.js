@@ -3,6 +3,9 @@ export const getProfileBaseStyles = (theme) => ({
     flex: 1,
     backgroundColor: theme.colors.dashboardBg,
   },
+  keyboardWrap: {
+    flex: 1,
+  },
   headerBar: {
     backgroundColor: theme.colors.primary,
     paddingHorizontal: 16,

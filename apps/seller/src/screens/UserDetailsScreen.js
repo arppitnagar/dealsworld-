@@ -5,6 +5,8 @@ import {
   StyleSheet,
   Alert,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { AppButton, AppInput, useTheme, TopPageHeader } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
@@ -48,9 +50,15 @@ export default function UserDetailsScreen({ navigation }) {
         rounded
       />
 
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.heroCard}>
           <View style={styles.heroAccent} />
@@ -89,6 +97,7 @@ export default function UserDetailsScreen({ navigation }) {
           />
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

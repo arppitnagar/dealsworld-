@@ -9,6 +9,7 @@ import {
   Modal,
   SafeAreaView,
   Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -940,7 +941,15 @@ export default function CreateDealScreen({ route, navigation }) {
           </View>
         </View>
       )}
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.formCard}>
           <DealFormFields
             form={form}
@@ -1057,6 +1066,7 @@ export default function CreateDealScreen({ route, navigation }) {
           )}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* CATEGORY MODAL */}
       <Modal transparent visible={categoryModalVisible}>
@@ -1272,6 +1282,9 @@ const createStyles = (theme, formStyles) =>
   screen: {
     flex: 1,
     backgroundColor: theme.colors.dashboardBg,
+  },
+  keyboardWrap: {
+    flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 20,

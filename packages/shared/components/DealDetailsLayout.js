@@ -8,6 +8,7 @@ import {
   Platform,
   StatusBar,
   Image,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -82,6 +83,9 @@ export default function DealDetailsLayout({
         screen: {
           flex: 1,
           backgroundColor: theme.colors.dashboardBg,
+        },
+        keyboardWrap: {
+          flex: 1,
         },
         headerBar: {
           backgroundColor: theme.colors.primary,
@@ -472,9 +476,15 @@ export default function DealDetailsLayout({
         </View>
       )}
 
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, contentStyle]}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={[styles.heroCard, heroStyle]}>
           {hasImageProp ? (
@@ -659,6 +669,7 @@ export default function DealDetailsLayout({
 
         {children}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {footer}
     </View>
