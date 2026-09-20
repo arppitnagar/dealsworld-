@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
   doc,
+  deleteDoc,
+  getDocsFromServer,
   onSnapshot,
   orderBy,
   query,
@@ -67,11 +69,52 @@ export const useNotifications = () => {
     await batch.commit();
   }, [user?.uid, notifications]);
 
+  // onSnapshot already keeps `notifications` live, but pull-to-refresh needs
+  // a real round-trip (not just a spinner) to be worth anything - e.g. after
+  // the listener sat detached while the app was backgrounded. Bypasses the
+  // local cache so it actually re-checks the server instead of resolving
+  // instantly from whatever the listener already has.
+  const refreshNotifications = useCallback(async () => {
+    if (!user) return;
+    const ref = collection(db, "users", user.uid, "notifications");
+    const q = query(ref, orderBy("createdAt", "desc"));
+    const snap = await getDocsFromServer(q);
+    setNotifications(
+      snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
+    );
+  }, [user?.uid]);
+
+  const deleteNotification = useCallback(
+    async (id) => {
+      if (!user || !id) return;
+      const ref = doc(db, "users", user.uid, "notifications", id);
+      await deleteDoc(ref);
+    },
+    [user?.uid],
+  );
+
+  // Firestore batches cap out at 500 writes, so a buyer with a long history
+  // needs this chunked rather than one giant batch.
+  const deleteAllNotifications = useCallback(async () => {
+    if (!user || notifications.length === 0) return;
+    const CHUNK_SIZE = 450;
+    for (let i = 0; i < notifications.length; i += CHUNK_SIZE) {
+      const batch = writeBatch(db);
+      notifications.slice(i, i + CHUNK_SIZE).forEach((item) => {
+        batch.delete(doc(db, "users", user.uid, "notifications", item.id));
+      });
+      await batch.commit();
+    }
+  }, [user?.uid, notifications]);
+
   return {
     notifications,
     loading,
     unreadCount,
     markNotificationRead,
     markAllNotificationsRead,
+    deleteNotification,
+    deleteAllNotifications,
+    refreshNotifications,
   };
 };

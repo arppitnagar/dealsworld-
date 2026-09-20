@@ -18,6 +18,7 @@ const {
   getSellerId,
   validateDealPublishability,
   pushNotification,
+  notifyBuyersOfNewDeal,
 } = require("../lib");
 
 const router = express.Router();
@@ -227,6 +228,8 @@ router.post("/api/admin/deals/:dealId/approve", requireAuth, requireRole("admin"
       body: deal.title || "Your deal is approved",
       meta: { dealId },
     });
+
+    await notifyBuyersOfNewDeal(deal, dealId);
 
     return res.json({ ok: true });
   } catch (error) {

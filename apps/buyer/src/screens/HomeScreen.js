@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -14,9 +14,6 @@ import { useDealState } from "../hooks/useDealState";
 import { useNotifications } from "../hooks/useNotifications";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { useDealSearchControls } from "../hooks/useDealSearchControls";
-import { useAuth } from "../context/AuthContext";
-import { db } from "../config/firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
@@ -60,11 +57,8 @@ export default function HomeScreen({ navigation }) {
     loading: dealStateLoading,
   } = useDealState();
   const { data: myDeliveries } = useMyDeliveries();
-  const { user } = useAuth();
   const { profile, updateProfile } = useUserProfile();
   const { unreadCount } = useNotifications();
-  const dealNotifyRef = useRef(0);
-  const dealNotifyBusyRef = useRef(false);
 
   // Defaults to "list" until the profile loads/has a saved preference;
   // persisted per-buyer so the dashboard reopens the way they left it.
@@ -85,60 +79,6 @@ export default function HomeScreen({ navigation }) {
     }, 1000);
     return () => clearInterval(intervalId);
   }, []);
-
-  useEffect(() => {
-    const profileMs = getTimeMs(profile?.lastNotifiedDealAt);
-    if (profileMs && profileMs > dealNotifyRef.current) {
-      dealNotifyRef.current = profileMs;
-    }
-  }, [profile?.lastNotifiedDealAt]);
-
-  useEffect(() => {
-    if (!user?.uid || !deals?.length || !profile) return;
-    if (dealNotifyBusyRef.current) return;
-    const lastNotified = dealNotifyRef.current || 0;
-    const nowMs = Date.now();
-    const newDeals = deals
-      .map((deal) => ({
-        deal,
-        createdMs: getTimeMs(deal?.createdAt),
-        expiryMs: getExpiryMs(deal),
-      }))
-      .filter(({ createdMs, expiryMs }) => {
-        if (!createdMs) return false;
-        if (createdMs <= lastNotified) return false;
-        if (typeof expiryMs === "number" && expiryMs <= nowMs) return false;
-        return true;
-      })
-      .sort((a, b) => a.createdMs - b.createdMs);
-
-    if (newDeals.length === 0) return;
-    dealNotifyBusyRef.current = true;
-
-    const notificationsRef = collection(db, "users", user.uid, "notifications");
-
-    const maxCreated = newDeals[newDeals.length - 1].createdMs;
-    dealNotifyRef.current = Math.max(dealNotifyRef.current, maxCreated);
-
-    Promise.all(
-      newDeals.map(({ deal }) =>
-        addDoc(notificationsRef, {
-          type: "deal",
-          dealId: deal.id,
-          title: "New deal published",
-          body: deal.title || "A new deal is available",
-          createdAt: serverTimestamp(),
-          isRead: false,
-        }),
-      ),
-    )
-      .then(() => {
-        updateProfile({ lastNotifiedDealAt: new Date(maxCreated) });
-      })
-      .finally(() => {
-        dealNotifyBusyRef.current = false;
-      });
-  }, [deals, profile, updateProfile, user?.uid]);
 
   // Home always shows the fixed "New Deals" feed - the New/Hot/Viewed/
   // Favourite/Joined switcher now lives on the Deals tab. A search still
@@ -298,22 +238,6 @@ export default function HomeScreen({ navigation }) {
       <DealSearchModals controls={controls} resultCount={sortedDeals?.length || 0} />
     </SafeAreaView>
   );
-}
-
-function getTimeMs(value) {
-  if (!value) return null;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value?.toDate === "function") return value.toDate().getTime();
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-  if (typeof value === "object") {
-    const seconds = value.seconds ?? value._seconds;
-    if (typeof seconds === "number") return seconds * 1000;
-  }
-  return null;
 }
 
 const createStyles = (theme) =>

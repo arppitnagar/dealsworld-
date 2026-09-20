@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { auth, GOOGLE_WEB_CLIENT_ID } from "../config/firebase";
+import { auth, db, GOOGLE_WEB_CLIENT_ID } from "../config/firebase";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -8,6 +8,7 @@ import {
   GoogleAuthProvider,
   signOut,
 } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
@@ -38,6 +39,21 @@ export const AuthProvider = ({ children }) => {
     return signInWithCredential(auth, credential);
   };
   const logout = async () => {
+    // Detach this device from the account's push notifications before
+    // signing out - otherwise a device that switches accounts (shared/test
+    // phone) keeps getting the old account's pushes, since nothing else
+    // ever clears users/{uid}.expoPushToken (see usePushToken.js).
+    if (auth.currentUser) {
+      try {
+        await setDoc(
+          doc(db, "users", auth.currentUser.uid),
+          { expoPushToken: null },
+          { merge: true },
+        );
+      } catch (error) {
+        console.warn("Failed to clear push token on logout:", error);
+      }
+    }
     if (GoogleSignin.hasPreviousSignIn()) {
       await GoogleSignin.signOut();
     }

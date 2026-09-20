@@ -34,22 +34,15 @@ import {
   TopPageHeader,
   validatePricingTiers,
   MAX_PRICING_TIERS,
+  DEAL_CATEGORIES,
+  DEAL_CATEGORY_LABELS,
 } from "@dealsworld/shared";
 import { useAddresses } from "../hooks/useAddresses";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
 /* ---------- CATEGORY OPTIONS ---------- */
-const CATEGORIES = [
-  { label: "Food & Beverages", icon: "🍔" },
-  { label: "Fashion", icon: "👕" },
-  { label: "Electronics", icon: "📱" },
-  { label: "Beauty & Wellness", icon: "💄" },
-  { label: "Travel", icon: "✈️" },
-  { label: "Services", icon: "🛠️" },
-  { label: "Entertainment", icon: "🎬" },
-  { label: "Other", icon: "🧩" },
-];
-const CATEGORY_LABELS = CATEGORIES.map((c) => c.label);
+const CATEGORIES = DEAL_CATEGORIES;
+const CATEGORY_LABELS = DEAL_CATEGORY_LABELS;
 
 /* ---------- DELIVERY MODES ---------- */
 const DELIVERY_MODES = [

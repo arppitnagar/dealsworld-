@@ -112,6 +112,12 @@ export default function ProfileScreen({ navigation }) {
             label="Change Theme"
             onPress={() => navigation.navigate("ThemeSettings")}
             theme={theme}
+          />
+          <MenuItem
+            icon="notifications-outline"
+            label="Notification Preference"
+            onPress={() => navigation.navigate("NotificationPreferences")}
+            theme={theme}
             divider={false}
           />
         </View>

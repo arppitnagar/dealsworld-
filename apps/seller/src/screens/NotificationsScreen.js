@@ -5,6 +5,8 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  RefreshControl,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { EmptyState, toDate, useTheme, TopPageHeader } from "@dealsworld/shared";
@@ -19,8 +21,23 @@ export default function NotificationsScreen({ navigation }) {
     unreadCount,
     markNotificationRead,
     markAllNotificationsRead,
+    deleteNotification,
+    deleteAllNotifications,
+    refreshNotifications,
   } = useNotifications();
   const [clearing, setClearing] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshNotifications();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleOpen = async (item) => {
     if (!item) return;
@@ -40,6 +57,39 @@ export default function NotificationsScreen({ navigation }) {
     } finally {
       setClearing(false);
     }
+  };
+
+  const handleDelete = async (id) => {
+    if (!id || deletingId) return;
+    setDeletingId(id);
+    try {
+      await deleteNotification(id);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = () => {
+    if (deletingAll || notifications.length === 0) return;
+    Alert.alert(
+      "Delete all notifications",
+      "This can't be undone. Delete all notifications?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete All",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingAll(true);
+            try {
+              await deleteAllNotifications();
+            } finally {
+              setDeletingAll(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const renderItem = ({ item }) => {
@@ -80,51 +130,90 @@ export default function NotificationsScreen({ navigation }) {
             <Text style={styles.noticeTime}>{timeLabel}</Text>
           ) : null}
         </View>
-        {isUnread ? <View style={styles.unreadDot} /> : null}
+        <View style={styles.noticeTrailing}>
+          {isUnread ? <View style={styles.unreadDot} /> : null}
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDelete(item.id)}
+            disabled={deletingId === item.id}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name="trash-outline"
+              size={15}
+              color={theme.colors.textMuted}
+            />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.screen}>
-      <TopPageHeader
-        title="Notifications"
-        onBack={() => navigation.goBack()}
-        rounded
-        rightContent={
-          unreadCount > 0 ? (
+      <TopPageHeader title="Notifications" onBack={() => navigation.goBack()} rounded>
+        {notifications.length > 0 ? (
+          <View style={styles.headerActions}>
+            {unreadCount > 0 ? (
+              <TouchableOpacity
+                style={styles.headerActionButton}
+                onPress={handleClearAll}
+                disabled={clearing}
+              >
+                <Ionicons
+                  name="checkmark-done-outline"
+                  size={14}
+                  color={theme.colors.onPrimary}
+                />
+                <Text style={styles.headerActionText}>Mark all read</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
-              style={styles.clearButton}
-              onPress={handleClearAll}
-              disabled={clearing}
+              style={styles.headerActionButton}
+              onPress={handleDeleteAll}
+              disabled={deletingAll}
             >
               <Ionicons
-                name="checkmark-done-outline"
-                size={20}
+                name="trash-outline"
+                size={14}
                 color={theme.colors.onPrimary}
               />
+              <Text style={styles.headerActionText}>Delete all</Text>
             </TouchableOpacity>
-          ) : null
+          </View>
+        ) : null}
+      </TopPageHeader>
+
+      <FlatList
+        data={notifications}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={
+          notifications.length === 0
+            ? styles.listContentEmpty
+            : styles.listContent
+        }
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
+        ListEmptyComponent={
+          loading ? null : (
+            <View style={styles.emptyWrap}>
+              <EmptyState
+                icon="notifications-outline"
+                title="No notifications yet"
+                subtitle="Chat replies and deal updates will appear here."
+              />
+            </View>
+          )
         }
       />
-
-      {notifications.length === 0 && !loading ? (
-        <View style={styles.emptyWrap}>
-          <EmptyState
-            icon="notifications-outline"
-            title="No notifications yet"
-            subtitle="Chat replies and deal updates will appear here."
-          />
-        </View>
-      ) : (
-        <FlatList
-          data={notifications}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
     </View>
   );
 }
@@ -146,18 +235,33 @@ const createStyles = (theme) =>
       flex: 1,
       backgroundColor: theme.colors.dashboardBg,
     },
-    clearButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: theme.colors.onPrimarySoft,
+    headerActions: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      gap: 8,
+    },
+    headerActionButton: {
+      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
+      gap: 4,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      backgroundColor: theme.colors.onPrimarySoft,
+    },
+    headerActionText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: theme.colors.onPrimary,
     },
     listContent: {
       padding: 20,
       paddingBottom: 24,
       gap: 12,
+    },
+    listContentEmpty: {
+      flexGrow: 1,
+      padding: 20,
     },
     noticeCard: {
       backgroundColor: theme.colors.background,
@@ -202,12 +306,24 @@ const createStyles = (theme) =>
       fontSize: 10,
       color: theme.colors.textMuted,
     },
+    noticeTrailing: {
+      alignItems: "center",
+      gap: 10,
+    },
     unreadDot: {
       width: 10,
       height: 10,
       borderRadius: 5,
       backgroundColor: theme.colors.danger,
       marginTop: 6,
+    },
+    deleteButton: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.colors.surfaceMuted,
     },
     emptyWrap: {
       flex: 1,

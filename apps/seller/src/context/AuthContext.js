@@ -92,6 +92,21 @@ export const AuthProvider = ({ children }) => {
     return signInWithCredential(auth, credential);
   };
   const logout = async () => {
+    // Detach this device from the account's push notifications before
+    // signing out - otherwise a device that switches accounts (shared/test
+    // phone) keeps getting the old account's pushes, since nothing else
+    // ever clears users/{uid}.expoPushToken (see usePushToken.js).
+    if (auth.currentUser) {
+      try {
+        await setDoc(
+          doc(db, "users", auth.currentUser.uid),
+          { expoPushToken: null },
+          { merge: true },
+        );
+      } catch (error) {
+        console.warn("Failed to clear push token on logout:", error);
+      }
+    }
     if (GoogleSignin.hasPreviousSignIn()) {
       await GoogleSignin.signOut();
     }

@@ -73,6 +73,7 @@ export {
   MAX_PRICING_TIERS,
 } from "./utils/priceBreakup";
 export { getDealImages } from "./utils/dealImages";
+export { DEAL_CATEGORIES, DEAL_CATEGORY_LABELS } from "./utils/dealCategories";
 export { validatePassword } from "./utils/passwordPolicy";
 export {
   DEAL_SORT_FIELDS,

@@ -614,6 +614,59 @@ async function pushNotification({ userId, type, title, body, meta = {} }) {
   ]);
 }
 
+// A buyer with no notificationPrefs (or enabled left unset) gets every new
+// deal - filtering is opt-in, so nobody silently stops hearing about deals
+// just because this feature shipped.
+function dealMatchesPrefs(deal, prefs) {
+  if (!prefs) return true;
+  if (prefs.enabled === false) return false;
+
+  const categories = Array.isArray(prefs.categories) ? prefs.categories : [];
+  if (categories.length && !categories.includes(deal.category)) return false;
+
+  const cities = Array.isArray(prefs.cities) ? prefs.cities : [];
+  if (cities.length) {
+    const location = String(deal.location || "").toLowerCase();
+    const matchesCity = cities.some((city) =>
+      location.includes(String(city || "").toLowerCase().trim()),
+    );
+    if (!matchesCity) return false;
+  }
+
+  const price = asNumber(deal.discountPrice, 0);
+  if (prefs.minPrice != null && price < asNumber(prefs.minPrice, 0)) return false;
+  if (prefs.maxPrice != null && price > asNumber(prefs.maxPrice, Infinity)) return false;
+
+  return true;
+}
+
+// Fans out a "new deal published" notification to every buyer whose
+// notificationPrefs match this deal. Called once at admin-approval time
+// (routes/admin.js), which is when a deal actually becomes buyer-visible.
+async function notifyBuyersOfNewDeal(deal, dealId) {
+  const buyersSnap = await db
+    .collection(USERS_COLLECTION)
+    .where("role", "==", "buyer")
+    .get();
+
+  const title = "New deal published";
+  const body = deal.title || "Check out a new deal";
+
+  await Promise.all(
+    buyersSnap.docs.map((buyerDoc) => {
+      const prefs = buyerDoc.data()?.notificationPrefs;
+      if (!dealMatchesPrefs(deal, prefs)) return null;
+      return pushNotification({
+        userId: buyerDoc.id,
+        type: "deal",
+        title,
+        body,
+        meta: { dealId },
+      });
+    }),
+  );
+}
+
 // Normalizes a deal's image gallery to an array of URL strings. Falls back
 // to a single legacy `image`/`imageUrl` value when no `images` array was
 // provided, so deals created before multi-image support still show one.
@@ -860,6 +913,7 @@ module.exports = {
   hasStoreAddress,
   validateDealPublishability,
   pushNotification,
+  notifyBuyersOfNewDeal,
   extractDealPayload,
   applyDealUpdate,
   normalizePricingTiers,
