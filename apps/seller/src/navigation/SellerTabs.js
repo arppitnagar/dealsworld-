@@ -17,6 +17,10 @@ const icon = (name, outlineName) => (focused, color) => (
 // below), but React Navigation still requires a component for the route.
 const CreatePlaceholder = () => null;
 
+// Same interception pattern as "Create": ScanPlaceholder never actually
+// shows, BottomTabBar pushes the real ScanQR stack screen instead.
+const ScanPlaceholder = () => null;
+
 const TAB_CONFIG = [
   { key: "Dashboard", label: "Home", icon: icon("home", "home-outline") },
   { key: "Deals", label: "Deals", icon: icon("pricetag", "pricetag-outline") },
@@ -26,6 +30,12 @@ const TAB_CONFIG = [
     isFab: true,
     icon: (focused, color) => <Ionicons name="add" size={22} color={color} />,
     onPress: (navigation) => navigation.getParent()?.navigate("CreateDeal"),
+  },
+  {
+    key: "ScanQR",
+    label: "Scan",
+    icon: icon("qr-code", "qr-code-outline"),
+    onPress: (navigation) => navigation.getParent()?.navigate("ScanQR"),
   },
   { key: "Search", label: "Search", icon: icon("search", "search-outline") },
 ];
@@ -39,6 +49,7 @@ export default function SellerTabs() {
       <Tab.Screen name="Dashboard" component={SellerHomeScreen} />
       <Tab.Screen name="Deals" component={SellerDealsScreen} />
       <Tab.Screen name="Create" component={CreatePlaceholder} />
+      <Tab.Screen name="ScanQR" component={ScanPlaceholder} />
       <Tab.Screen name="Search" component={SellerSearchScreen} />
     </Tab.Navigator>
   );

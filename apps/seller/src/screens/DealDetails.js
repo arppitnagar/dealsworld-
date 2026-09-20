@@ -147,14 +147,12 @@ export default function DealDetails({ route, navigation }) {
   const dispatchThresholdReached = joinsCount >= target || Boolean(deal?.thresholdReachedAt);
   const isUnsuccessful = isUnsuccessfulDeal(deal, now);
   const isDispatched = Boolean(deal?.dispatchStatus) && deal.dispatchStatus !== "pending";
-  // Payment status only exists for delivery-mode deals; pickup deals never
-  // enter the payment-hold flow, so they're never gated on it.
   const showLifecycleActions =
     lifecycleStatus === "active" && !isPersistedExpired && !isExpiredNow;
   const { data: deliveryStatusData } = useDeliveryStatusList(deal?.id, {
     enabled: Boolean(deal?.id),
   });
-  const allBuyersPaid = isPickup ? true : Boolean(deliveryStatusData?.allPaid);
+  const allBuyersPaid = Boolean(deliveryStatusData?.allPaid);
   const storeAddress =
     formatAddressText(deal?.storeAddress) ||
     formatAddressText(deal?.pickupAddress) ||
@@ -331,8 +329,10 @@ export default function DealDetails({ route, navigation }) {
 
   const handleMarkDelivered = (buyerId, buyerName) => {
     Alert.alert(
-      "Mark delivered?",
-      `Mark ${buyerName || "this buyer"}'s delivery as complete without their OTP? Use this only if the buyer can't confirm themselves.`,
+      isPickup ? "Mark picked up?" : "Mark delivered?",
+      isPickup
+        ? `Mark ${buyerName || "this buyer"}'s order as picked up without scanning their QR code? Use this only if they can't show it.`
+        : `Mark ${buyerName || "this buyer"}'s delivery as complete without their OTP? Use this only if the buyer can't confirm themselves.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -645,51 +645,61 @@ export default function DealDetails({ route, navigation }) {
           <PriceBreakupCard breakup={priceBreakup} />
         </InfoCard>
 
-        {!isPickup && deliveryStatusData?.items?.length ? (
+        {deliveryStatusData?.items?.length ? (
           <InfoCard
-            title={isDispatched ? "Delivery Progress" : "Buyer Payments"}
+            title={isPickup ? "Pickup Progress" : isDispatched ? "Delivery Progress" : "Buyer Payments"}
             style={styles.logisticsCard}
           >
-            {deliveryStatusData.items.map((item, index) => (
-              <React.Fragment key={item.buyerId}>
-                {index > 0 ? <View style={styles.logisticsDivider} /> : null}
-                <View style={styles.buyerRow}>
-                  <View style={styles.buyerRowInfo}>
-                    <Text style={styles.logisticsValue}>{item.buyerName}</Text>
-                    {item.buyerCode ? (
-                      <Text style={styles.logisticsLabel}>{item.buyerCode}</Text>
-                    ) : null}
-                    {!isDispatched && item.paidAmount != null ? (
-                      <Text style={styles.buyerAmountText}>
-                        {item.settledAmount != null && item.settledAmount !== item.paidAmount
-                          ? `${formatINR(item.paidAmount)} → ${formatINR(item.settledAmount)} settled`
-                          : `Paid ${formatINR(item.paidAmount)}`}
-                      </Text>
-                    ) : null}
-                    {isDispatched && item.deliveryStatus === "delivered" && item.deliveredAt ? (
-                      <Text style={styles.logisticsLabel}>
-                        Delivered {formatShortDate(item.deliveredAt)}
-                      </Text>
+            {deliveryStatusData.items.map((item, index) => {
+              const isReady =
+                item.deliveryStatus === "in_transit" || item.deliveryStatus === "ready_for_pickup";
+              const isDelivered = item.deliveryStatus === "delivered";
+              const readyLabel = isPickup ? "Ready for Pickup" : "In Transit";
+              const doneLabel = isPickup ? "Picked Up" : "Delivered";
+
+              return (
+                <React.Fragment key={item.buyerId}>
+                  {index > 0 ? <View style={styles.logisticsDivider} /> : null}
+                  <View style={styles.buyerRow}>
+                    <View style={styles.buyerRowInfo}>
+                      <Text style={styles.logisticsValue}>{item.buyerName}</Text>
+                      {item.buyerCode ? (
+                        <Text style={styles.logisticsLabel}>{item.buyerCode}</Text>
+                      ) : null}
+                      {!isReady && !isDelivered && item.paidAmount != null ? (
+                        <Text style={styles.buyerAmountText}>
+                          {item.settledAmount != null && item.settledAmount !== item.paidAmount
+                            ? `${formatINR(item.paidAmount)} → ${formatINR(item.settledAmount)} settled`
+                            : `Paid ${formatINR(item.paidAmount)}`}
+                        </Text>
+                      ) : null}
+                      {isDelivered && item.deliveredAt ? (
+                        <Text style={styles.logisticsLabel}>
+                          {doneLabel} {formatShortDate(item.deliveredAt)}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {isReady || isDelivered ? (
+                      <StatusPill
+                        status={isDelivered ? "delivered" : "dispatched"}
+                        label={isDelivered ? doneLabel : readyLabel}
+                      />
+                    ) : (
+                      <StatusPill status={item.paymentStatus || "unpaid"} />
+                    )}
+                    {isReady ? (
+                      <TouchableOpacity
+                        onPress={() => handleMarkDelivered(item.buyerId, item.buyerName)}
+                      >
+                        <Text style={styles.markDeliveredText}>
+                          {isPickup ? "Mark picked up" : "Mark delivered"}
+                        </Text>
+                      </TouchableOpacity>
                     ) : null}
                   </View>
-                  {isDispatched ? (
-                    <StatusPill
-                      status={item.deliveryStatus === "delivered" ? "delivered" : "dispatched"}
-                      label={item.deliveryStatus === "delivered" ? "Delivered" : "In Transit"}
-                    />
-                  ) : (
-                    <StatusPill status={item.paymentStatus || "unpaid"} />
-                  )}
-                  {isDispatched && item.deliveryStatus !== "delivered" ? (
-                    <TouchableOpacity
-                      onPress={() => handleMarkDelivered(item.buyerId, item.buyerName)}
-                    >
-                      <Text style={styles.markDeliveredText}>Mark delivered</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              </React.Fragment>
-            ))}
+                </React.Fragment>
+              );
+            })}
           </InfoCard>
         ) : null}
 
@@ -782,7 +792,9 @@ export default function DealDetails({ route, navigation }) {
           {deal?.dispatchStatus === "delivered" ? (
             <View style={styles.deliveredBanner}>
               <Ionicons name="checkmark-done-circle" size={18} color={theme.colors.success} />
-              <Text style={styles.deliveredBannerText}>All buyers received their orders.</Text>
+              <Text style={styles.deliveredBannerText}>
+                {isPickup ? "All buyers have picked up their orders." : "All buyers received their orders."}
+              </Text>
             </View>
           ) : null}
         </View>

@@ -7,6 +7,7 @@ import DealDetails from "./src/screens/DealDetails";
 import DealChat from "./src/screens/DealChat";
 import SellerTabs from "./src/navigation/SellerTabs";
 import CreateDealScreen from "./src/screens/CreateDealScreen";
+import ScanQrScreen from "./src/screens/ScanQrScreen";
 import StyleGuideScreen from "./src/screens/StyleGuideScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import RoleMismatchScreen from "./src/screens/RoleMismatchScreen";
@@ -89,6 +90,7 @@ function AppNavigator() {
         <>
           <Stack.Screen name="MainTabs" component={SellerTabs} />
           <Stack.Screen name="CreateDeal" component={CreateDealScreen} />
+          <Stack.Screen name="ScanQR" component={ScanQrScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="UserDetails" component={UserDetailsScreen} />
           <Stack.Screen

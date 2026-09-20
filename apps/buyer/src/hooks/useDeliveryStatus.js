@@ -13,6 +13,9 @@ export function getDeliveryBadge(dealId, deliveries, theme) {
   if (entry.deliveryStatus === "in_transit") {
     return { label: "In Transit", color: theme.colors.primary };
   }
+  if (entry.deliveryStatus === "ready_for_pickup") {
+    return { label: "Ready for Pickup", color: theme.colors.primary };
+  }
   return null;
 }
 

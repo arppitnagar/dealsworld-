@@ -25,6 +25,8 @@ const {
   makeJoinDocId,
   validateAddress,
   isDeliveryMode,
+  isPickupMode,
+  generatePickupToken,
   validateDealPublishability,
   extractDealPayload,
   applyDealUpdate,
@@ -457,9 +459,6 @@ router.post("/api/deals/:dealId/pay", requireAuth, requireRole("buyer", "admin")
       if (String(joinData.joinStatus || "").toLowerCase() !== "joined") {
         throw new Error("You have not joined this deal");
       }
-      if (!isDeliveryMode(deal.deliveryMode)) {
-        throw new Error("Payment hold is not applicable to pickup deals");
-      }
       const lifecycleStatus = normalizeLifecycleStatus(deal);
       const isDispatchedOrBeyond = Boolean(deal.dispatchStatus) && deal.dispatchStatus !== "pending";
       if (lifecycleStatus !== "active" || isExpiredDeal(deal) || isDispatchedOrBeyond) {
@@ -482,16 +481,22 @@ router.post("/api/deals/:dealId/pay", requireAuth, requireRole("buyer", "admin")
       const currentJoins = asNumber(deal.currentJoins ?? deal.joinedUsers, 0);
       const paidAmount = resolveTierPrice(deal, currentJoins);
 
-      tx.set(
-        joinRef,
-        {
-          paymentStatus: "paid_blocked",
-          paidAt: FieldValue.serverTimestamp(),
-          paidAmount,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
+      const joinUpdates = {
+        paymentStatus: "paid_blocked",
+        paidAt: FieldValue.serverTimestamp(),
+        paidAmount,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      // Pickup deals skip the seller-dispatch step entirely (there's nothing
+      // to ship) - the pickup QR is issued right here at payment time, not
+      // by /dispatch, which explicitly rejects pickup mode.
+      if (isPickupMode(deal.deliveryMode)) {
+        joinUpdates.deliveryStatus = "ready_for_pickup";
+        joinUpdates.pickupQrToken = generatePickupToken();
+        joinUpdates.pickupTokenIssuedAt = FieldValue.serverTimestamp();
+      }
+
+      tx.set(joinRef, joinUpdates, { merge: true });
 
       return { ok: true, sellerId: getSellerId(deal), title: deal.title || "your deal" };
     });
@@ -542,14 +547,12 @@ router.post(
         if (!thresholdReached) {
           throw new Error("Minimum required buyers have not joined yet");
         }
-        if (isDeliveryMode(deal.deliveryMode)) {
-          const allPaid = joinsSnap.docs.every((joinDoc) => {
-            const ps = String((joinDoc.data() || {}).paymentStatus || "").toLowerCase();
-            return ps === "paid_blocked" || ps === "released_to_seller";
-          });
-          if (!allPaid) {
-            throw new Error("All buyers must complete payment before this deal can be marked completed");
-          }
+        const allPaid = joinsSnap.docs.every((joinDoc) => {
+          const ps = String((joinDoc.data() || {}).paymentStatus || "").toLowerCase();
+          return ps === "paid_blocked" || ps === "released_to_seller";
+        });
+        if (!allPaid) {
+          throw new Error("All buyers must complete payment before this deal can be marked completed");
         }
 
         // Settlement: with dynamic tiered pricing, whatever a buyer paid at
@@ -559,7 +562,7 @@ router.post(
         // everyone up to the same final price rather than making them wait
         // for delivery - the gap goes back to them as an immediate refund.
         const settlementAdjustments = [];
-        if (isDeliveryMode(deal.deliveryMode) && Array.isArray(deal.pricingTiers) && deal.pricingTiers.length) {
+        if (Array.isArray(deal.pricingTiers) && deal.pricingTiers.length) {
           const finalPrice = resolveTierPrice(deal, currentJoins);
           joinsSnap.docs.forEach((joinDoc) => {
             const data = joinDoc.data() || {};

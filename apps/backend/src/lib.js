@@ -481,6 +481,10 @@ function generateSixDigitOtp() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
 }
 
+function generatePickupToken() {
+  return crypto.randomBytes(20).toString("hex");
+}
+
 // Only the deal's own seller (or an admin) may manage its delivery/lifecycle
 // actions (dispatch, mark-delivered, complete, expire-early). Shared by
 // routes/delivery.js and routes/deals.js.
@@ -862,6 +866,7 @@ module.exports = {
   resolveTierPrice,
   MAX_OTP_ATTEMPTS,
   generateSixDigitOtp,
+  generatePickupToken,
   assertSellerOwnsDeal,
   applyDeliveryConfirmation,
 };

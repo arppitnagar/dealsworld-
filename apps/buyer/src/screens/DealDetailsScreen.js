@@ -29,6 +29,7 @@ import {
   AppButton,
   OtpDisplay,
   OtpInput,
+  PickupQrDisplay,
   StatusPill,
   getDealImages,
   PriceBreakupModal,
@@ -243,12 +244,13 @@ export default function DealDetailsScreen({ route, navigation }) {
   const requiresDeliveryAddress =
     deliveryModeLabel.length > 0 && !/pick/i.test(deliveryModeLabel);
   const deliveryStatus = hasJoined ? myDelivery?.deliveryStatus || null : null;
-  const showDeliverySection = requiresDeliveryAddress && hasJoined && Boolean(deliveryStatus);
+  const showDeliverySection =
+    (requiresDeliveryAddress || isPickup) && hasJoined && Boolean(deliveryStatus);
   const isUnsuccessful = isUnsuccessfulDeal(deal);
   const showUnsuccessfulSection = hasJoined && isUnsuccessful;
   const myPaymentStatus = hasJoined ? myDelivery?.paymentStatus || "unpaid" : null;
   const showPaymentSection =
-    hasJoined && requiresDeliveryAddress && !showUnsuccessfulSection && Boolean(myPaymentStatus);
+    hasJoined && (requiresDeliveryAddress || isPickup) && !showUnsuccessfulSection && Boolean(myPaymentStatus);
   // Once paid, the address is locked - the seller/delivery flow relies on
   // whatever was on file at that point, so letting a buyer swap it out
   // afterward (even post-OTP) would silently desync it from what's actually
@@ -267,7 +269,9 @@ export default function DealDetailsScreen({ route, navigation }) {
       ? { label: "Delivered", color: theme.colors.success }
       : deliveryStatus === "in_transit"
         ? { label: "In Transit", color: theme.colors.primary }
-        : null;
+        : deliveryStatus === "ready_for_pickup"
+          ? { label: "Ready for Pickup", color: theme.colors.primary }
+          : null;
   const hasAnyAddress = Array.isArray(addresses) && addresses.length > 0;
   const defaultAddress = useMemo(
     () => (hasAnyAddress ? addresses.find((item) => item.isDefault) || null : null),
@@ -293,7 +297,9 @@ export default function DealDetailsScreen({ route, navigation }) {
     if (!dealId || hasRecorded.current || dealStateLoading) return;
     if (!viewedIds.has(dealId)) {
       // Keep UI responsive even if backend view-tracking is delayed/unavailable.
-      markViewed(dealId);
+      markViewed(dealId).catch((error) => {
+        console.warn("Failed to persist viewed state:", error);
+      });
       recordView(dealId, {
         onError: (error) => {
           console.warn("Record view failed:", error);
@@ -356,7 +362,9 @@ export default function DealDetailsScreen({ route, navigation }) {
     }
     setShowAddressModal(false);
     if (hasJoined) {
-      setDeliveryAddress(dealId, address, deal?.deliveryMode);
+      setDeliveryAddress(dealId, address, deal?.deliveryMode).catch((error) => {
+        console.warn("Failed to persist delivery address:", error);
+      });
       return;
     }
     handleJoin(address);
@@ -373,9 +381,13 @@ export default function DealDetailsScreen({ route, navigation }) {
       },
       {
         onSuccess: () => {
-          markJoined(dealId);
+          markJoined(dealId).catch((error) => {
+            console.warn("Failed to persist joined state:", error);
+          });
           if (address) {
-            setDeliveryAddress(dealId, address, deal?.deliveryMode);
+            setDeliveryAddress(dealId, address, deal?.deliveryMode).catch((error) => {
+              console.warn("Failed to persist delivery address:", error);
+            });
           }
           setSuccessFeedback("join");
         },
@@ -638,7 +650,9 @@ export default function DealDetailsScreen({ route, navigation }) {
       if (leaving) return;
       leaveDeal(dealId, {
         onSuccess: () => {
-          unmarkJoined(dealId);
+          unmarkJoined(dealId).catch((error) => {
+            console.warn("Failed to persist left state:", error);
+          });
           setSuccessFeedback("leave");
         },
         onError: (error) => {
@@ -1015,14 +1029,26 @@ export default function DealDetailsScreen({ route, navigation }) {
         ) : null}
 
         {showDeliverySection ? (
-          <InfoCard title="Delivery" style={styles.deliveryOtpCard}>
+          <InfoCard title={isPickup ? "Store Pickup" : "Delivery"} style={styles.deliveryOtpCard}>
             {deliveryStatus === "delivered" ? (
               <View style={styles.deliveryOtpDoneRow}>
                 <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
                 <Text style={styles.deliveryOtpDoneText}>
-                  Delivered{myDelivery?.deliveredAt ? ` on ${formatReviewDate(myDelivery.deliveredAt)}` : ""}
+                  {isPickup ? "Picked up" : "Delivered"}
+                  {myDelivery?.deliveredAt ? ` on ${formatReviewDate(myDelivery.deliveredAt)}` : ""}
                 </Text>
               </View>
+            ) : isPickup ? (
+              <>
+                <Text style={styles.deliveryOtpLabel}>Your pickup QR code</Text>
+                <PickupQrDisplay
+                  value={`DWPICKUP:${dealId}:${user?.uid || ""}:${myDelivery?.pickupQrToken || ""}`}
+                />
+                <Text style={styles.deliveryOtpHint}>
+                  Show this QR code to the seller at the store. It'll be scanned to confirm your
+                  pickup — no need to do anything else here.
+                </Text>
+              </>
             ) : (
               <>
                 <Text style={styles.deliveryOtpLabel}>Your delivery confirmation code</Text>

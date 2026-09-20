@@ -182,6 +182,7 @@ router.get("/api/deals/:dealId/my-delivery", requireAuth, async (req, res) => {
       joined: true,
       deliveryStatus,
       deliveryOtp: deliveryStatus === "in_transit" ? data.deliveryOtp || null : null,
+      pickupQrToken: deliveryStatus === "ready_for_pickup" ? data.pickupQrToken || null : null,
       deliveryDispatchedAt: data.deliveryDispatchedAt || null,
       deliveredAt: data.deliveredAt || null,
       otpLocked: Boolean(data.deliveryOtpLockedAt),
@@ -384,6 +385,95 @@ router.get(
   },
 );
 
+// Seller-driven equivalent of confirm-delivery: instead of a buyer typing an
+// OTP, the seller scans the buyer's pickup QR (apps/seller ScanQrScreen),
+// which decodes to {dealId, buyerId, token}. No attempt-lock here like the
+// OTP flow - a mis-scan just fails once, there's no realistic brute-force
+// surface when the seller is the one holding the scanner.
+router.post(
+  "/api/deals/:dealId/confirm-pickup",
+  requireAuth,
+  requireRole("seller", "admin"),
+  async (req, res) => {
+    try {
+      const { dealId } = req.params;
+      const buyerId = String(req.body?.buyerId || "").trim();
+      const submittedToken = String(req.body?.token || "").trim();
+      if (!buyerId || !submittedToken) {
+        return res.status(400).json({ error: "buyerId and token are required" });
+      }
+
+      const dealRef = db.collection(DEALS_COLLECTION).doc(dealId);
+      const joinRef = db.collection(DEAL_JOINS_COLLECTION).doc(makeJoinDocId(dealId, buyerId));
+
+      const result = await db.runTransaction(async (tx) => {
+        const [dealSnap, joinSnap] = await Promise.all([tx.get(dealRef), tx.get(joinRef)]);
+        if (!dealSnap.exists || !joinSnap.exists) throw new Error("Deal or buyer not found");
+        const deal = dealSnap.data() || {};
+        assertSellerOwnsDeal(deal, req);
+        const joinData = joinSnap.data() || {};
+
+        if (String(joinData.joinStatus || "").toLowerCase() !== "joined") {
+          throw new Error("Buyer is not part of this deal");
+        }
+        if (joinData.deliveryStatus === "delivered") {
+          return { alreadyDelivered: true, buyerId };
+        }
+        if (joinData.deliveryStatus !== "ready_for_pickup") {
+          throw new Error("This buyer's order isn't ready for pickup yet");
+        }
+        if (!joinData.pickupQrToken || submittedToken !== joinData.pickupQrToken) {
+          const error = new Error("Invalid or expired QR code");
+          error.status = 400;
+          throw error;
+        }
+
+        const { rollupComplete } = applyDeliveryConfirmation(tx, {
+          dealRef,
+          deal,
+          joinRef,
+          joinData,
+          via: "qr_scan",
+        });
+
+        tx.set(dealRef.collection("deliveryEvents").doc(), {
+          action: "delivered",
+          buyerId,
+          via: "qr_scan",
+          actorId: req.user.uid,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+
+        return { delivered: true, rollupComplete, buyerId, title: deal.title || "your deal" };
+      });
+
+      if (result.alreadyDelivered) {
+        const profile = await ensureUserProfile(buyerId);
+        return res.json({
+          ok: true,
+          alreadyDelivered: true,
+          buyerName: getUserDisplayName(profile, profile.buyerCode || "Buyer"),
+        });
+      }
+
+      const profile = await ensureUserProfile(buyerId);
+      const buyerName = getUserDisplayName(profile, profile.buyerCode || "Buyer");
+
+      await pushNotification({
+        userId: buyerId,
+        type: "pickup_confirmed",
+        title: "Pickup confirmed",
+        body: `Your pickup for "${result.title}" has been confirmed by the seller.`,
+        meta: { dealId },
+      });
+
+      return res.json({ ok: true, delivered: true, buyerName, title: result.title });
+    } catch (error) {
+      return res.status(error.status || 400).json({ error: error.message });
+    }
+  },
+);
+
 router.post(
   "/api/deals/:dealId/delivery/:buyerId/mark-delivered",
   requireAuth,
@@ -407,8 +497,8 @@ router.post(
         if (joinData.deliveryStatus === "delivered") {
           return { alreadyDelivered: true };
         }
-        if (joinData.deliveryStatus !== "in_transit") {
-          throw new Error("This buyer's order hasn't been dispatched yet");
+        if (joinData.deliveryStatus !== "in_transit" && joinData.deliveryStatus !== "ready_for_pickup") {
+          throw new Error("This buyer's order isn't ready for delivery confirmation yet");
         }
 
         const { rollupComplete } = applyDeliveryConfirmation(tx, {

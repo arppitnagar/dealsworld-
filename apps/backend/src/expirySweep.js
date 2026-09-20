@@ -13,7 +13,6 @@ const {
   DEAL_JOINS_COLLECTION,
   asNumber,
   isExpiredDeal,
-  isDeliveryMode,
   getSellerId,
   normalizeLifecycleStatus,
   pushNotification,
@@ -88,14 +87,10 @@ async function expireDealTransactional(dealId, { via = "sweep" } = {}) {
     const minGroupSize = Math.max(1, asNumber(deal.minGroupSize ?? deal.minThreshold, 1));
     const thresholdReached = Boolean(deal.thresholdReachedAt) || currentJoins >= minGroupSize;
 
-    // Pickup deals never enter the payment-hold flow, so they're always
-    // "allPaid" as far as this check is concerned.
-    const allPaid =
-      !isDeliveryMode(deal.deliveryMode) ||
-      joinsSnap.docs.every((joinDoc) => {
-        const ps = String((joinDoc.data() || {}).paymentStatus || "").toLowerCase();
-        return ps === "paid_blocked" || ps === "released_to_seller";
-      });
+    const allPaid = joinsSnap.docs.every((joinDoc) => {
+      const ps = String((joinDoc.data() || {}).paymentStatus || "").toLowerCase();
+      return ps === "paid_blocked" || ps === "released_to_seller";
+    });
 
     // Threshold reached and everyone paid: this deal is dispatch-ready, just
     // never actioned by the seller yet. Don't auto-expire/refund it - the

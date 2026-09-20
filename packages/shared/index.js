@@ -44,6 +44,7 @@ export { default as DealDetailsView } from "./components/DealDetailsView";
 export { default as DealDetailsLayout } from "./components/DealDetailsLayout";
 export { default as OtpDisplay } from "./components/OtpDisplay";
 export { default as OtpInput } from "./components/OtpInput";
+export { default as PickupQrDisplay } from "./components/PickupQrDisplay";
 export { default as DealFormFields } from "./components/DealFormFields";
 export { default as AuthScreen } from "./components/AuthScreen.js";
 export { default as DealBuddyLoader } from "./components/DealBuddyLoader";

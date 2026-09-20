@@ -74,3 +74,16 @@ export const useMarkBuyerDelivered = () => {
     },
   });
 };
+
+// Called by ScanQrScreen once it decodes a buyer's pickup QR
+// (DWPICKUP:{dealId}:{buyerId}:{token}) - no cache to invalidate here since
+// the scanner isn't viewing a specific deal's delivery-status list.
+export const useConfirmPickup = () => {
+  return useMutation({
+    mutationFn: async ({ dealId, buyerId, token }) => {
+      if (!dealId || !buyerId || !token) throw new Error("dealId, buyerId and token are required");
+      const { data } = await apiClient.post(`/deals/${dealId}/confirm-pickup`, { buyerId, token });
+      return data;
+    },
+  });
+};
