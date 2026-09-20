@@ -54,22 +54,43 @@ export const useDealState = () => {
     });
   }, []);
 
+  const replaceLocalState = useCallback((dealId, value) => {
+    if (!dealId) return;
+    setStateMap((prev) => {
+      const next = new Map(prev);
+      if (value === undefined) {
+        next.delete(dealId);
+      } else {
+        next.set(dealId, value);
+      }
+      return next;
+    });
+  }, []);
+
   const setDealState = useCallback(
     async (dealId, updates, serverUpdates) => {
       if (!user?.uid || !dealId) return;
+      const previous = stateMap.get(dealId);
       applyLocalUpdate(dealId, updates);
       const ref = doc(db, "users", user.uid, DEAL_STATE_COLLECTION, dealId);
-      await setDoc(
-        ref,
-        {
-          ...updates,
-          ...serverUpdates,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
+      try {
+        await setDoc(
+          ref,
+          {
+            ...updates,
+            ...serverUpdates,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+      } catch (error) {
+        // Roll back the optimistic flip so the button doesn't keep showing
+        // a joined/left state that never actually persisted.
+        replaceLocalState(dealId, previous);
+        throw error;
+      }
     },
-    [applyLocalUpdate, user?.uid],
+    [applyLocalUpdate, replaceLocalState, stateMap, user?.uid],
   );
 
   const markViewed = useCallback(

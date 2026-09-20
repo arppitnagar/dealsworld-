@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 
-const NETWORK_RETRY_DELAYS_MS = [500, 1400];
-const MUTATION_TIMEOUT_MS = 15_000;
+const NETWORK_RETRY_DELAYS_MS = [500];
+const MUTATION_TIMEOUT_MS = 8_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -114,9 +114,12 @@ export const useJoinDeal = () => {
       );
       return data;
     },
-    onSuccess: () => {
-      // Refresh the deals list automatically after joining
+    onSettled: () => {
+      // Refresh the deals list (and this buyer's joined list) whether the
+      // join succeeded or failed, so a retry/rejoin right after never reads
+      // stale capacity/price for this deal.
       queryClient.invalidateQueries({ queryKey: ["deals"] });
+      queryClient.invalidateQueries({ queryKey: ["joined-deals"] });
     },
   });
 };
@@ -150,8 +153,9 @@ export const useLeaveDeal = () => {
       );
       return data;
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["deals"] });
+      queryClient.invalidateQueries({ queryKey: ["joined-deals"] });
     },
   });
 };

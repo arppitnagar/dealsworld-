@@ -7,6 +7,7 @@ import {
   CardHeader,
   DealCard,
   DealBuddyLoadingScreen,
+  ViewModeToggle,
   getDealImages,
 } from "@dealsworld/shared";
 import { useDeals } from "../hooks/useDeals";
@@ -46,9 +47,15 @@ export default function SearchScreen({ navigation }) {
     loading: dealStateLoading,
   } = useDealState();
   const { data: myDeliveries } = useMyDeliveries();
-  const { profile } = useUserProfile();
+  const { profile, updateProfile } = useUserProfile();
   const { unreadCount } = useNotifications();
   const controls = useDealSearchControls();
+
+  const viewMode = profile?.dashboardViewMode === "grid" ? "grid" : "list";
+  const handleChangeViewMode = (mode) => {
+    if (mode === viewMode) return;
+    updateProfile({ dashboardViewMode: mode });
+  };
 
   // Land on the same active deals everyone else sees - searching narrows
   // that list down, it never starts from an empty one.
@@ -94,10 +101,12 @@ export default function SearchScreen({ navigation }) {
         <View style={[styles.listWrap, !hasDeals && styles.listWrapEmpty]}>
           <CardHeader
             title={controls.isSearching ? "Search Results" : "All Deals"}
+            right={<ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />}
           />
 
           {hasDeals ? (
-            sortedDeals.map((deal) => {
+            <View style={viewMode === "grid" ? styles.grid : null}>
+              {sortedDeals.map((deal) => {
               const expiryMs = getExpiryMs(deal);
               const viewsCountRaw = deal?.viewsCount ?? deal?.views ?? 0;
               const favoritesCountRaw =
@@ -108,8 +117,12 @@ export default function SearchScreen({ navigation }) {
                 !isPickupDeal(deal) &&
                 !isDealPaid(deal.id, myDeliveries);
               return (
-                <DealCard
+                <View
                   key={deal.id}
+                  style={viewMode === "grid" ? styles.gridItem : null}
+                >
+                <DealCard
+                  compact={viewMode === "grid"}
                   title={deal.title}
                   category={deal?.category || null}
                   images={getDealImages(deal)}
@@ -158,8 +171,10 @@ export default function SearchScreen({ navigation }) {
                     navigation.navigate("DealDetails", { dealId: deal.id })
                   }
                 />
+                </View>
               );
-            })
+              })}
+            </View>
           ) : (
             <View style={styles.emptyWrap}>
               <EmptyState
@@ -201,6 +216,16 @@ const createStyles = (theme) =>
     },
     listWrapEmpty: {
       flex: 1,
+    },
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      marginTop: 16,
+    },
+    gridItem: {
+      width: "48%",
+      marginBottom: 16,
     },
     emptyWrap: {
       flex: 1,
