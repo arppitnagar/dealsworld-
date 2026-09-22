@@ -212,8 +212,11 @@ router.patch(
         return res.status(403).json({ error: "Only owner can edit this deal" });
       }
       const approvalStatus = normalizeApprovalStatus(data);
-      if (approvalStatus === "approved") {
-        return res.status(400).json({ error: "Approved deal cannot be edited" });
+      const currentJoins = asNumber(data.currentJoins ?? data.joinedUsers, 0);
+      if (approvalStatus === "approved" && currentJoins > 0) {
+        return res
+          .status(400)
+          .json({ error: "This deal cannot be edited because at least one buyer has already joined" });
       }
 
       const updates = applyDealUpdate(req.body);
