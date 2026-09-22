@@ -174,9 +174,17 @@ export default function CreateDealScreen({ route, navigation }) {
   // 1. Detect if we are in Edit/View mode
   const deal = route.params?.deal;
   const isCompleted = deal?.status === "completed";
+  // Once a published deal has at least one buyer joined (or paid, which
+  // requires having joined first), the seller can no longer edit it - buyers
+  // already committed based on what they saw. Enforced server-side too (see
+  // firestore.rules isLockedForEdit); this just gives a clear in-app message
+  // instead of a silent permission-denied write failure.
+  const hasJoinedBuyers =
+    Number(deal?.currentJoins ?? deal?.joinedUsers ?? 0) > 0;
+  const isLockedForEdit = deal?.approvalStatus === "approved" && hasJoinedBuyers;
   const [isDuplicateMode, setIsDuplicateMode] = useState(false);
   const isEditMode = !!deal && !isDuplicateMode;
-  const isReadOnly = isCompleted && !isDuplicateMode;
+  const isReadOnly = (isCompleted || isLockedForEdit) && !isDuplicateMode;
   const isExpiryLocked = isReadOnly;
   const sellerDisplayName = useMemo(() => {
     const explicitName =
@@ -818,8 +826,7 @@ export default function CreateDealScreen({ route, navigation }) {
         includeSafeArea={false}
       />
       {/* READ-ONLY BANNER */}
-      {/* READ-ONLY BANNER */}
-      {isCompleted && (
+      {(isCompleted || isLockedForEdit) && (
         <View style={styles.readOnlyBanner}>
           <View style={styles.bannerAccent} />
           <View style={styles.bannerContent}>
@@ -831,8 +838,9 @@ export default function CreateDealScreen({ route, navigation }) {
                   color={theme.colors.amberText}
                 />
                 <Text style={styles.readOnlyBannerText}>
-                  This deal has been completed. Editing is disabled; you may
-                  create a duplicate deal.
+                  {isCompleted
+                    ? "This deal has been completed. Editing is disabled; you may create a duplicate deal."
+                    : "This deal already has buyers who joined or paid, so it can no longer be edited. You may create a duplicate deal."}
                 </Text>
               </View>
             )}

@@ -164,6 +164,22 @@ service cloud.firestore {
       return affected.hasAny(['status', 'lifecycleStatus', 'expiredAt', 'expiryReason', 'completedAt']);
     }
 
+    // Once a published (admin-approved) deal has at least one buyer joined -
+    // a prerequisite for paying, since /api/deals/:dealId/pay requires an
+    // existing 'joined' dealJoins doc - the seller can no longer change it:
+    // buyers already committed based on what they saw. An approved deal with
+    // zero joins, or any deal still pending/rejected, stays fully editable.
+    // Field presence is checked first since older deal docs may predate
+    // currentJoins/joinedUsers, and a missing-field read throws in rules.
+    function hasJoinedBuyers() {
+      return (('currentJoins' in resource.data) && resource.data.currentJoins > 0) ||
+        (('joinedUsers' in resource.data) && resource.data.joinedUsers > 0);
+    }
+
+    function isLockedForEdit() {
+      return resource.data.approvalStatus == 'approved' && hasJoinedBuyers();
+    }
+
     // Deal listings (apps/seller/src/screens/SellerDashboard.js reads the
     // whole collection unfiltered and filters client-side, so read access
     // must not depend on document contents). Writes are restricted to the
@@ -175,7 +191,7 @@ service cloud.firestore {
         isValidDealPayload(request.resource.data);
       allow update: if isSignedIn() &&
         ((resource.data.sellerId == request.auth.uid && !isDispatchFieldWrite() && !isLifecycleFieldWrite() &&
-          isValidDealPayload(request.resource.data)) || isFavoritesCountStep());
+          !isLockedForEdit() && isValidDealPayload(request.resource.data)) || isFavoritesCountStep());
       allow delete: if isSignedIn() && resource.data.sellerId == request.auth.uid;
 
       // Chat messages and typing indicators (apps/*/src/screens/DealChat*.js)
