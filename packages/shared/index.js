@@ -1,6 +1,8 @@
 export { default as CountdownTimer } from "./components/CountdownTimer";
 export { default as AppButton } from "./components/ui/AppButton";
 export { default as AppInput } from "./components/ui/AppInput";
+export { default as ConfirmModal } from "./components/ui/ConfirmModal";
+export { default as useConfirmModal } from "./hooks/useConfirmModal";
 export { theme, createTheme } from "./theme/theme";
 export { ThemeProvider, useTheme } from "./theme/ThemeProvider";
 export { getUi } from "./styles/ui";
@@ -24,6 +26,7 @@ export { default as HeaderBar } from "./components/HeaderBar";
 export { default as TopPageHeader } from "./components/TopPageHeader";
 export { default as StatusPill } from "./components/StatusPill";
 export { default as BottomTabBar } from "./components/BottomTabBar";
+export { default as IconActionBar } from "./components/IconActionBar";
 export { default as ViewModeToggle } from "./components/ViewModeToggle";
 export { default as MetricsGrid } from "./components/MetricsGrid";
 export { default as MetricRow } from "./components/MetricRow";

@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   StyleSheet,
   Modal,
   SafeAreaView,
@@ -36,6 +35,8 @@ import {
   MAX_PRICING_TIERS,
   DEAL_CATEGORIES,
   DEAL_CATEGORY_LABELS,
+  ConfirmModal,
+  useConfirmModal,
 } from "@dealsworld/shared";
 import { useAddresses } from "../hooks/useAddresses";
 import { useAuth } from "../context/AuthContext";
@@ -185,6 +186,7 @@ export default function CreateDealScreen({ route, navigation }) {
   const [isDuplicateMode, setIsDuplicateMode] = useState(false);
   const isEditMode = !!deal && !isDuplicateMode;
   const isReadOnly = (isCompleted || isLockedForEdit) && !isDuplicateMode;
+  const { confirm, alert, confirmModalProps } = useConfirmModal();
   const isExpiryLocked = isReadOnly;
   const sellerDisplayName = useMemo(() => {
     const explicitName =
@@ -662,10 +664,10 @@ export default function CreateDealScreen({ route, navigation }) {
     try {
       if (cleanData.deliveryMode === "Pick from Store") {
         if (addressesLoading) {
-          Alert.alert(
-            "Please wait",
-            "Loading seller addresses. Try again in a moment.",
-          );
+          await alert({
+            title: "Please wait",
+            message: "Loading seller addresses. Try again in a moment.",
+          });
           return false;
         }
         const hasAnyAddress = Array.isArray(addresses) && addresses.length > 0;
@@ -674,17 +676,12 @@ export default function CreateDealScreen({ route, navigation }) {
             deliveryMode:
               "Add at least one seller address before selecting Pick from Store.",
           });
-          Alert.alert(
-            "Store address required",
-            "To publish a pickup deal, add at least one seller address first.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Add Address",
-                onPress: () => navigation.navigate("AddressForm"),
-              },
-            ],
-          );
+          const addAddress = await confirm({
+            title: "Store address required",
+            message: "To publish a pickup deal, add at least one seller address first.",
+            confirmText: "Add Address",
+          });
+          if (addAddress) navigation.navigate("AddressForm");
           return false;
         }
         if (!effectiveStoreAddress) {
@@ -692,27 +689,23 @@ export default function CreateDealScreen({ route, navigation }) {
             deliveryMode:
               "Select a store address before publishing this pickup deal.",
           });
-          Alert.alert(
-            "Select store address",
-            "No default address is selected. Please choose one from your saved addresses.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Select Address",
-                onPress: () => setStoreAddressModalVisible(true),
-              },
-            ],
-          );
+          const selectAddress = await confirm({
+            title: "Select store address",
+            message: "No default address is selected. Please choose one from your saved addresses.",
+            confirmText: "Select Address",
+          });
+          if (selectAddress) setStoreAddressModalVisible(true);
           return false;
         }
       }
       setErrors({});
       return true;
     } catch (err) {
-      Alert.alert(
-        "Validation failed",
-        err?.message || "Something went wrong while validating this deal.",
-      );
+      await alert({
+        title: "Validation failed",
+        message: err?.message || "Something went wrong while validating this deal.",
+        destructive: true,
+      });
       return false;
     }
   };
@@ -727,6 +720,15 @@ export default function CreateDealScreen({ route, navigation }) {
   const handleSubmit = async () => {
     const isValid = await validate();
     if (!isValid) return;
+
+    const ok = await confirm({
+      title: isEditMode ? "Save changes to this deal?" : "Publish this deal?",
+      message: isEditMode
+        ? "Buyers who already joined will see the updated details."
+        : "It will be sent for admin approval before it's visible to buyers.",
+      confirmText: isEditMode ? "Save Changes" : "Publish",
+    });
+    if (!ok) return;
 
     setLoading(true);
     try {
@@ -818,7 +820,7 @@ export default function CreateDealScreen({ route, navigation }) {
       setShowSuccess(true);
     } catch (error) {
       console.error("Detailed Error:", error);
-      Alert.alert("Publish Failed", error.message);
+      await alert({ title: "Publish Failed", message: error.message, destructive: true });
     } finally {
       setLoading(false);
     }
@@ -1292,6 +1294,8 @@ export default function CreateDealScreen({ route, navigation }) {
           </View>
         </Modal>
       )}
+
+      <ConfirmModal {...confirmModalProps} />
     </SafeAreaView>
   );
 }

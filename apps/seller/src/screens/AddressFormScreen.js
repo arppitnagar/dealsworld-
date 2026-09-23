@@ -4,13 +4,19 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AppButton, AppInput, useTheme, TopPageHeader } from "@dealsworld/shared";
+import {
+  AppButton,
+  AppInput,
+  useTheme,
+  TopPageHeader,
+  ConfirmModal,
+  useConfirmModal,
+} from "@dealsworld/shared";
 import { useAddresses } from "../hooks/useAddresses";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -37,14 +43,20 @@ export default function AddressFormScreen({ navigation, route }) {
   const [pincode, setPincode] = useState(existing?.pincode || "");
   const [isDefault, setIsDefault] = useState(Boolean(existing?.isDefault));
   const [saving, setSaving] = useState(false);
+  const { confirm, alert, confirmModalProps } = useConfirmModal();
 
   const finalLabel = label === "Other" ? customLabel || "Other" : label;
 
   const handleSave = async () => {
     if (!line1.trim() || !city.trim() || !stateName.trim() || !pincode.trim()) {
-      Alert.alert("Missing details", "Please fill required fields.");
+      await alert({ title: "Missing details", message: "Please fill required fields." });
       return;
     }
+    const ok = await confirm({
+      title: existing ? "Save changes to this address?" : "Save this address?",
+      confirmText: "Save Address",
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       const payload = {
@@ -71,7 +83,7 @@ export default function AddressFormScreen({ navigation, route }) {
       }
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Error", error?.message || "Unable to save address.");
+      await alert({ title: "Error", message: error?.message || "Unable to save address.", destructive: true });
     } finally {
       setSaving(false);
     }
@@ -211,6 +223,8 @@ export default function AddressFormScreen({ navigation, route }) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmModal {...confirmModalProps} />
     </View>
   );
 }

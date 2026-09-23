@@ -9,7 +9,15 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { EmptyState, toDate, useTheme, TopPageHeader } from "@dealsworld/shared";
+import {
+  EmptyState,
+  toDate,
+  useTheme,
+  TopPageHeader,
+  IconActionBar,
+  ConfirmModal,
+  useConfirmModal,
+} from "@dealsworld/shared";
 import { useNotifications } from "../hooks/useNotifications";
 
 export default function NotificationsScreen({ navigation }) {
@@ -29,6 +37,7 @@ export default function NotificationsScreen({ navigation }) {
   const [deletingAll, setDeletingAll] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { confirm, confirmModalProps } = useConfirmModal();
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -61,6 +70,12 @@ export default function NotificationsScreen({ navigation }) {
 
   const handleDelete = async (id) => {
     if (!id || deletingId) return;
+    const ok = await confirm({
+      title: "Delete this notification?",
+      confirmText: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     setDeletingId(id);
     try {
       await deleteNotification(id);
@@ -69,27 +84,21 @@ export default function NotificationsScreen({ navigation }) {
     }
   };
 
-  const handleDeleteAll = () => {
+  const handleDeleteAll = async () => {
     if (deletingAll || notifications.length === 0) return;
-    Alert.alert(
-      "Delete all notifications",
-      "This can't be undone. Delete all notifications?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete All",
-          style: "destructive",
-          onPress: async () => {
-            setDeletingAll(true);
-            try {
-              await deleteAllNotifications();
-            } finally {
-              setDeletingAll(false);
-            }
-          },
-        },
-      ],
-    );
+    const ok = await confirm({
+      title: "Delete all notifications",
+      message: "This can't be undone. Delete all notifications?",
+      confirmText: "Delete All",
+      destructive: true,
+    });
+    if (!ok) return;
+    setDeletingAll(true);
+    try {
+      await deleteAllNotifications();
+    } finally {
+      setDeletingAll(false);
+    }
   };
 
   const renderItem = ({ item }) => {
@@ -151,38 +160,7 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <TopPageHeader title="Notifications" onBack={() => navigation.goBack()} rounded>
-        {notifications.length > 0 ? (
-          <View style={styles.headerActions}>
-            {unreadCount > 0 ? (
-              <TouchableOpacity
-                style={styles.headerActionButton}
-                onPress={handleClearAll}
-                disabled={clearing}
-              >
-                <Ionicons
-                  name="checkmark-done-outline"
-                  size={14}
-                  color={theme.colors.onPrimary}
-                />
-                <Text style={styles.headerActionText}>Mark all read</Text>
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              style={styles.headerActionButton}
-              onPress={handleDeleteAll}
-              disabled={deletingAll}
-            >
-              <Ionicons
-                name="trash-outline"
-                size={14}
-                color={theme.colors.onPrimary}
-              />
-              <Text style={styles.headerActionText}>Delete all</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </TopPageHeader>
+      <TopPageHeader title="Notifications" onBack={() => navigation.goBack()} rounded />
 
       <FlatList
         data={notifications}
@@ -214,6 +192,39 @@ export default function NotificationsScreen({ navigation }) {
           )
         }
       />
+
+      <IconActionBar
+        items={[
+          {
+            key: "home",
+            onPress: () => navigation.navigate("MainTabs", { screen: "Home" }),
+            label: "Home",
+            icon: (color) => (
+              <Ionicons name="home-outline" size={20} color={color} />
+            ),
+          },
+          unreadCount > 0 && {
+            key: "mark-all-read",
+            onPress: handleClearAll,
+            disabled: clearing,
+            label: "Mark all read",
+            icon: (color) => (
+              <Ionicons name="checkmark-done-outline" size={20} color={color} />
+            ),
+          },
+          notifications.length > 0 && {
+            key: "delete-all",
+            onPress: handleDeleteAll,
+            disabled: deletingAll,
+            label: "Delete all",
+            icon: (color) => (
+              <Ionicons name="trash-outline" size={20} color={color} />
+            ),
+          },
+        ]}
+      />
+
+      <ConfirmModal {...confirmModalProps} />
     </View>
   );
 }
@@ -234,25 +245,6 @@ const createStyles = (theme) =>
     screen: {
       flex: 1,
       backgroundColor: theme.colors.dashboardBg,
-    },
-    headerActions: {
-      flexDirection: "row",
-      justifyContent: "flex-end",
-      gap: 8,
-    },
-    headerActionButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      paddingVertical: 6,
-      paddingHorizontal: 10,
-      borderRadius: 999,
-      backgroundColor: theme.colors.onPrimarySoft,
-    },
-    headerActionText: {
-      fontSize: 11,
-      fontWeight: "700",
-      color: theme.colors.onPrimary,
     },
     listContent: {
       padding: 20,

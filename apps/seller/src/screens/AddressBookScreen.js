@@ -8,7 +8,14 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AppButton, EmptyState, useTheme, TopPageHeader } from "@dealsworld/shared";
+import {
+  AppButton,
+  EmptyState,
+  useTheme,
+  TopPageHeader,
+  ConfirmModal,
+  useConfirmModal,
+} from "@dealsworld/shared";
 import { useAddresses } from "../hooks/useAddresses";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -19,16 +26,17 @@ export default function AddressBookScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { addresses, loading, removeAddress, setDefaultAddress } =
     useAddresses();
+  const { confirm, confirmModalProps } = useConfirmModal();
 
-  const handleDelete = (item) => {
-    Alert.alert("Delete address", "Remove this address?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => removeAddress(item.id),
-      },
-    ]);
+  const handleDelete = async (item) => {
+    const ok = await confirm({
+      title: "Delete address",
+      message: "Remove this address?",
+      confirmText: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
+    removeAddress(item.id);
   };
 
   const renderItem = ({ item }) => (
@@ -144,6 +152,8 @@ export default function AddressBookScreen({ navigation }) {
           { marginBottom: Math.max(insets.bottom, 12) },
         ]}
       />
+
+      <ConfirmModal {...confirmModalProps} />
     </View>
   );
 }

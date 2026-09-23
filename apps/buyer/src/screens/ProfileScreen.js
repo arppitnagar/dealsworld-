@@ -8,7 +8,14 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme, toDate, formatDate, TopPageHeader } from "@dealsworld/shared";
+import {
+  useTheme,
+  toDate,
+  formatDate,
+  TopPageHeader,
+  ConfirmModal,
+  useConfirmModal,
+} from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -22,16 +29,17 @@ export default function ProfileScreen({ navigation }) {
     const date = toDate(profile?.createdAt);
     return date ? formatDate(date) : null;
   }, [profile?.createdAt]);
+  const { confirm, confirmModalProps } = useConfirmModal();
 
-  const handleLogout = () => {
-    Alert.alert("Logout", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: () => logout(),
-      },
-    ]);
+  const handleLogout = async () => {
+    const ok = await confirm({
+      title: "Logout",
+      message: "Are you sure you want to log out?",
+      confirmText: "Logout",
+      destructive: true,
+    });
+    if (!ok) return;
+    logout();
   };
 
   return (
@@ -133,6 +141,8 @@ export default function ProfileScreen({ navigation }) {
           />
         </View>
       </ScrollView>
+
+      <ConfirmModal {...confirmModalProps} />
     </View>
   );
 }

@@ -3,12 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { AppButton, AppInput, useTheme, TopPageHeader } from "@dealsworld/shared";
+import {
+  AppButton,
+  AppInput,
+  useTheme,
+  TopPageHeader,
+  ConfirmModal,
+  useConfirmModal,
+} from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -21,6 +27,7 @@ export default function UserDetailsScreen({ navigation }) {
   const [name, setName] = useState(profile?.displayName || "");
   const [phone, setPhone] = useState(profile?.phone || "");
   const [saving, setSaving] = useState(false);
+  const { confirm, alert, confirmModalProps } = useConfirmModal();
 
   useEffect(() => {
     setName(profile?.displayName || "");
@@ -28,15 +35,21 @@ export default function UserDetailsScreen({ navigation }) {
   }, [profile?.displayName, profile?.phone]);
 
   const handleSave = async () => {
+    const ok = await confirm({
+      title: "Save changes?",
+      message: "Update your name and phone number.",
+      confirmText: "Save Changes",
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       await updateProfile({
         displayName: name.trim(),
         phone: phone.trim(),
       });
-      Alert.alert("Saved", "Your details were updated.");
+      await alert({ title: "Saved", message: "Your details were updated.", tone: "success" });
     } catch (error) {
-      Alert.alert("Error", error?.message || "Unable to save details.");
+      await alert({ title: "Error", message: error?.message || "Unable to save details.", destructive: true });
     } finally {
       setSaving(false);
     }
@@ -98,6 +111,8 @@ export default function UserDetailsScreen({ navigation }) {
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmModal {...confirmModalProps} />
     </View>
   );
 }

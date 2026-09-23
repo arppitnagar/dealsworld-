@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +15,8 @@ import {
   useTheme,
   validatePassword,
   TopPageHeader,
+  ConfirmModal,
+  useConfirmModal,
 } from "@dealsworld/shared";
 import { auth } from "../config/firebase";
 import {
@@ -35,38 +36,46 @@ export default function ChangePasswordScreen({ navigation }) {
   const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const { confirm, alert, confirmModalProps } = useConfirmModal();
 
   const handleSave = async () => {
     const user = auth.currentUser;
     if (!user?.email) {
-      Alert.alert("Error", "Missing user email for password update.");
+      await alert({ title: "Error", message: "Missing user email for password update.", destructive: true });
       return;
     }
     if (!oldPassword || !newPassword || !confirmPassword) {
-      Alert.alert("Missing details", "Please fill all fields.");
+      await alert({ title: "Missing details", message: "Please fill all fields." });
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert("Mismatch", "New password and confirmation do not match.");
+      await alert({ title: "Mismatch", message: "New password and confirmation do not match." });
       return;
     }
     const validationError = validatePassword(newPassword);
     if (validationError) {
-      Alert.alert("Weak password", validationError);
+      await alert({ title: "Weak password", message: validationError });
       return;
     }
+
+    const ok = await confirm({
+      title: "Update your password?",
+      message: "You'll need to use the new password next time you sign in.",
+      confirmText: "Update Password",
+    });
+    if (!ok) return;
 
     setSaving(true);
     try {
       const credential = EmailAuthProvider.credential(user.email, oldPassword);
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
-      Alert.alert("Success", "Your password has been updated.");
+      await alert({ title: "Success", message: "Your password has been updated.", tone: "success" });
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (error) {
-      Alert.alert("Error", error?.message || "Failed to update password.");
+      await alert({ title: "Error", message: error?.message || "Failed to update password.", destructive: true });
     } finally {
       setSaving(false);
     }
@@ -181,6 +190,8 @@ export default function ChangePasswordScreen({ navigation }) {
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmModal {...confirmModalProps} />
     </View>
   );
 }

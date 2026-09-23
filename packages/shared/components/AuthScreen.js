@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
@@ -14,6 +13,8 @@ import { Eye, EyeOff } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AppButton from "./ui/AppButton";
 import AppInput from "./ui/AppInput";
+import ConfirmModal from "./ui/ConfirmModal";
+import useConfirmModal from "../hooks/useConfirmModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { validatePassword } from "../utils/passwordPolicy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -85,21 +86,22 @@ export default function AuthScreen({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { alert, confirmModalProps } = useConfirmModal();
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      Alert.alert("Missing details", "Please enter email and password.");
+      await alert({ title: "Missing details", message: "Please enter email and password." });
       return;
     }
     if (typeof onLogin !== "function") {
-      Alert.alert("Unavailable", "Login is not configured.");
+      await alert({ title: "Unavailable", message: "Login is not configured." });
       return;
     }
     setLoading(true);
     try {
       await onLogin(email.trim(), password);
     } catch (error) {
-      Alert.alert("Login failed", getAuthErrorMessage(error, "login"));
+      await alert({ title: "Login failed", message: getAuthErrorMessage(error, "login"), destructive: true });
     } finally {
       setLoading(false);
     }
@@ -107,27 +109,27 @@ export default function AuthScreen({
 
   const handleSignup = async () => {
     if (!email.trim() || !password || !confirmPassword) {
-      Alert.alert("Missing details", "Please fill all fields.");
+      await alert({ title: "Missing details", message: "Please fill all fields." });
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert("Mismatch", "Passwords do not match.");
+      await alert({ title: "Mismatch", message: "Passwords do not match." });
       return;
     }
     const validationError = validatePassword(password);
     if (validationError) {
-      Alert.alert("Weak password", validationError);
+      await alert({ title: "Weak password", message: validationError });
       return;
     }
     if (typeof onRegister !== "function") {
-      Alert.alert("Unavailable", "Sign up is not configured.");
+      await alert({ title: "Unavailable", message: "Sign up is not configured." });
       return;
     }
     setLoading(true);
     try {
       await onRegister(email.trim(), password);
     } catch (error) {
-      Alert.alert("Sign up failed", getAuthErrorMessage(error, "signup"));
+      await alert({ title: "Sign up failed", message: getAuthErrorMessage(error, "signup"), destructive: true });
     } finally {
       setLoading(false);
     }
@@ -137,12 +139,12 @@ export default function AuthScreen({
   const displayTitle = isSignup ? signupTitle || title : title;
   const displaySubtitle = isSignup ? signupSubtitle : subtitle;
 
-  const handleForgotPassword = () => {
+  const handleForgotPassword = async () => {
     if (typeof onForgotPassword === "function") {
       onForgotPassword(email.trim());
       return;
     }
-    Alert.alert("Forgot password", "Password reset is not configured yet.");
+    await alert({ title: "Forgot password", message: "Password reset is not configured yet." });
   };
 
   const handleSocialLogin = async (provider) => {
@@ -153,7 +155,7 @@ export default function AuthScreen({
           ? onAppleLogin
           : null;
     if (typeof handler !== "function") {
-      Alert.alert("Coming soon", "Social login is not available yet.");
+      await alert({ title: "Coming soon", message: "Social login is not available yet." });
       return;
     }
     setLoading(true);
@@ -161,7 +163,7 @@ export default function AuthScreen({
       await handler();
     } catch (error) {
       if (error?.code !== "SIGN_IN_CANCELLED" && error?.code !== "-5") {
-        Alert.alert("Sign-in failed", getAuthErrorMessage(error, "login"));
+        await alert({ title: "Sign-in failed", message: getAuthErrorMessage(error, "login"), destructive: true });
       }
     } finally {
       setLoading(false);
@@ -382,6 +384,8 @@ export default function AuthScreen({
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmModal {...confirmModalProps} />
     </Wrapper>
   );
 }

@@ -27,6 +27,7 @@ export function AppButton({
 }) {
   const { theme } = useTheme();
   const isPrimary = variant === "primary";
+  const isDanger = variant === "danger";
   const isGhost = variant === "ghost";
   const backgroundColor = isGhost
     ? "transparent"
@@ -166,9 +167,13 @@ export function AppButton({
         style,
       ]}
     >
-      {isPrimary ? (
+      {isPrimary || isDanger ? (
         <LinearGradient
-          colors={[theme.colors.primary, theme.colors.primaryDeep]}
+          colors={
+            isDanger
+              ? [theme.colors.dangerDark, theme.colors.danger]
+              : [theme.colors.primary, theme.colors.primaryDeep]
+          }
           style={[
             styles.gradientSurface,
             compact ? styles.gradientSurfaceCompact : null,

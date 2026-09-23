@@ -5,8 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
-  Dimensions,
   Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,12 +24,15 @@ import {
   useTheme,
   SkeletonBlock,
   DealDetailsLayout,
+  IconActionBar,
   InfoCard,
   getDealImages,
   PriceBreakupCard,
   calculatePriceBreakup,
   resolveTierPrice,
   getNextTierInfo,
+  ConfirmModal,
+  useConfirmModal,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -43,8 +44,6 @@ import {
   useExpireDealEarly,
 } from "../hooks/useDeliveryStatus";
 import { isUnsuccessfulDeal } from "../utils/dealStatus";
-
-const { width } = Dimensions.get("window");
 
 function pickSellerDisplayName(...values) {
   for (const value of values) {
@@ -67,6 +66,7 @@ export default function DealDetails({ route, navigation }) {
   const { mutate: markBuyerDelivered } = useMarkBuyerDelivered();
   const { mutate: completeDeal, isPending: completing } = useCompleteDeal();
   const { mutate: expireDealEarly, isPending: expiringEarly } = useExpireDealEarly();
+  const { confirm, alert, confirmModalProps } = useConfirmModal();
 
   const joinsCount =
     safeGet(deal, "joinedUsers") ??
@@ -254,105 +254,83 @@ export default function DealDetails({ route, navigation }) {
     return () => clearInterval(intervalId);
   }, []);
 
-  const handleMarkCompleted = () => {
-    Alert.alert(
-      "Mark deal completed?",
-      "This moves the deal to Completed so you can dispatch it. Continue?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Mark Completed",
-          onPress: () => {
-            completeDeal(deal.id, {
-              onError: (error) => {
-                const message =
-                  error?.response?.data?.error ||
-                  error?.message ||
-                  "Could not mark this deal as completed.";
-                Alert.alert("Failed", message);
-              },
-            });
-          },
-        },
-      ],
-    );
+  const handleMarkCompleted = async () => {
+    const ok = await confirm({
+      title: "Mark deal completed?",
+      message: "This moves the deal to Completed so you can dispatch it. Continue?",
+      confirmText: "Mark Completed",
+    });
+    if (!ok) return;
+    completeDeal(deal.id, {
+      onError: (error) => {
+        const message =
+          error?.response?.data?.error ||
+          error?.message ||
+          "Could not mark this deal as completed.";
+        alert({ title: "Failed", message, destructive: true });
+      },
+    });
   };
 
-  const handleExpireEarly = () => {
-    Alert.alert(
-      "Expire this deal early?",
-      "The minimum number of buyers hasn't joined yet. Ending it now refunds any buyers who already paid and cannot be undone. Continue?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Expire Early",
-          style: "destructive",
-          onPress: () => {
-            expireDealEarly(deal.id, {
-              onError: (error) => {
-                const message =
-                  error?.response?.data?.error ||
-                  error?.message ||
-                  "Could not expire this deal.";
-                Alert.alert("Failed", message);
-              },
-            });
-          },
-        },
-      ],
-    );
+  const handleExpireEarly = async () => {
+    const ok = await confirm({
+      title: "Expire this deal early?",
+      message:
+        "The minimum number of buyers hasn't joined yet. Ending it now refunds any buyers who already paid and cannot be undone. Continue?",
+      confirmText: "Expire Early",
+      destructive: true,
+    });
+    if (!ok) return;
+    expireDealEarly(deal.id, {
+      onError: (error) => {
+        const message =
+          error?.response?.data?.error ||
+          error?.message ||
+          "Could not expire this deal.";
+        alert({ title: "Failed", message, destructive: true });
+      },
+    });
   };
 
-  const handleDispatch = () => {
-    Alert.alert(
-      "Mark deal as dispatched?",
-      "This notifies every joined buyer with their delivery confirmation code and cannot be undone. Continue?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Dispatch",
-          onPress: () => {
-            dispatchDeal(deal.id, {
-              onError: (error) => {
-                const message =
-                  error?.response?.data?.error ||
-                  error?.message ||
-                  "Could not dispatch this deal.";
-                Alert.alert("Dispatch failed", message);
-              },
-            });
-          },
-        },
-      ],
-    );
+  const handleDispatch = async () => {
+    const ok = await confirm({
+      title: "Mark deal as dispatched?",
+      message:
+        "This notifies every joined buyer with their delivery confirmation code and cannot be undone. Continue?",
+      confirmText: "Dispatch",
+    });
+    if (!ok) return;
+    dispatchDeal(deal.id, {
+      onError: (error) => {
+        const message =
+          error?.response?.data?.error ||
+          error?.message ||
+          "Could not dispatch this deal.";
+        alert({ title: "Dispatch failed", message, destructive: true });
+      },
+    });
   };
 
-  const handleMarkDelivered = (buyerId, buyerName) => {
-    Alert.alert(
-      isPickup ? "Mark picked up?" : "Mark delivered?",
-      isPickup
+  const handleMarkDelivered = async (buyerId, buyerName) => {
+    const ok = await confirm({
+      title: isPickup ? "Mark picked up?" : "Mark delivered?",
+      message: isPickup
         ? `Mark ${buyerName || "this buyer"}'s order as picked up without scanning their QR code? Use this only if they can't show it.`
         : `Mark ${buyerName || "this buyer"}'s delivery as complete without their OTP? Use this only if the buyer can't confirm themselves.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Mark Delivered",
-          onPress: () => {
-            markBuyerDelivered(
-              { dealId: deal.id, buyerId },
-              {
-                onError: (error) => {
-                  const message =
-                    error?.response?.data?.error ||
-                    error?.message ||
-                    "Could not mark this delivery.";
-                  Alert.alert("Failed", message);
-                },
-              },
-            );
-          },
+      confirmText: "Mark Delivered",
+    });
+    if (!ok) return;
+    markBuyerDelivered(
+      { dealId: deal.id, buyerId },
+      {
+        onError: (error) => {
+          const message =
+            error?.response?.data?.error ||
+            error?.message ||
+            "Could not mark this delivery.";
+          alert({ title: "Failed", message, destructive: true });
         },
-      ],
+      },
     );
   };
 
@@ -423,50 +401,135 @@ export default function DealDetails({ route, navigation }) {
   const editIcon =
     lifecycleStatus === "completed" ? "eye-outline" : "create-outline";
 
-  const GradientIconButton = ({ onPress, children }) => (
-    <TouchableOpacity onPress={onPress} style={styles.headerIconButton}>
-      <LinearGradient
-        colors={[theme.colors.primary, theme.colors.primaryDeep]}
-        style={styles.headerIconGradient}
-      >
-        <View style={styles.headerIconInner}>{children}</View>
-      </LinearGradient>
-    </TouchableOpacity>
-  );
+  const footerContent = (
+    <>
+      {(showLifecycleActions || canDispatch || isDispatched || isUnsuccessful) && (
+        <View style={styles.lifecycleActions}>
+          {showLifecycleActions && dispatchThresholdReached ? (
+            <>
+              <TouchableOpacity
+                onPress={handleMarkCompleted}
+                disabled={completing || !allBuyersPaid}
+              >
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.primaryDeep]}
+                  style={[styles.dispatchBtn, !allBuyersPaid && styles.disabledBtn]}
+                >
+                  <Text style={styles.dispatchBtnText}>
+                    {completing ? "Processing..." : "Mark Completed"}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              {!allBuyersPaid ? (
+                <Text style={styles.helperNoteText}>
+                  Waiting for all buyers to complete payment before this deal can be marked completed.
+                </Text>
+              ) : null}
+            </>
+          ) : null}
 
-  const headerBelowContent = (
-    <View style={styles.headerBelowRow}>
-      <View style={styles.headerActionItem}>
-        <GradientIconButton onPress={handleShareDeal}>
-          <Ionicons
-            name="share-social-outline"
-            size={16}
-            color={theme.colors.onPrimary}
-          />
-        </GradientIconButton>
-        <Text style={styles.headerActionLabel}>Share</Text>
-      </View>
-      <View style={styles.headerActionItem}>
-        <GradientIconButton onPress={() => navigation.navigate("DealChat", { deal })}>
-          <Ionicons
-            name="chatbubble-ellipses-outline"
-            size={16}
-            color={theme.colors.onPrimary}
-          />
-        </GradientIconButton>
-        <Text style={styles.headerActionLabel}>Chat</Text>
-      </View>
-      <View style={styles.headerActionItem}>
-        <GradientIconButton onPress={() => navigation.navigate("CreateDeal", { deal })}>
-          <Ionicons
-            name={editIcon}
-            size={16}
-            color={theme.colors.onPrimary}
-          />
-        </GradientIconButton>
-        <Text style={styles.headerActionLabel}>{editLabel}</Text>
-      </View>
-    </View>
+          {showLifecycleActions && !dispatchThresholdReached ? (
+            <TouchableOpacity
+              style={styles.endBtn}
+              onPress={handleExpireEarly}
+              disabled={expiringEarly}
+            >
+              <Text style={styles.endBtnText}>
+                {expiringEarly ? "Processing..." : "Expire Early"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {isUnsuccessful ? (
+            <View style={styles.unsuccessfulBanner}>
+              <Ionicons name="alert-circle-outline" size={18} color={theme.colors.error} />
+              <Text style={styles.unsuccessfulBannerText}>
+                This deal ended without reaching the minimum {target} buyers ({joinsCount} joined)
+                and did not qualify for dispatch. Any blocked buyer payments have been refunded.
+              </Text>
+            </View>
+          ) : null}
+
+          {canDispatch && dispatchThresholdReached ? (
+            allBuyersPaid ? (
+              <TouchableOpacity onPress={handleDispatch} disabled={dispatching}>
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.primaryDeep]}
+                  style={styles.dispatchBtn}
+                >
+                  <Text style={styles.dispatchBtnText}>
+                    {dispatching ? "Dispatching..." : "Mark as Dispatched"}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.helperNoteText}>
+                Waiting for all buyers to complete payment before this deal can be dispatched.
+              </Text>
+            )
+          ) : null}
+
+          {deal?.dispatchStatus === "dispatched" ? (
+            <View style={styles.dispatchedChip}>
+              <Ionicons name="checkmark-circle-outline" size={16} color={theme.colors.primary} />
+              <Text style={styles.dispatchedChipText}>
+                Dispatched{deal?.dispatchedAt ? ` on ${formatShortDate(deal.dispatchedAt)}` : ""}
+              </Text>
+            </View>
+          ) : null}
+
+          {deal?.dispatchStatus === "delivered" ? (
+            <View style={styles.deliveredBanner}>
+              <Ionicons name="checkmark-done-circle" size={18} color={theme.colors.success} />
+              <Text style={styles.deliveredBannerText}>
+                {isPickup ? "All buyers have picked up their orders." : "All buyers received their orders."}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+      <IconActionBar
+        items={[
+          {
+            key: "home",
+            onPress: () =>
+              navigation.navigate("MainTabs", { screen: "Dashboard" }),
+            label: "Home",
+            icon: (color) => (
+              <Ionicons name="home-outline" size={20} color={color} />
+            ),
+          },
+          {
+            key: "share",
+            onPress: handleShareDeal,
+            label: "Share",
+            icon: (color) => (
+              <Ionicons name="share-social-outline" size={20} color={color} />
+            ),
+          },
+          {
+            key: "chat",
+            onPress: () => navigation.navigate("DealChat", { deal }),
+            label: "Chat",
+            icon: (color) => (
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={20}
+                color={color}
+              />
+            ),
+          },
+          {
+            key: "edit",
+            onPress: () => navigation.navigate("CreateDeal", { deal }),
+            label: editLabel,
+            icon: (color) => (
+              <Ionicons name={editIcon} size={20} color={color} />
+            ),
+          },
+        ]}
+      />
+    </>
   );
 
   return (
@@ -475,7 +538,7 @@ export default function DealDetails({ route, navigation }) {
         headerTitle="Deal Details"
         onBack={() => navigation.goBack()}
         actions={null}
-        headerBelow={headerBelowContent}
+        footer={footerContent}
         images={getDealImages(deal)}
         title={deal.title || "Deal"}
         description={deal.description}
@@ -714,91 +777,7 @@ export default function DealDetails({ route, navigation }) {
 
       </DealDetailsLayout>
 
-      {(showLifecycleActions || canDispatch || isDispatched || isUnsuccessful) && (
-        <View style={styles.footer}>
-          {showLifecycleActions && dispatchThresholdReached ? (
-            <>
-              <TouchableOpacity
-                onPress={handleMarkCompleted}
-                disabled={completing || !allBuyersPaid}
-              >
-                <LinearGradient
-                  colors={[theme.colors.primary, theme.colors.primaryDeep]}
-                  style={[styles.dispatchBtn, !allBuyersPaid && styles.disabledBtn]}
-                >
-                  <Text style={styles.dispatchBtnText}>
-                    {completing ? "Processing..." : "Mark Completed"}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-              {!allBuyersPaid ? (
-                <Text style={styles.helperNoteText}>
-                  Waiting for all buyers to complete payment before this deal can be marked completed.
-                </Text>
-              ) : null}
-            </>
-          ) : null}
-
-          {showLifecycleActions && !dispatchThresholdReached ? (
-            <TouchableOpacity
-              style={styles.endBtn}
-              onPress={handleExpireEarly}
-              disabled={expiringEarly}
-            >
-              <Text style={styles.endBtnText}>
-                {expiringEarly ? "Processing..." : "Expire Early"}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {isUnsuccessful ? (
-            <View style={styles.unsuccessfulBanner}>
-              <Ionicons name="alert-circle-outline" size={18} color={theme.colors.error} />
-              <Text style={styles.unsuccessfulBannerText}>
-                This deal ended without reaching the minimum {target} buyers ({joinsCount} joined)
-                and did not qualify for dispatch. Any blocked buyer payments have been refunded.
-              </Text>
-            </View>
-          ) : null}
-
-          {canDispatch && dispatchThresholdReached ? (
-            allBuyersPaid ? (
-              <TouchableOpacity onPress={handleDispatch} disabled={dispatching}>
-                <LinearGradient
-                  colors={[theme.colors.primary, theme.colors.primaryDeep]}
-                  style={styles.dispatchBtn}
-                >
-                  <Text style={styles.dispatchBtnText}>
-                    {dispatching ? "Dispatching..." : "Mark as Dispatched"}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.helperNoteText}>
-                Waiting for all buyers to complete payment before this deal can be dispatched.
-              </Text>
-            )
-          ) : null}
-
-          {deal?.dispatchStatus === "dispatched" ? (
-            <View style={styles.dispatchedChip}>
-              <Ionicons name="checkmark-circle-outline" size={16} color={theme.colors.primary} />
-              <Text style={styles.dispatchedChipText}>
-                Dispatched{deal?.dispatchedAt ? ` on ${formatShortDate(deal.dispatchedAt)}` : ""}
-              </Text>
-            </View>
-          ) : null}
-
-          {deal?.dispatchStatus === "delivered" ? (
-            <View style={styles.deliveredBanner}>
-              <Ionicons name="checkmark-done-circle" size={18} color={theme.colors.success} />
-              <Text style={styles.deliveredBannerText}>
-                {isPickup ? "All buyers have picked up their orders." : "All buyers received their orders."}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      )}
+      <ConfirmModal {...confirmModalProps} />
     </View>
   );
 }
@@ -809,44 +788,8 @@ const createStyles = (theme) =>
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 120,
+    paddingBottom: 56,
     gap: 20,
-  },
-  headerBelowRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "center",
-    gap: 12,
-  },
-  headerActionItem: {
-    alignItems: "center",
-    gap: 4,
-  },
-  headerActionLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: theme.colors.onPrimaryMuted,
-  },
-  headerIconButton: {
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  headerIconGradient: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerIconInner: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: theme.colors.onPrimarySoft,
-    borderWidth: 1,
-    borderColor: theme.colors.onPrimaryMuted,
-    alignItems: "center",
-    justifyContent: "center",
   },
   insightsCard: {
     backgroundColor: theme.colors.surfaceGlass,
@@ -991,10 +934,7 @@ const createStyles = (theme) =>
     color: theme.colors.text,
     lineHeight: 18,
   },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    width: width,
+  lifecycleActions: {
     padding: 20,
     backgroundColor: theme.colors.background,
     borderTopWidth: 1,

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -15,6 +14,8 @@ import {
   AppInput,
   AppButton,
   DEAL_CATEGORIES,
+  ConfirmModal,
+  useConfirmModal,
 } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -31,6 +32,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [saving, setSaving] = useState(false);
+  const { confirm, alert, confirmModalProps } = useConfirmModal();
 
   // useUserProfile()'s Firestore listener is still async on first mount, so
   // `profile` is null for the initial render(s). Seeding the useState calls
@@ -95,17 +97,23 @@ export default function NotificationPreferencesScreen({ navigation }) {
     const min = minPrice.trim() === "" ? null : Number(minPrice);
     const max = maxPrice.trim() === "" ? null : Number(maxPrice);
     if (min != null && Number.isNaN(min)) {
-      Alert.alert("Invalid price", "Minimum price must be a number.");
+      await alert({ title: "Invalid price", message: "Minimum price must be a number." });
       return;
     }
     if (max != null && Number.isNaN(max)) {
-      Alert.alert("Invalid price", "Maximum price must be a number.");
+      await alert({ title: "Invalid price", message: "Maximum price must be a number." });
       return;
     }
     if (min != null && max != null && min > max) {
-      Alert.alert("Invalid price range", "Minimum price can't be greater than maximum price.");
+      await alert({ title: "Invalid price range", message: "Minimum price can't be greater than maximum price." });
       return;
     }
+
+    const ok = await confirm({
+      title: "Save notification preferences?",
+      confirmText: "Save Preferences",
+    });
+    if (!ok) return;
 
     setSaving(true);
     try {
@@ -120,7 +128,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
       });
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Couldn't save", error.message || "Please try again.");
+      await alert({ title: "Couldn't save", message: error.message || "Please try again.", destructive: true });
     } finally {
       setSaving(false);
     }
@@ -283,6 +291,8 @@ export default function NotificationPreferencesScreen({ navigation }) {
           loading={saving}
         />
       </ScrollView>
+
+      <ConfirmModal {...confirmModalProps} />
     </View>
   );
 }

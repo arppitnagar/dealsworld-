@@ -4,12 +4,10 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Share,
   Modal,
   Animated,
   Easing,
-  ActivityIndicator,
   StyleSheet,
   TextInput,
 } from "react-native";
@@ -24,6 +22,7 @@ import {
   formatINR,
   SkeletonBlock,
   DealDetailsLayout,
+  IconActionBar,
   useTheme,
   EmptyState,
   AppButton,
@@ -36,6 +35,8 @@ import {
   calculatePriceBreakup,
   resolveTierPrice,
   getNextTierInfo,
+  ConfirmModal,
+  useConfirmModal,
 } from "@dealsworld/shared";
 import {
   useDeals,
@@ -179,6 +180,7 @@ export default function DealDetailsScreen({ route, navigation }) {
     loading: dealStateLoading,
     setDeliveryAddress,
   } = useDealState();
+  const { confirm, alert, confirmModalProps } = useConfirmModal();
   const hasRecorded = useRef(false);
   const [successFeedback, setSuccessFeedback] = useState(null);
   const [showBreakupModal, setShowBreakupModal] = useState(false);
@@ -354,10 +356,10 @@ export default function DealDetailsScreen({ route, navigation }) {
     toggleFavorite(dealId);
   };
 
-  const handleConfirmAddress = () => {
+  const handleConfirmAddress = async () => {
     const address = addresses?.find((item) => item.id === selectedAddressId);
     if (!address) {
-      Alert.alert("Select address", "Please choose a delivery address.");
+      await alert({ title: "Select address", message: "Please choose a delivery address." });
       return;
     }
     setShowAddressModal(false);
@@ -370,8 +372,14 @@ export default function DealDetailsScreen({ route, navigation }) {
     handleJoin(address);
   };
 
-  const handleJoin = (address) => {
+  const handleJoin = async (address) => {
     if (joining) return;
+    const ok = await confirm({
+      title: "Join this deal?",
+      message: "You're about to join this group deal. You can leave anytime before it closes.",
+      confirmText: "Join Deal",
+    });
+    if (!ok) return;
     const deliveryAddressPayload = address || dealState?.deliveryAddress || null;
     joinDeal(
       {
@@ -405,19 +413,25 @@ export default function DealDetailsScreen({ route, navigation }) {
               : error?.response?.data?.error ||
                 error?.message ||
                 "Unable to join this deal.";
-          Alert.alert("Join failed", message);
+          alert({ title: "Join failed", message, destructive: true });
         },
       },
     );
   };
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!dealId || paying) return;
+    const ok = await confirm({
+      title: "Confirm payment?",
+      message: `You're about to pay ${formatINR(priceBreakup.total)} for this deal. This can't be undone.`,
+      confirmText: "Pay Now",
+    });
+    if (!ok) return;
     payForDeal(dealId, {
       onError: (error) => {
         const message =
           error?.response?.data?.error || error?.message || "Unable to process payment.";
-        Alert.alert("Payment failed", message);
+        alert({ title: "Payment failed", message, destructive: true });
       },
     });
   };
@@ -434,7 +448,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         onError: (error) => {
           const message =
             error?.response?.data?.error || error?.message || "Unable to confirm delivery.";
-          Alert.alert("Incorrect code", message);
+          alert({ title: "Incorrect code", message, destructive: true });
         },
       },
     );
@@ -498,14 +512,21 @@ export default function DealDetailsScreen({ route, navigation }) {
   const handleSubmitReview = async () => {
     if (!dealId) return;
     if (!isBuyer) {
-      Alert.alert("Not allowed", "Only buyers can submit reviews.");
+      await alert({ title: "Not allowed", message: "Only buyers can submit reviews." });
       return;
     }
     if (!user?.uid) {
-      Alert.alert("Login required", "Please sign in to leave a review.");
+      await alert({ title: "Login required", message: "Please sign in to leave a review." });
       return;
     }
     if (submittingReview) return;
+
+    const ok = await confirm({
+      title: "Submit this review?",
+      message: "Your rating and comment will be visible to the seller and other buyers.",
+      confirmText: "Submit Review",
+    });
+    if (!ok) return;
 
     try {
       setSubmittingReview(true);
@@ -514,11 +535,11 @@ export default function DealDetailsScreen({ route, navigation }) {
         comment: commentText,
         displayName: profile?.displayName || user?.displayName,
       });
-      Alert.alert("Thanks!", "Your rating has been saved.");
+      await alert({ title: "Thanks!", message: "Your rating has been saved.", tone: "success" });
     } catch (error) {
       const message =
         error?.message || "We could not save your review. Please try again.";
-      Alert.alert("Review failed", message);
+      await alert({ title: "Review failed", message, destructive: true });
     } finally {
       setSubmittingReview(false);
     }
@@ -630,24 +651,31 @@ export default function DealDetailsScreen({ route, navigation }) {
     },
   ];
 
-  const handleToggleJoin = () => {
+  const handleToggleJoin = async () => {
     if (!dealId) return;
     if (joining || leaving) {
-      Alert.alert(
-        "Please wait",
-        "We are updating your deal status. Try again in a moment.",
-      );
+      await alert({
+        title: "Please wait",
+        message: "We are updating your deal status. Try again in a moment.",
+      });
       return;
     }
     if (!hasJoined && dealFull) {
-      Alert.alert(
-        "Deal full",
-        "This deal has reached its maximum number of buyers.",
-      );
+      await alert({
+        title: "Deal full",
+        message: "This deal has reached its maximum number of buyers.",
+      });
       return;
     }
     if (hasJoined) {
       if (leaving) return;
+      const ok = await confirm({
+        title: "Leave this deal?",
+        message: "You'll lose your spot in this group buy and may need to rejoin if it fills up.",
+        confirmText: "Leave Deal",
+        destructive: true,
+      });
+      if (!ok) return;
       leaveDeal(dealId, {
         onSuccess: () => {
           unmarkJoined(dealId).catch((error) => {
@@ -671,7 +699,7 @@ export default function DealDetailsScreen({ route, navigation }) {
             : error?.response?.data?.error ||
               error?.message ||
               "Unable to leave this deal.";
-          Alert.alert("Leave failed", message);
+          alert({ title: "Leave failed", message, destructive: true });
         },
       });
       return;
@@ -679,24 +707,19 @@ export default function DealDetailsScreen({ route, navigation }) {
 
     if (requiresDeliveryAddress) {
       if (addressesLoading) {
-        Alert.alert(
-          "Please wait",
-          "Loading your saved addresses. Try again in a moment.",
-        );
+        await alert({
+          title: "Please wait",
+          message: "Loading your saved addresses. Try again in a moment.",
+        });
         return;
       }
       if (!addressesLoading && !hasAnyAddress) {
-        Alert.alert(
-          "Delivery address needed",
-          "Please add a delivery address before joining this deal.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Add Address",
-              onPress: () => navigation.navigate("AddressForm"),
-            },
-          ],
-        );
+        const addAddress = await confirm({
+          title: "Delivery address needed",
+          message: "Please add a delivery address before joining this deal.",
+          confirmText: "Add Address",
+        });
+        if (addAddress) navigation.navigate("AddressForm");
         return;
       }
       const selectedAddress =
@@ -709,10 +732,10 @@ export default function DealDetailsScreen({ route, navigation }) {
         null;
 
       if (!selectedAddress) {
-        Alert.alert(
-          "Select delivery address",
-          "Please choose one delivery address from your saved addresses.",
-        );
+        await alert({
+          title: "Select delivery address",
+          message: "Please choose one delivery address from your saved addresses.",
+        });
         setShowAddressModal(true);
         return;
       }
@@ -729,94 +752,72 @@ export default function DealDetailsScreen({ route, navigation }) {
     handleJoin();
   };
 
-  const BarItem = ({ onPress, active, tone, label, children }) => {
-    const color =
-      tone === "danger"
-        ? theme.colors.danger
-        : active
-          ? theme.colors.primary
-          : theme.colors.textMuted;
-    return (
-      <TouchableOpacity
-        style={[styles.bottomBarItem, active && styles.bottomBarItemActive]}
-        activeOpacity={0.75}
-        onPress={onPress}
-      >
-        {children(color)}
-        <Text style={[styles.bottomBarLabel, { color }]}>{label}</Text>
-      </TouchableOpacity>
-    );
-  };
-
   const footerContent = (
-    <View
-      style={[
-        styles.bottomBar,
-        { paddingBottom: Math.max(insets.bottom, 16) },
-      ]}
-    >
-      <BarItem
-        onPress={() => navigation.navigate("MainTabs", { screen: "Home" })}
-        label="Home"
-      >
-        {(color) => <Ionicons name="home-outline" size={20} color={color} />}
-      </BarItem>
-      <BarItem
-        onPress={handleToggleJoin}
-        active={hasJoined}
-        tone={hasJoined ? "danger" : undefined}
-        label={hasJoined ? "Leave" : dealFull ? "Full" : "Join"}
-      >
-        {(color) =>
-          joining || leaving ? (
-            <ActivityIndicator color={color} size="small" />
-          ) : !hasJoined && dealFull ? (
-            <Ionicons name="lock-closed-outline" size={20} color={color} />
-          ) : (
-            <Ionicons
-              name={hasJoined ? "exit-outline" : "person-add-outline"}
-              size={20}
-              color={color}
-            />
-          )
-        }
-      </BarItem>
-      <BarItem onPress={handleShareDeal} label="Share">
-        {(color) => (
-          <Ionicons name="share-social-outline" size={20} color={color} />
-        )}
-      </BarItem>
-      {hasJoined && (
-        <BarItem
-          onPress={() =>
-            navigation.navigate("DealChat", { dealId: deal.id, deal })
-          }
-          label="Chat"
-        >
-          {(color) => (
+    <IconActionBar
+      items={[
+        {
+          key: "home",
+          onPress: () => navigation.navigate("MainTabs", { screen: "Home" }),
+          label: "Home",
+          icon: (color) => (
+            <Ionicons name="home-outline" size={20} color={color} />
+          ),
+        },
+        {
+          key: "join",
+          onPress: handleToggleJoin,
+          active: hasJoined,
+          tone: hasJoined ? "danger" : undefined,
+          label: hasJoined ? "Leave" : dealFull ? "Full" : "Join",
+          loading: joining || leaving,
+          icon: (color) =>
+            !hasJoined && dealFull ? (
+              <Ionicons name="lock-closed-outline" size={20} color={color} />
+            ) : (
+              <Ionicons
+                name={hasJoined ? "exit-outline" : "person-add-outline"}
+                size={20}
+                color={color}
+              />
+            ),
+        },
+        {
+          key: "share",
+          onPress: handleShareDeal,
+          label: "Share",
+          icon: (color) => (
+            <Ionicons name="share-social-outline" size={20} color={color} />
+          ),
+        },
+        hasJoined && {
+          key: "chat",
+          onPress: () =>
+            navigation.navigate("DealChat", { dealId: deal.id, deal }),
+          label: "Chat",
+          icon: (color) => (
             <Ionicons
               name="chatbubble-ellipses-outline"
               size={20}
               color={color}
             />
-          )}
-        </BarItem>
-      )}
-      <BarItem
-        onPress={handleToggleFavorite}
-        active={isFavorite}
-        tone={isFavorite ? "danger" : undefined}
-        label="Liked"
-      >
-        {(color) => (
-          <Heart
-            size={20}
-            color={color}
-            fill={isFavorite ? theme.colors.danger : "transparent"}
-          />
-        )}
-      </BarItem>
-    </View>
+          ),
+        },
+        {
+          key: "liked",
+          onPress: handleToggleFavorite,
+          active: isFavorite,
+          tone: isFavorite ? "danger" : undefined,
+          label: "Liked",
+          icon: (color) => (
+            <Heart
+              size={20}
+              color={color}
+              fill={isFavorite ? theme.colors.danger : "transparent"}
+            />
+          ),
+        },
+      ]}
+    />
   );
 
   return (
@@ -1238,19 +1239,14 @@ export default function DealDetailsScreen({ route, navigation }) {
               {canEditAddress ? (
                 <AppButton
                   title={deliveryAddress ? "Change Address" : "Add Address"}
-                  onPress={() => {
+                  onPress={async () => {
                     if (!addressesLoading && (!addresses || addresses.length === 0)) {
-                      Alert.alert(
-                        "No saved address",
-                        "Please add a delivery address to continue.",
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Add Address",
-                            onPress: () => navigation.navigate("AddressForm"),
-                          },
-                        ],
-                      );
+                      const addAddress = await confirm({
+                        title: "No saved address",
+                        message: "Please add a delivery address to continue.",
+                        confirmText: "Add Address",
+                      });
+                      if (addAddress) navigation.navigate("AddressForm");
                       return;
                     }
                     setShowAddressModal(true);
@@ -1272,6 +1268,8 @@ export default function DealDetailsScreen({ route, navigation }) {
         onClose={() => setShowBreakupModal(false)}
         breakup={priceBreakup}
       />
+
+      <ConfirmModal {...confirmModalProps} />
 
       {showAddressModal && (
         <Modal
@@ -1437,32 +1435,6 @@ const createStyles = (theme) =>
     paddingTop: 20,
     paddingBottom: 56,
     gap: 20,
-  },
-  bottomBar: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    ...theme.shadow.card,
-  },
-  bottomBarItem: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  bottomBarItemActive: {
-    backgroundColor: theme.colors.primaryTintBg,
-  },
-  bottomBarLabel: {
-    fontSize: 10,
-    fontWeight: "700",
   },
   insightsCard: {
     backgroundColor: theme.colors.surfaceGlass,
