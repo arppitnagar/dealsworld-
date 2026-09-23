@@ -4,6 +4,7 @@ import {
   doc,
   deleteDoc,
   getDocsFromServer,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -13,6 +14,8 @@ import {
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
+
+const NOTIFICATIONS_LIMIT = 50;
 
 export const useNotifications = () => {
   const { user } = useAuth();
@@ -26,7 +29,7 @@ export const useNotifications = () => {
       return undefined;
     }
     const ref = collection(db, "users", user.uid, "notifications");
-    const q = query(ref, orderBy("createdAt", "desc"));
+    const q = query(ref, orderBy("createdAt", "desc"), limit(NOTIFICATIONS_LIMIT));
     const unsubscribe = onSnapshot(q, (snap) => {
       const list = snap.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -77,7 +80,7 @@ export const useNotifications = () => {
   const refreshNotifications = useCallback(async () => {
     if (!user) return;
     const ref = collection(db, "users", user.uid, "notifications");
-    const q = query(ref, orderBy("createdAt", "desc"));
+    const q = query(ref, orderBy("createdAt", "desc"), limit(NOTIFICATIONS_LIMIT));
     const snap = await getDocsFromServer(q);
     setNotifications(
       snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),

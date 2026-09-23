@@ -168,7 +168,38 @@ async function maybeExpireDeal(dealId, deal, { via = "lazy" } = {}) {
   }
 }
 
+const SWEEP_CONCURRENCY = 10;
+
+// Each due deal is an independent transaction on its own document, so
+// running them one at a time (as this used to) makes total sweep duration
+// scale linearly with the number of due deals. At enough active deals, a
+// sweep can take longer than the interval it's scheduled on (server.js),
+// causing overlapping runs. Process a bounded number concurrently instead.
+async function expireDealsWithConcurrency(dealIds) {
+  let cursor = 0;
+  async function worker() {
+    while (cursor < dealIds.length) {
+      const dealId = dealIds[cursor++];
+      try {
+        await expireDealTransactional(dealId, { via: "sweep" });
+      } catch (error) {
+        console.warn("Expiry sweep failed for deal", dealId, error.message || error);
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(SWEEP_CONCURRENCY, dealIds.length) }, worker),
+  );
+}
+
+let sweepInFlight = false;
+
 async function runExpirySweep() {
+  // Guard against overlapping runs - if a previous sweep is still working
+  // through a large due-deal backlog when the next interval fires, let it
+  // finish rather than starting a second pass over the same collection.
+  if (sweepInFlight) return;
+  sweepInFlight = true;
   try {
     const snap = await db
       .collection(DEALS_COLLECTION)
@@ -179,15 +210,11 @@ async function runExpirySweep() {
       .filter((doc) => isEligibleForAutoExpiry(doc.data() || {}, nowMs))
       .map((doc) => doc.id);
 
-    for (const dealId of dueDealIds) {
-      try {
-        await expireDealTransactional(dealId, { via: "sweep" });
-      } catch (error) {
-        console.warn("Expiry sweep failed for deal", dealId, error.message || error);
-      }
-    }
+    await expireDealsWithConcurrency(dueDealIds);
   } catch (error) {
     console.warn("Expiry sweep query failed:", error.message || error);
+  } finally {
+    sweepInFlight = false;
   }
 }
 

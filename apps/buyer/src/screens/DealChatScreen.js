@@ -22,6 +22,7 @@ import apiClient from "../api/client";
 import {
   collection,
   addDoc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -55,13 +56,18 @@ export default function DealChatScreen({ route, navigation }) {
   useEffect(() => {
     if (!dealId) return;
     const messagesRef = collection(db, "deals", dealId, "messages");
-    const q = query(messagesRef, orderBy("createdAt", "asc"));
+    // Most recent first + limit, then reversed below - an unbounded asc
+    // query re-syncs the entire message history on every snapshot, which
+    // only gets worse the longer a deal's chat thread lives.
+    const q = query(messagesRef, orderBy("createdAt", "desc"), limit(200));
     const unsubscribe = onSnapshot(q, (snap) => {
-      const list = snap.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ref: docSnap.ref,
-        ...docSnap.data(),
-      }));
+      const list = snap.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ref: docSnap.ref,
+          ...docSnap.data(),
+        }))
+        .reverse();
 
       // Only mark newly-added messages, not the whole list on every single
       // snapshot - re-scanning and re-writing every message on every change

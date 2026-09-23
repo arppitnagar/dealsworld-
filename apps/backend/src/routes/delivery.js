@@ -4,6 +4,7 @@ const {
   FieldValue,
   DEALS_COLLECTION,
   DEAL_JOINS_COLLECTION,
+  USERS_COLLECTION,
   asNumber,
   getSellerId,
   getUserDisplayName,
@@ -327,17 +328,43 @@ router.get(
         .get();
 
       const buyerIds = joinsSnap.docs.map((doc) => doc.data().buyerId).filter(Boolean);
+      const uniqueBuyerIds = [...new Set(buyerIds)];
       // Never fall back to the raw buyerId (an internal Firestore UID) for
       // display - ensureUserProfile backfills a buyerCode for any legacy
       // profile missing one (same self-healing pattern as maybeAssignDealCode),
-      // so the worst case is the generic "Buyer" label, not the UID.
-      const profiles = await Promise.all(
-        buyerIds.map((buyerId) => ensureUserProfile(buyerId)),
-      );
+      // so the worst case is the generic "Buyer" label, not the UID. Batch
+      // the common case (profile already complete) into one getAll() round
+      // trip instead of one ensureUserProfile() read per joined buyer - for
+      // a popular deal with thousands of joiners this was thousands of
+      // individual reads on every poll.
+      const profileById = new Map();
+      if (uniqueBuyerIds.length) {
+        const refs = uniqueBuyerIds.map((id) => db.collection(USERS_COLLECTION).doc(id));
+        const snaps = await db.getAll(...refs);
+        const needsBackfill = [];
+        snaps.forEach((snap, index) => {
+          const buyerId = uniqueBuyerIds[index];
+          const data = snap.exists ? snap.data() || {} : null;
+          const role = String(data?.role || "").toLowerCase();
+          if (!data || !role || (role === "buyer" && !data.buyerCode)) {
+            needsBackfill.push(buyerId);
+          } else {
+            profileById.set(buyerId, { id: buyerId, ...data });
+          }
+        });
+        if (needsBackfill.length) {
+          const backfilled = await Promise.all(
+            needsBackfill.map((buyerId) => ensureUserProfile(buyerId)),
+          );
+          needsBackfill.forEach((buyerId, index) => {
+            profileById.set(buyerId, backfilled[index]);
+          });
+        }
+      }
       const namesById = new Map();
       const codesById = new Map();
-      profiles.forEach((profile, index) => {
-        const buyerId = buyerIds[index];
+      uniqueBuyerIds.forEach((buyerId) => {
+        const profile = profileById.get(buyerId) || {};
         const buyerCode = profile.buyerCode || null;
         codesById.set(buyerId, buyerCode);
         namesById.set(buyerId, getUserDisplayName(profile, buyerCode || "Buyer"));

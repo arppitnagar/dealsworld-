@@ -62,9 +62,9 @@ export function AppInput({
         },
         leftIcon: {
           position: "absolute",
-          left: 12,
+          left: 8,
           top: "50%",
-          marginTop: -10,
+          marginTop: -14,
           width: 28,
           height: 28,
           borderRadius: 14,
@@ -73,14 +73,15 @@ export function AppInput({
         },
         rightIcon: {
           position: "absolute",
-          right: 12,
+          right: 8,
           top: "50%",
-          marginTop: -10,
+          marginTop: -14,
           width: 28,
           height: 28,
           borderRadius: 14,
           alignItems: "center",
           justifyContent: "center",
+          backgroundColor: theme.colors.border,
         },
         inputMultiline: {
           minHeight: 100,
@@ -145,6 +146,7 @@ export function AppInput({
             <TouchableOpacity
               onPress={onRightPress}
               style={[styles.rightIcon, rightContainerStyle]}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
             >
               {rightElement}

@@ -20,7 +20,7 @@ import AddressFormScreen from "./src/screens/AddressFormScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { usePushToken } from "./src/hooks/usePushToken";
-import { useUserProfile } from "./src/hooks/useUserProfile";
+import { useUserProfile, UserProfileProvider } from "./src/hooks/useUserProfile";
 import { useVersionGate } from "./src/hooks/useVersionGate";
 import {
   DealBuddyLoadingScreen,
@@ -189,13 +189,15 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ThemeProvider initialMode="light" app="seller">
-          <ThemeBootstrap>
-            <NavigationContainer>
-              <AppNavigator />
-            </NavigationContainer>
-          </ThemeBootstrap>
-        </ThemeProvider>
+        <UserProfileProvider>
+          <ThemeProvider initialMode="light" app="seller">
+            <ThemeBootstrap>
+              <NavigationContainer>
+                <AppNavigator />
+              </NavigationContainer>
+            </ThemeBootstrap>
+          </ThemeProvider>
+        </UserProfileProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

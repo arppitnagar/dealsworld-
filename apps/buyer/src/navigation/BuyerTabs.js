@@ -18,7 +18,7 @@ const icon = (name, outlineName) => (focused, color) => (
 const TAB_CONFIG = [
   { key: "Home", label: "Home", icon: icon("home", "home-outline") },
   { key: "Deals", label: "Deals", icon: icon("pricetag", "pricetag-outline") },
-  { key: "Search", label: "Search", icon: icon("search", "search-outline") },
+  { key: "Search", label: "Search", icon: icon("search", "search-outline"), toggle: true },
 ];
 
 export default function BuyerTabs() {

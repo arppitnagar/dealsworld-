@@ -1,5 +1,17 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import apiClient from "../api/client";
+
+const DEALS_PAGE_SIZE = 20;
+// Matches the old single-fetch endpoint's effective ceiling (it always
+// requested limit=200) - used for the sort/search fallback below, so that
+// mode isn't missing deals the old single-fetch behavior would have shown.
+const FULL_SET_LIMIT = 200;
 
 const NETWORK_RETRY_DELAYS_MS = [500];
 const MUTATION_TIMEOUT_MS = 8_000;
@@ -40,26 +52,84 @@ async function postWithNetworkRetry(url, body, config = {}) {
   throw lastError;
 }
 
-// Hook to fetch all active deals
-export const useDeals = () => {
-  return useQuery({
-    queryKey: ["deals"],
-    queryFn: async () => {
+// Hook to fetch active deals. GET /deals returns { deals, nextCursor }
+// (cursor-based pagination).
+//
+// Sort/search/field-filter (useDealSearchControls, applied client-side in
+// Home/DealsScreen) only give correct results over the FULL active-deals
+// set, not just whatever pages have been scrolled into so far - pass
+// fullSet: true while any of those are active to fetch everything in one
+// shot (same ceiling the old single-fetch endpoint used) instead of
+// paginating. Both queries always exist (React Query's rules of hooks
+// don't allow conditionally calling one); only one is enabled at a time.
+export const useDeals = ({ fullSet = false } = {}) => {
+  const pagedQuery = useInfiniteQuery({
+    queryKey: ["deals", "paged"],
+    queryFn: async ({ pageParam }) => {
       const { data } = await apiClient.get("/deals", {
-        params: { limit: 200 },
-      }); // Ensure you have this GET route in server.js
+        params: { limit: DEALS_PAGE_SIZE, cursor: pageParam || undefined },
+      });
       return data;
     },
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => lastPage?.nextCursor ?? null,
+    enabled: !fullSet,
     // Keep buyer dashboard close to real-time for admin approvals.
     staleTime: 2_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: true,
     refetchOnMount: "always",
     refetchOnReconnect: true,
-    refetchInterval: 4_000,
+    refetchInterval: fullSet ? false : 4_000,
     refetchIntervalInBackground: false,
     placeholderData: (previous) => previous,
   });
+
+  const fullQuery = useQuery({
+    queryKey: ["deals", "full"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/deals", {
+        params: { limit: FULL_SET_LIMIT },
+      });
+      return data.deals;
+    },
+    enabled: fullSet,
+    staleTime: 2_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
+    refetchInterval: fullSet ? 4_000 : false,
+    refetchIntervalInBackground: false,
+    placeholderData: (previous) => previous,
+  });
+
+  const pagedDeals = useMemo(
+    () => pagedQuery.data?.pages.flatMap((page) => page.deals) ?? [],
+    [pagedQuery.data],
+  );
+
+  if (fullSet) {
+    return {
+      data: fullQuery.data ?? [],
+      isLoading: fullQuery.isLoading,
+      isFetching: fullQuery.isFetching,
+      refetch: fullQuery.refetch,
+      fetchNextPage: () => {},
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    };
+  }
+
+  return {
+    data: pagedDeals,
+    isLoading: pagedQuery.isLoading,
+    isFetching: pagedQuery.isFetching,
+    refetch: pagedQuery.refetch,
+    fetchNextPage: pagedQuery.fetchNextPage,
+    hasNextPage: Boolean(pagedQuery.hasNextPage),
+    isFetchingNextPage: pagedQuery.isFetchingNextPage,
+  };
 };
 
 // Every deal the buyer has joined, regardless of the deal's own status -

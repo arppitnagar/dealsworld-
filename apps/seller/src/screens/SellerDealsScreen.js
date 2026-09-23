@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, StyleSheet } from "react-native";
+import { View, Text, FlatList, RefreshControl, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   useTheme,
@@ -10,7 +10,7 @@ import {
   ViewModeToggle,
   getStatusColor,
   getStatusLabel,
-  getDealImages,
+  getDealThumbnails,
   toDate,
 } from "@dealsworld/shared";
 import { useSellerLiveDeals } from "../hooks/useSellerLiveDeals";
@@ -106,94 +106,96 @@ export default function SellerDealsScreen({ navigation }) {
     return <DealBuddyLoadingScreen label="Loading deals..." />;
   }
 
+  const renderDeal = ({ item: deal }) => {
+    const displayStatus = getDealDisplayStatus(deal, now);
+    const expiryDate = toDate(deal.expiresAt);
+    const endsInLabel =
+      expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
+        ? formatEndsIn(expiryDate.getTime(), now)
+        : null;
+
+    return (
+      <View style={viewMode === "grid" ? styles.gridItem : null}>
+        <DealCard
+          compact={viewMode === "grid"}
+          title={deal.title}
+          category={deal.category || null}
+          images={getDealThumbnails(deal)}
+          joins={deal.currentJoins ?? deal.joinedUsers ?? 0}
+          targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
+          maxCount={deal.maxGroupSize ?? null}
+          accentColor={getStatusColor(displayStatus, theme)}
+          badgeLabel={getStatusLabel(displayStatus)}
+          statusLabel={getStatusLabel(displayStatus)}
+          viewsCount={deal.viewsCount ?? deal.views ?? 0}
+          favoritesCount={deal.favoritesCount ?? deal.favouritesCount ?? 0}
+          ratingAvg={deal.ratingAvg ?? deal.rating ?? null}
+          ratingCount={deal.ratingCount ?? 0}
+          originalPrice={deal.originalPrice}
+          discountPrice={deal.discountPrice}
+          expiryLabel={endsInLabel}
+          actionLabel="View Deal"
+          onActionPress={() => navigation.navigate("DealDetails", { deal })}
+        />
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={() => {}} />}
-      >
-        <SellerDashboardHeader
-          navigation={navigation}
-          now={now}
-          displayName={sellerDisplayName}
-          unreadCount={unreadCount}
-          searchText={controls.searchText}
-          onChangeSearchText={controls.setSearchText}
-          sortActive={Boolean(controls.sortField)}
-          onPressSort={() => controls.setIsSortVisible(true)}
-          filterActive={controls.hasFieldFilter}
-          onPressFilter={() => controls.setIsFilterVisible(true)}
-          showSearchControls
-        />
+      <SellerDashboardHeader
+        navigation={navigation}
+        now={now}
+        displayName={sellerDisplayName}
+        unreadCount={unreadCount}
+        searchText={controls.searchText}
+        onChangeSearchText={controls.setSearchText}
+        sortActive={Boolean(controls.sortField)}
+        onPressSort={() => controls.setIsSortVisible(true)}
+        filterActive={controls.hasFieldFilter}
+        onPressFilter={() => controls.setIsFilterVisible(true)}
+        showSearchControls
+      />
 
-        <View style={[styles.listWrap, !sortedDeals?.length && styles.listWrapEmpty]}>
+      <FlatList
+        key={viewMode}
+        data={sortedDeals}
+        keyExtractor={(deal) => deal.id}
+        numColumns={viewMode === "grid" ? 2 : 1}
+        columnWrapperStyle={viewMode === "grid" ? styles.gridRow : undefined}
+        renderItem={renderDeal}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          !sortedDeals?.length && styles.listWrapEmpty,
+        ]}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => {}} />}
+        ListHeaderComponent={
           <CardHeader
             title={`${sectionTitle} (${sortedDeals?.length || 0})`}
             right={<ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />}
           />
-
-          {sortedDeals?.length > 0 ? (
-            <View style={viewMode === "grid" ? styles.grid : null}>
-              {sortedDeals.map((deal) => {
-              const displayStatus = getDealDisplayStatus(deal, now);
-              const expiryDate = toDate(deal.expiresAt);
-              const endsInLabel =
-                expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
-                  ? formatEndsIn(expiryDate.getTime(), now)
-                  : null;
-
-              return (
-                <View
-                  key={deal.id}
-                  style={viewMode === "grid" ? styles.gridItem : null}
-                >
-                <DealCard
-                  compact={viewMode === "grid"}
-                  title={deal.title}
-                  category={deal.category || null}
-                  images={getDealImages(deal)}
-                  joins={deal.currentJoins ?? deal.joinedUsers ?? 0}
-                  targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
-                  maxCount={deal.maxGroupSize ?? null}
-                  accentColor={getStatusColor(displayStatus, theme)}
-                  badgeLabel={getStatusLabel(displayStatus)}
-                  statusLabel={getStatusLabel(displayStatus)}
-                  viewsCount={deal.viewsCount ?? deal.views ?? 0}
-                  favoritesCount={deal.favoritesCount ?? deal.favouritesCount ?? 0}
-                  ratingAvg={deal.ratingAvg ?? deal.rating ?? null}
-                  ratingCount={deal.ratingCount ?? 0}
-                  originalPrice={deal.originalPrice}
-                  discountPrice={deal.discountPrice}
-                  expiryLabel={endsInLabel}
-                  actionLabel="View Deal"
-                  onActionPress={() => navigation.navigate("DealDetails", { deal })}
-                />
-                </View>
-              );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyWrap}>
-              <EmptyState
-                icon="pricetag-outline"
-                title={
-                  controls.isSearching
-                    ? "No deals match your search."
-                    : selectedStatus
-                      ? "No deals with this status."
-                      : "No deals yet."
-                }
-                subtitle={
-                  controls.isSearching
-                    ? "Try a different search term."
-                    : "Pull to refresh or pick another status."
-                }
-              />
-            </View>
-          )}
-        </View>
-      </ScrollView>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              icon="pricetag-outline"
+              title={
+                controls.isSearching
+                  ? "No deals match your search."
+                  : selectedStatus
+                    ? "No deals with this status."
+                    : "No deals yet."
+              }
+              subtitle={
+                controls.isSearching
+                  ? "Try a different search term."
+                  : "Pull to refresh or pick another status."
+              }
+            />
+          </View>
+        }
+      />
 
       <SellerStatusModal
         visible={isPickerVisible}
@@ -217,8 +219,6 @@ const createStyles = (theme) =>
     },
     scrollContent: {
       flexGrow: 1,
-    },
-    listWrap: {
       paddingHorizontal: 20,
       paddingTop: 24,
       paddingBottom: 32,
@@ -226,11 +226,8 @@ const createStyles = (theme) =>
     listWrapEmpty: {
       flex: 1,
     },
-    grid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
+    gridRow: {
       justifyContent: "space-between",
-      marginTop: 16,
     },
     gridItem: {
       width: "48%",

@@ -3,7 +3,8 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
+  ActivityIndicator,
   RefreshControl,
   StyleSheet,
   StatusBar,
@@ -24,7 +25,7 @@ import {
   DealBuddyLoadingScreen,
   DealCard,
   ViewModeToggle,
-  getDealImages,
+  getDealThumbnails,
 } from "@dealsworld/shared";
 import DashboardHeader from "../components/DashboardHeader";
 import DealSearchModals from "../components/DealSearchModals";
@@ -44,11 +45,23 @@ import {
 } from "../utils/dealCategories";
 
 export default function HomeScreen({ navigation }) {
-  const { data: deals, isLoading, refetch } = useDeals();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [now, setNow] = useState(Date.now());
   const controls = useDealSearchControls();
+  // Sort/filter/search only give correct results over the full active-deals
+  // set, not just whatever pages have been scrolled into so far - fall back
+  // to a one-shot full fetch (pausing infinite scroll) while any are active.
+  // See useDeals.js.
+  const needsFullSet = Boolean(controls.sortField) || controls.isSearching || controls.hasFieldFilter;
+  const {
+    data: deals,
+    isLoading,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useDeals({ fullSet: needsFullSet });
   const {
     viewedIds,
     favoriteIds,
@@ -95,38 +108,103 @@ export default function HomeScreen({ navigation }) {
 
   const sortedDeals = controls.applyFieldFilterAndSort(filteredDeals);
 
-  const dealsHeaderTitle = controls.isSearching ? "Search Results" : "New Deals";
+  const dealsHeaderTitle = `${
+    controls.isSearching ? "Search Results" : "New Deals"
+  } (${sortedDeals?.length || 0})`;
   const hasDeals = sortedDeals?.length > 0;
 
   if (isLoading || dealStateLoading) {
     return <DealBuddyLoadingScreen label="Loading deals..." />;
   }
 
+  const renderDeal = ({ item: deal }) => {
+    const expiryMs = getExpiryMs(deal);
+    const viewsCountRaw = deal?.viewsCount ?? deal?.views ?? 0;
+    const favoritesCountRaw = deal?.favoritesCount ?? deal?.favouritesCount ?? 0;
+    const needsPay =
+      joinedIds.has(deal.id) &&
+      isDealActive(deal, now) &&
+      !isPickupDeal(deal) &&
+      !isDealPaid(deal.id, myDeliveries);
+    return (
+      <View style={viewMode === "grid" ? styles.gridItem : null}>
+        <DealCard
+          compact={viewMode === "grid"}
+          title={deal.title}
+          category={deal?.category || null}
+          images={getDealThumbnails(deal)}
+          joins={getJoinCount(deal)}
+          targetCount={getMinGroupSize(deal)}
+          maxCount={getMaxGroupSize(deal)}
+          accentColor={getDealAccentColor({
+            isJoined: joinedIds.has(deal.id),
+            isFavorite: favoriteIds.has(deal.id),
+            isViewed: viewedIds.has(deal.id),
+            isHot: isHotDeal(deal),
+            theme,
+          })}
+          viewsCount={Number.isFinite(Number(viewsCountRaw)) ? Number(viewsCountRaw) : 0}
+          favoritesCount={
+            Number.isFinite(Number(favoritesCountRaw)) ? Number(favoritesCountRaw) : 0
+          }
+          ratingAvg={deal?.ratingAvg ?? deal?.rating ?? null}
+          ratingCount={deal?.ratingCount ?? 0}
+          originalPrice={deal?.originalPrice}
+          discountPrice={deal?.discountPrice}
+          badgeLabel={deal?.location ? String(deal.location) : null}
+          deliveryBadge={getDeliveryBadge(deal.id, myDeliveries, theme)}
+          expiryLabel={formatEndsIn(expiryMs)}
+          isFavorite={favoriteIds.has(deal.id)}
+          onFavoritePress={() => handleToggleFavorite(deal.id)}
+          isJoined={joinedIds.has(deal.id)}
+          joinLabel={joinedIds.has(deal.id) ? "Joined" : "Join"}
+          onJoinPress={() => navigation.navigate("DealDetails", { dealId: deal.id })}
+          payLabel={needsPay ? "Pay" : undefined}
+          onPayPress={
+            needsPay
+              ? () => navigation.navigate("DealDetails", { dealId: deal.id })
+              : undefined
+          }
+          actionLabel="View Deal"
+          onActionPress={() => navigation.navigate("DealDetails", { dealId: deal.id })}
+        />
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} />
-        }
-      >
-        <DashboardHeader
-          navigation={navigation}
-          now={now}
-          displayName={profile?.displayName}
-          unreadCount={unreadCount}
-          searchText={controls.searchText}
-          onChangeSearchText={controls.setSearchText}
-          sortActive={Boolean(controls.sortField)}
-          onPressSort={() => controls.setIsSortVisible(true)}
-          filterActive={controls.hasFieldFilter}
-          onPressFilter={() => controls.setIsFilterVisible(true)}
-        />
+      <DashboardHeader
+        navigation={navigation}
+        now={now}
+        displayName={profile?.displayName}
+        unreadCount={unreadCount}
+        searchText={controls.searchText}
+        onChangeSearchText={controls.setSearchText}
+        sortActive={Boolean(controls.sortField)}
+        onPressSort={() => controls.setIsSortVisible(true)}
+        filterActive={controls.hasFieldFilter}
+        onPressFilter={() => controls.setIsFilterVisible(true)}
+      />
 
-        <View style={[styles.listWrap, !hasDeals && styles.listWrapEmpty]}>
+      <FlatList
+        // numColumns can't change on a live FlatList without remounting.
+        key={viewMode}
+        data={sortedDeals}
+        keyExtractor={(deal) => deal.id}
+        numColumns={viewMode === "grid" ? 2 : 1}
+        columnWrapperStyle={viewMode === "grid" ? styles.gridRow : undefined}
+        renderItem={renderDeal}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, !hasDeals && styles.listWrapEmpty]}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+        }}
+        onEndReachedThreshold={0.5}
+        ListHeaderComponent={
           <CardHeader
             title={dealsHeaderTitle}
             right={
@@ -143,97 +221,30 @@ export default function HomeScreen({ navigation }) {
               </View>
             }
           />
-
-          {hasDeals ? (
-            <View style={viewMode === "grid" ? styles.grid : null}>
-              {sortedDeals.map((deal) => {
-              const expiryMs = getExpiryMs(deal);
-              const viewsCountRaw = deal?.viewsCount ?? deal?.views ?? 0;
-              const favoritesCountRaw =
-                deal?.favoritesCount ?? deal?.favouritesCount ?? 0;
-              const needsPay =
-                joinedIds.has(deal.id) &&
-                isDealActive(deal, now) &&
-                !isPickupDeal(deal) &&
-                !isDealPaid(deal.id, myDeliveries);
-              return (
-                <View
-                  key={deal.id}
-                  style={viewMode === "grid" ? styles.gridItem : null}
-                >
-                <DealCard
-                  compact={viewMode === "grid"}
-                  title={deal.title}
-                  category={deal?.category || null}
-                  images={getDealImages(deal)}
-                  joins={getJoinCount(deal)}
-                  targetCount={getMinGroupSize(deal)}
-                  maxCount={getMaxGroupSize(deal)}
-                  accentColor={getDealAccentColor({
-                    isJoined: joinedIds.has(deal.id),
-                    isFavorite: favoriteIds.has(deal.id),
-                    isViewed: viewedIds.has(deal.id),
-                    isHot: isHotDeal(deal),
-                    theme,
-                  })}
-                  viewsCount={
-                    Number.isFinite(Number(viewsCountRaw))
-                      ? Number(viewsCountRaw)
-                      : 0
-                  }
-                  favoritesCount={
-                    Number.isFinite(Number(favoritesCountRaw))
-                      ? Number(favoritesCountRaw)
-                      : 0
-                  }
-                  ratingAvg={deal?.ratingAvg ?? deal?.rating ?? null}
-                  ratingCount={deal?.ratingCount ?? 0}
-                  originalPrice={deal?.originalPrice}
-                  discountPrice={deal?.discountPrice}
-                  badgeLabel={deal?.location ? String(deal.location) : null}
-                  deliveryBadge={getDeliveryBadge(deal.id, myDeliveries, theme)}
-                  expiryLabel={formatEndsIn(expiryMs)}
-                  isFavorite={favoriteIds.has(deal.id)}
-                  onFavoritePress={() => handleToggleFavorite(deal.id)}
-                  isJoined={joinedIds.has(deal.id)}
-                  joinLabel={joinedIds.has(deal.id) ? "Joined" : "Join"}
-                  onJoinPress={() =>
-                    navigation.navigate("DealDetails", { dealId: deal.id })
-                  }
-                  payLabel={needsPay ? "Pay" : undefined}
-                  onPayPress={
-                    needsPay
-                      ? () => navigation.navigate("DealDetails", { dealId: deal.id })
-                      : undefined
-                  }
-                  actionLabel="View Deal"
-                  onActionPress={() =>
-                    navigation.navigate("DealDetails", { dealId: deal.id })
-                  }
-                />
-                </View>
-              );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyWrap}>
-              <EmptyState
-                icon="search-outline"
-                title={
-                  controls.isSearching
-                    ? "No deals match your search."
-                    : "No new deals right now."
-                }
-                subtitle={
-                  controls.isSearching
-                    ? "Try a different search term."
-                    : "Check the Deals tab to browse everything."
-                }
-              />
-            </View>
-          )}
-        </View>
-      </ScrollView>
+        }
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <ActivityIndicator style={styles.footerSpinner} color={theme.colors.primary} />
+          ) : null
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              icon="search-outline"
+              title={
+                controls.isSearching
+                  ? "No deals match your search."
+                  : "No new deals right now."
+              }
+              subtitle={
+                controls.isSearching
+                  ? "Try a different search term."
+                  : "Check the Deals tab to browse everything."
+              }
+            />
+          </View>
+        }
+      />
 
       <DealSearchModals controls={controls} resultCount={sortedDeals?.length || 0} />
     </SafeAreaView>
@@ -248,8 +259,6 @@ const createStyles = (theme) =>
     },
     scrollContent: {
       flexGrow: 1,
-    },
-    listWrap: {
       paddingHorizontal: 20,
       paddingTop: 24,
       paddingBottom: 32,
@@ -267,11 +276,8 @@ const createStyles = (theme) =>
       fontWeight: "700",
       fontSize: 12,
     },
-    grid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
+    gridRow: {
       justifyContent: "space-between",
-      marginTop: 16,
     },
     gridItem: {
       width: "48%",
@@ -282,5 +288,8 @@ const createStyles = (theme) =>
       alignItems: "center",
       justifyContent: "center",
       paddingVertical: 24,
+    },
+    footerSpinner: {
+      marginVertical: 16,
     },
   });

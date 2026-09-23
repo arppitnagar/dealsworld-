@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const sharp = require("sharp");
 const { requireAuth, requireRole } = require("../lib");
 
 const router = express.Router();
@@ -9,6 +10,7 @@ const router = express.Router();
 const UPLOADS_ROOT = path.join(__dirname, "..", "..", "uploads");
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const THUMBNAIL_WIDTH = 480;
 
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
@@ -44,18 +46,50 @@ router.post(
   requireAuth,
   requireRole("seller", "admin"),
   (req, res) => {
-    upload.array("images", MAX_DEAL_IMAGES)(req, res, (error) => {
+    upload.array("images", MAX_DEAL_IMAGES)(req, res, async (error) => {
       if (error) {
         return res.status(400).json({ error: error.message || "Upload failed" });
       }
       if (!req.files?.length) {
         return res.status(400).json({ error: "No image files provided" });
       }
-      const urls = req.files.map((file) => {
-        const relativePath = `deals/${req.user.uid}/${file.filename}`;
-        return `${req.protocol}://${req.get("host")}/uploads/${relativePath}`;
-      });
-      return res.json({ urls });
+      try {
+        const images = await Promise.all(
+          req.files.map(async (file) => {
+            const relativePath = `deals/${req.user.uid}/${file.filename}`;
+            const url = `${req.protocol}://${req.get("host")}/uploads/${relativePath}`;
+
+            // Best-effort - a card in a list view has no business loading a
+            // full-res original, but a failed thumbnail shouldn't fail the
+            // whole upload, so fall back to the original URL.
+            let thumbUrl = url;
+            try {
+              const thumbFilename = `${path.parse(file.filename).name}-thumb.webp`;
+              const thumbPath = path.join(path.dirname(file.path), thumbFilename);
+              await sharp(file.path)
+                .resize({ width: THUMBNAIL_WIDTH, withoutEnlargement: true })
+                .webp({ quality: 75 })
+                .toFile(thumbPath);
+              thumbUrl = `${req.protocol}://${req.get("host")}/uploads/deals/${req.user.uid}/${thumbFilename}`;
+            } catch (thumbError) {
+              console.warn(
+                "Failed to generate thumbnail for",
+                file.filename,
+                thumbError.message || thumbError,
+              );
+            }
+            return { url, thumbUrl };
+          }),
+        );
+        return res.json({
+          urls: images.map((image) => image.url),
+          thumbUrls: images.map((image) => image.thumbUrl),
+        });
+      } catch (processingError) {
+        return res
+          .status(500)
+          .json({ error: processingError.message || "Failed to process images" });
+      }
     });
   },
 );

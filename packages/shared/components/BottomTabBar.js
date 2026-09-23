@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,12 +16,24 @@ import { useTheme } from "../theme/ThemeProvider";
  *     icon: (focused: boolean, color: string) => ReactNode,
  *     isFab?: boolean,                          // renders as a raised circular button instead of a normal tab item
  *     onPress?: (navigation) => void,           // overrides the default tab switch (used by the FAB entry)
+ *     toggle?: boolean,                         // tapping it again while already focused switches back to the last tab, instead of doing nothing
  *   }
  */
 export default function BottomTabBar({ state, navigation, tabs }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Tracks the most recently focused non-toggle tab, so a toggle tab (e.g.
+  // Search) can switch back to wherever the person came from when tapped a
+  // second time, rather than sitting there doing nothing.
+  const lastNonToggleRouteRef = useRef(state.routes[state.index]?.name);
+  useEffect(() => {
+    const config = tabs[state.index];
+    if (!config?.toggle) {
+      lastNonToggleRouteRef.current = state.routes[state.index]?.name;
+    }
+  }, [state.index, tabs]);
 
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -34,6 +46,11 @@ export default function BottomTabBar({ state, navigation, tabs }) {
         const handlePress = () => {
           if (config.onPress) {
             config.onPress(navigation);
+            return;
+          }
+          if (config.toggle && focused) {
+            const fallback = state.routes[0]?.name;
+            navigation.navigate(lastNonToggleRouteRef.current || fallback);
             return;
           }
           const event = navigation.emit({

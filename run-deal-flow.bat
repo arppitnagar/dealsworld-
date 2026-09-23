@@ -70,8 +70,8 @@ if not defined LAN_IP (
 ) else (
     echo Detected LAN IP: !LAN_IP!
     echo ^(This must be the IP your phone can reach - same Wi-Fi as this PC^)
-    set /p CONFIRM_IP=Press Enter to use it, or type a different IP:
-    if not "!CONFIRM_IP!"=="" set "LAN_IP=!CONFIRM_IP!"
+    echo Using it automatically - if it's wrong, close everything, edit
+    echo EXPO_PUBLIC_API_BASE_URL below, and re-run.
 )
 
 set "EXPO_PUBLIC_API_BASE_URL=http://!LAN_IP!:5000/api"
@@ -109,8 +109,7 @@ for /l %%i in (1,1,25) do (
 if "!BACKEND_READY!"=="0" (
     echo [WARNING] Backend did not respond after ~25s.
     echo Check the "DealsWorld - Backend" window for errors.
-    echo You can still continue - the mobile apps will retry once it's up.
-    pause
+    echo Continuing anyway - the mobile apps will retry once it's up.
 )
 echo.
 
@@ -129,13 +128,39 @@ call :KillPort 8083
 echo Starting Buyer app ^(DealBuddy^) - Expo port 8083 ...
 start "DealsWorld - Buyer (view/join deals)" cmd /k "cd /d "%CD%" && npm run buyer:mobile"
 
+REM --- 8) Start Typesense (search) via Docker, if it's set up ---
+REM     One-time setup only (not done by this script): install Docker Desktop,
+REM     then run the `docker run ... typesense/typesense` command from
+REM     apps\backend\TYPESENSE_SETUP.md once to create the container and put
+REM     its API key into apps\backend\.env. After that, this step just starts
+REM     the already-created container each time you run this script.
+REM
+REM     Deliberately LAST and in its own self-closing window (start ... cmd
+REM     /c, not /k) - two earlier attempts to run this inline (synchronously,
+REM     then via start /b) both hung indefinitely on this machine for reasons
+REM     that were never fully pinned down, silently blocking Admin/Seller/
+REM     Buyer below from ever starting. Using the exact same start "Title"
+REM     cmd ... mechanism already proven reliable for those four windows,
+REM     placed after all of them, means even if this one hangs or fails, it
+REM     can never again block anything the deal flow actually needs.
+where docker >nul 2>nul
+if !ERRORLEVEL! equ 0 (
+    echo Starting Typesense (search) - check http://localhost:8108/health
+    start "DealsWorld - Typesense (search)" cmd /c "docker start typesense"
+) else (
+    echo [INFO] Docker not found - skipping Typesense. Buyer search will show
+    echo        "temporarily unavailable" until it's set up ^(optional^).
+)
+
 echo.
 echo ============================================================
-echo  Four windows are now starting:
+echo  Four windows are now starting (plus Typesense, if it's set up):
 echo    1. Backend    -^> http://127.0.0.1:5000/api/health
 echo    2. Admin      -^> http://localhost:8082 (opens in your browser)
 echo    3. Seller app -^> scan the QR code with Expo Go
 echo    4. Buyer app  -^> scan the QR code with Expo Go
+echo    Typesense (search) -^> http://localhost:8108/health, optional -
+echo    see apps\backend\TYPESENSE_SETUP.md if it showed [INFO] above.
 echo.
 echo  On your phone: install "Expo Go" and make sure it's on the
 echo  SAME Wi-Fi network as this PC before scanning either QR code.

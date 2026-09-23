@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
+import { useUserProfile } from "./useUserProfile";
 
 // Notifications that arrive while the app is in the foreground still show
 // as a system alert - without this handler they'd be silently swallowed.
@@ -24,6 +25,9 @@ Notifications.setNotificationHandler({
 // build - Expo Go dropped remote push support in SDK 53+.
 export function usePushToken() {
   const { user } = useAuth();
+  const { profile } = useUserProfile();
+  const storedTokenRef = useRef(undefined);
+  storedTokenRef.current = profile?.expoPushToken;
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -53,6 +57,10 @@ export function usePushToken() {
           projectId ? { projectId } : undefined,
         );
         if (cancelled || !token) return;
+        // Skip the write if the stored token already matches - this effect
+        // re-runs on every login, so without this check every login issues
+        // a Firestore write even when nothing actually changed.
+        if (storedTokenRef.current === token) return;
         await setDoc(
           doc(db, "users", user.uid),
           { expoPushToken: token },

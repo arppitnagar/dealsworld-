@@ -127,7 +127,58 @@ function sanitizeDealForResponse(doc) {
     sellerName,
     approvalStatus: normalizeApprovalStatus(data),
     lifecycleStatus: normalizeLifecycleStatus(data),
+    avgJoinTimeSeconds: deriveAvgJoinTimeSeconds(data),
   };
+}
+
+// join/leave (routes/deals.js) write joinTimeSecondsSum/joinEventsCount via
+// FieldValue.increment() instead of a computed avgJoinTimeSeconds literal -
+// increments never conflict with each other under concurrent joins, unlike
+// a read-modify-write average, which was adding unnecessary contention to
+// the join transaction. Derive the average at read time instead; deals
+// written before this change have no joinTimeSecondsSum, so fall back to
+// their legacy stored avgJoinTimeSeconds.
+function deriveAvgJoinTimeSeconds(data) {
+  const joinEventsCount = asNumber(data?.joinEventsCount, 0);
+  const joinTimeSecondsSum = data?.joinTimeSecondsSum;
+  if (typeof joinTimeSecondsSum === "number" && joinEventsCount > 0) {
+    return Math.round(joinTimeSecondsSum / joinEventsCount);
+  }
+  return data?.avgJoinTimeSeconds ?? null;
+}
+
+// Fields a list/card view actually renders (see DealCard.js and the
+// per-screen field mapping in Home/Deals/Search screens, buyer + seller) or
+// that sort/filter (dealSortFilter.js) needs. Detail-only fields
+// (description, pricingTiers, gstPercent, deliveryCharge, dispatchStatus,
+// dealCode, storeAddress/pickupAddress, the approval sub-object, etc.) are
+// deliberately left out - full documents are still available via the
+// single-deal detail endpoints.
+//
+// NOT wired into any route yet: today's client-side search
+// (dealSearch.js's buildSearchHaystack) walks every field of whatever list
+// response it's given, so switching GET /api/deals over to this before
+// search moves server-side would silently narrow what a buyer/seller can
+// search for, with no error. Wire this in once search no longer depends on
+// the full document shape.
+const LIST_RESPONSE_FIELDS = [
+  "id", "title", "category", "images", "imageUrl", "image",
+  "thumbUrl", "thumbImages",
+  "currentJoins", "joinedUsers", "minGroupSize", "minThreshold", "maxGroupSize",
+  "viewsCount", "favoritesCount", "ratingAvg", "ratingCount",
+  "originalPrice", "discountPrice", "location", "deliveryMode",
+  "expiresAt", "expiryTime", "status", "lifecycleStatus", "thresholdReachedAt",
+  "approvalStatus", "approved", "sellerId", "sellerName", "dealCode",
+  "createdAt", "updatedAt",
+];
+
+function sanitizeDealForListResponse(doc) {
+  const full = sanitizeDealForResponse(doc);
+  const trimmed = {};
+  LIST_RESPONSE_FIELDS.forEach((key) => {
+    if (key in full) trimmed[key] = full[key];
+  });
+  return trimmed;
 }
 
 function getUserDisplayName(profile = {}, fallback = "") {
@@ -366,6 +417,15 @@ async function requireAuth(req, res, next) {
   }
 }
 
+// requireRole runs on every role-gated request, and ensureUserProfile() is a
+// Firestore read (occasionally a write, for backfill). A short TTL cache
+// cuts that to roughly one read per user per window instead of one per
+// request, while keeping the staleness window small enough that a
+// newly-approved or newly-blocked account still takes effect within a few
+// seconds rather than needing every mutation site to explicitly invalidate it.
+const ROLE_PROFILE_CACHE_TTL_MS = 10_000;
+const roleProfileCache = new Map();
+
 function requireRole(...roles) {
   const allowed = new Set(roles.map((value) => String(value).toLowerCase()));
   return async (req, res, next) => {
@@ -373,9 +433,18 @@ function requireRole(...roles) {
       if (!req.user?.uid) {
         return res.status(401).json({ error: "Authentication required" });
       }
-      const profile = await ensureUserProfile(req.user.uid, {
-        email: req.user.email || "",
-      });
+      const uid = req.user.uid;
+      const cached = roleProfileCache.get(uid);
+      const nowMs = Date.now();
+      let profile;
+      if (cached && cached.expiresAt > nowMs) {
+        profile = cached.profile;
+      } else {
+        profile = await ensureUserProfile(uid, {
+          email: req.user.email || "",
+        });
+        roleProfileCache.set(uid, { profile, expiresAt: nowMs + ROLE_PROFILE_CACHE_TTL_MS });
+      }
       const role = String(profile.role || "").toLowerCase();
       if (!allowed.has(role)) {
         return res.status(403).json({ error: "Insufficient role" });
@@ -390,6 +459,13 @@ function requireRole(...roles) {
       return res.status(500).json({ error: error.message });
     }
   };
+}
+
+// Call after directly mutating a user's role/status/approvalStatus (e.g.
+// admin approve/reject/block) so the change is enforced immediately instead
+// of waiting out ROLE_PROFILE_CACHE_TTL_MS.
+function invalidateUserProfileCache(uid) {
+  roleProfileCache.delete(uid);
 }
 
 function optionalAuth(req, _res, next) {
@@ -892,6 +968,7 @@ module.exports = {
   normalizeLifecycleStatus,
   isExpiredDeal,
   sanitizeDealForResponse,
+  sanitizeDealForListResponse,
   getUserDisplayName,
   attachSellerNamesToDeals,
   maybeAssignDealCode,
@@ -901,6 +978,7 @@ module.exports = {
   normalizeAuthHeader,
   requireAuth,
   requireRole,
+  invalidateUserProfileCache,
   optionalAuth,
   getBuyerId,
   makeJoinDocId,

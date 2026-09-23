@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
 import apiClient from "../api/client";
 
-export const useUserProfile = () => {
+const UserProfileContext = createContext(null);
+
+// The actual listener + fetch, run exactly once by UserProfileProvider.
+// Every screen/hook that needs the profile calls useUserProfile() below,
+// which just reads this shared value instead of opening its own
+// listener - previously each of the ~11 call sites across the app mounted
+// its own onSnapshot on the same doc and fired its own /users/me request.
+function useUserProfileState() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -64,4 +71,21 @@ export const useUserProfile = () => {
   );
 
   return { profile, loading, updateProfile };
+}
+
+export function UserProfileProvider({ children }) {
+  const value = useUserProfileState();
+  return (
+    <UserProfileContext.Provider value={value}>
+      {children}
+    </UserProfileContext.Provider>
+  );
+}
+
+export const useUserProfile = () => {
+  const context = useContext(UserProfileContext);
+  if (!context) {
+    throw new Error("useUserProfile must be used within a UserProfileProvider");
+  }
+  return context;
 };

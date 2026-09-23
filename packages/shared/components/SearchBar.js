@@ -45,8 +45,11 @@ export default function SearchBar({
         returnKeyType="search"
       />
       {value?.length > 0 && (
-        <TouchableOpacity onPress={onClear}>
-          <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+        <TouchableOpacity
+          onPress={onClear}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="close-circle" size={20} color={theme.colors.text} />
         </TouchableOpacity>
       )}
     </View>

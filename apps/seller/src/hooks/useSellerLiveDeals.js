@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   onSnapshot,
+  query,
   serverTimestamp,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "./useUserProfile";
-import { isDealOwnedBySeller, normalizeText } from "../utils/dealStatus";
 import apiClient from "../api/client";
 
 // Live Firestore subscription for the current seller's own deals, shared by
@@ -37,61 +38,26 @@ export function useSellerLiveDeals() {
     return "Seller";
   }, [profile, user]);
 
-  const sellerOwnership = useMemo(() => {
-    const idValues = [
-      user?.uid,
-      profile?.sellerId,
-      profile?.legacySellerId,
-      profile?.vendorId,
-      profile?.vendorid,
-      profile?.sellerCode,
-      profile?.code,
-    ]
-      .map((value) => String(value || "").trim())
-      .filter(Boolean);
-    const nameValues = [
-      profile?.displayName,
-      profile?.fullName,
-      profile?.name,
-      profile?.businessName,
-      sellerDisplayName,
-    ]
-      .map((value) => normalizeText(value))
-      .filter(Boolean);
-    return {
-      ids: new Set(idValues),
-      names: new Set(nameValues),
-    };
-  }, [
-    profile?.businessName,
-    profile?.code,
-    profile?.displayName,
-    profile?.fullName,
-    profile?.legacySellerId,
-    profile?.name,
-    profile?.sellerCode,
-    profile?.sellerId,
-    profile?.vendorId,
-    profile?.vendorid,
-    sellerDisplayName,
-    user?.uid,
-  ]);
-
   useEffect(() => {
+    if (!user?.uid) {
+      setDeals([]);
+      setLoading(false);
+      return undefined;
+    }
+
     setLoading(true);
-    const dealsRef = collection(db, "deals");
+    const dealsQuery = query(
+      collection(db, "deals"),
+      where("sellerId", "==", user.uid),
+    );
     const unsubscribe = onSnapshot(
-      dealsRef,
+      dealsQuery,
       (snapshot) => {
         const dealsList = [];
         const nowMs = Date.now();
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          if (!isDealOwnedBySeller(data, sellerOwnership)) {
-            return;
-          }
-
           const currentJoins = data.currentJoins ?? data.joinedUsers ?? 0;
           const minGroupSize = data.minGroupSize ?? 1;
           const shouldSetThreshold =
@@ -146,7 +112,7 @@ export function useSellerLiveDeals() {
     );
 
     return () => unsubscribe();
-  }, [sellerOwnership]);
+  }, [user?.uid]);
 
   return { deals, loading, sellerDisplayName };
 }

@@ -87,7 +87,7 @@ export default function DashboardHeader({
             leftElement={<Search size={17} color={theme.colors.textMuted} />}
             rightElement={
               searchText?.length > 0 ? (
-                <X size={14} color={theme.colors.textMuted} />
+                <X size={16} color={theme.colors.text} />
               ) : null
             }
             onRightPress={

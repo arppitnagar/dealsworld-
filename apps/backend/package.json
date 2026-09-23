@@ -11,6 +11,8 @@
     "backfill:sellername": "node scripts/backfillSellerName.js",
     "reconcile:joins": "node scripts/reconcileJoinCounts.js",
     "cleanup:fields": "node scripts/cleanupFields.js",
+    "backfill:dealcreatedat": "node scripts/backfillDealCreatedAt.js",
+    "seed:testdeals": "node scripts/seedTestDeals.js",
     "admin:web": "echo skip"
   },
   "dependencies": {
@@ -18,9 +20,12 @@
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
+    "express-rate-limit": "^7.5.1",
     "firebase-admin": "^13.6.0",
     "multer": "^2.3.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "sharp": "^0.35.4",
+    "typesense": "^3.0.6"
   }
 }

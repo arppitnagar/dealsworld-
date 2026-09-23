@@ -1,0 +1,18 @@
+[Unit]
+Description=Typesense search server for DealsWorld
+After=network.target
+
+[Service]
+Type=simple
+# Adjust these paths/values for your host before installing.
+ExecStart=/usr/bin/typesense-server \
+  --data-dir=/var/lib/typesense \
+  --api-key=REPLACE_WITH_A_LONG_RANDOM_SECRET \
+  --listen-port=8108
+Restart=on-failure
+RestartSec=5
+User=typesense
+Group=typesense
+
+[Install]
+WantedBy=multi-user.target

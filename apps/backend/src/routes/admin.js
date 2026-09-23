@@ -15,6 +15,7 @@ const {
   attachSellerNamesToDeals,
   requireAuth,
   requireRole,
+  invalidateUserProfileCache,
   getSellerId,
   validateDealPublishability,
   pushNotification,
@@ -44,6 +45,7 @@ async function approveUserInternal(uid, actorUid) {
     },
     { merge: true },
   );
+  invalidateUserProfileCache(uid);
 
   const user = snap.data() || {};
   await pushNotification({
@@ -81,6 +83,7 @@ async function rejectUserInternal(uid, actorUid, reasonRaw) {
     },
     { merge: true },
   );
+  invalidateUserProfileCache(uid);
 
   await pushNotification({
     userId: uid,
@@ -89,6 +92,45 @@ async function rejectUserInternal(uid, actorUid, reasonRaw) {
     body: reason || "Your account request was rejected by admin.",
     meta: { rejectedBy: actorUid },
   });
+}
+
+// normalizeUserApprovalStatus treats a MISSING approvalStatus field on a
+// seller profile as an implicit "pending" (legacy accounts predate the
+// field). A single `where("approvalStatus","==","pending")` query can't see
+// those, so we union it with a role-scoped scan for legacy sellers - scoped
+// to sellers (a small subset of all users) rather than the whole USERS
+// collection, so it stays cheap as the buyer base grows.
+async function findPendingUsers({ roleFilter } = {}) {
+  const byId = new Map();
+
+  const explicitPendingSnap = await db
+    .collection(USERS_COLLECTION)
+    .where("approvalStatus", "==", "pending")
+    .get();
+  explicitPendingSnap.docs.forEach((doc) => {
+    byId.set(doc.id, { id: doc.id, ...(doc.data() || {}) });
+  });
+
+  if (!roleFilter || roleFilter === "seller") {
+    const sellerSnap = await db
+      .collection(USERS_COLLECTION)
+      .where("role", "==", "seller")
+      .limit(5000)
+      .get();
+    sellerSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      if (data.approvalStatus) return; // explicit status already covered above
+      byId.set(doc.id, { id: doc.id, ...data });
+    });
+  }
+
+  return Array.from(byId.values())
+    .map((user) => ({ ...user, approvalStatus: normalizeUserApprovalStatus(user) }))
+    .filter((user) => {
+      if (roleFilter && String(user.role || "").toLowerCase() !== roleFilter) return false;
+      return String(user.approvalStatus || "").toLowerCase() === "pending";
+    })
+    .sort((a, b) => getCreatedMs(b) - getCreatedMs(a));
 }
 
 router.get("/api/admin/deals/pending", requireAuth, requireRole("admin"), async (_req, res) => {
@@ -229,7 +271,12 @@ router.post("/api/admin/deals/:dealId/approve", requireAuth, requireRole("admin"
       meta: { dealId },
     });
 
-    await notifyBuyersOfNewDeal(deal, dealId);
+    // Fan-out to every buyer shouldn't hold the admin's response hostage -
+    // at thousands of buyers this can take a while, and the approval itself
+    // already succeeded above.
+    notifyBuyersOfNewDeal(deal, dealId).catch((error) => {
+      console.error("Failed to notify buyers of new deal:", error);
+    });
 
     return res.json({ ok: true });
   } catch (error) {
@@ -473,19 +520,8 @@ router.get("/api/admin/users/pending", requireAuth, requireRole("admin"), async 
     const limitRaw = Number(req.query.limit);
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 200;
     const roleFilter = String(req.query.role || "").toLowerCase();
-    const snap = await db.collection(USERS_COLLECTION).limit(limit).get();
-    const list = snap.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
-      .map((user) => ({
-        ...user,
-        approvalStatus: normalizeUserApprovalStatus(user),
-      }))
-      .filter((user) => {
-        if (roleFilter && String(user.role || "").toLowerCase() !== roleFilter) return false;
-        return String(user.approvalStatus || "").toLowerCase() === "pending";
-      })
-      .sort((a, b) => getCreatedMs(b) - getCreatedMs(a));
-    return res.json(list);
+    const list = await findPendingUsers({ roleFilter });
+    return res.json(list.slice(0, limit));
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -517,21 +553,8 @@ router.get("/api/admin/sellers/pending", requireAuth, requireRole("admin"), asyn
   try {
     const limitRaw = Number(req.query.limit);
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 200;
-    const snap = await db.collection(USERS_COLLECTION).limit(limit).get();
-    const list = snap.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
-      .map((user) => ({
-        ...user,
-        role: String(user.role || "").toLowerCase(),
-        approvalStatus: normalizeUserApprovalStatus(user),
-      }))
-      .filter(
-        (user) =>
-          user.role === "seller" &&
-          String(user.approvalStatus || "").toLowerCase() === "pending",
-      )
-      .sort((a, b) => getCreatedMs(b) - getCreatedMs(a));
-    return res.json(list);
+    const list = await findPendingUsers({ roleFilter: "seller" });
+    return res.json(list.slice(0, limit));
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }

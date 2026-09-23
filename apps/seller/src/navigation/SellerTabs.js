@@ -37,7 +37,7 @@ const TAB_CONFIG = [
     icon: icon("qr-code", "qr-code-outline"),
     onPress: (navigation) => navigation.getParent()?.navigate("ScanQR"),
   },
-  { key: "Search", label: "Search", icon: icon("search", "search-outline") },
+  { key: "Search", label: "Search", icon: icon("search", "search-outline"), toggle: true },
 ];
 
 export default function SellerTabs() {

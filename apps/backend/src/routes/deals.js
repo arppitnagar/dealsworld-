@@ -46,27 +46,62 @@ router.get("/api/deals", async (req, res) => {
     const nowMs = Date.now();
     const limitRaw = Number(req.query.limit);
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_DEAL_LIMIT;
+    // approvalStatus/expiry still get filtered in Node below, not pushed
+    // into the query, because both normalizeApprovalStatus and
+    // getExpiryMs/isExpiredDeal fall back to inferring a value from other
+    // fields for legacy deals that never had approvalStatus/expiresAt set
+    // explicitly - a `where` clause can't see that inference and would
+    // silently exclude those deals. Over-fetch to compensate, same as
+    // before this endpoint had real cursor pagination.
     const fetchLimit = Math.min(limit * 5, MAX_DEAL_LIMIT);
+    const cursor = String(req.query.cursor || "").trim();
 
-    const snapshot = await db
+    let query = db
       .collection(DEALS_COLLECTION)
       .where("status", "==", "active")
-      .limit(fetchLimit)
-      .get();
+      .orderBy("createdAt", "desc")
+      .limit(fetchLimit);
 
-    const deals = snapshot.docs
-      .map((doc) => sanitizeDealForResponse(doc))
-      .filter((deal) => {
-        if (isExpiredDeal(deal, nowMs)) return false;
-        const approvalStatus = normalizeApprovalStatus(deal);
-        return approvalStatus === "approved";
-      })
-      .sort((a, b) => getCreatedMs(b) - getCreatedMs(a))
-      .slice(0, limit);
+    if (cursor) {
+      const cursorSnap = await db.collection(DEALS_COLLECTION).doc(cursor).get();
+      // If the cursor doc is gone (e.g. deleted since the last page), fall
+      // back to an unpaginated first page rather than erroring - a page 2
+      // request just quietly becomes a page 1 request.
+      if (cursorSnap.exists) {
+        query = query.startAfter(cursorSnap);
+      }
+    }
+
+    const snapshot = await query.get();
+    const rawDocs = snapshot.docs;
+
+    const survivors = [];
+    rawDocs.forEach((doc) => {
+      const deal = sanitizeDealForResponse(doc);
+      if (isExpiredDeal(deal, nowMs)) return;
+      if (normalizeApprovalStatus(deal) !== "approved") return;
+      survivors.push({ doc, deal });
+    });
+
+    const page = survivors.slice(0, limit);
+    const deals = page.map((item) => item.deal);
+
+    // The cursor must be positioned against the raw Firestore-ordered
+    // sequence, not the filtered survivor list, so the next page correctly
+    // resumes after docs we skipped (expired/unapproved) rather than
+    // re-scanning them.
+    let nextCursor = null;
+    if (page.length === limit && survivors.length > limit) {
+      nextCursor = page[page.length - 1].doc.id;
+    } else if (rawDocs.length === fetchLimit) {
+      // Consumed the whole over-fetched batch, whether or not enough of it
+      // survived filtering - there may be more beyond it.
+      nextCursor = rawDocs[rawDocs.length - 1].id;
+    }
 
     const codedDeals = await ensureDealCodes(deals);
     const hydratedDeals = await attachSellerNamesToDeals(codedDeals);
-    res.json(hydratedDeals);
+    res.json({ deals: hydratedDeals, nextCursor });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -329,21 +364,20 @@ router.post("/api/deals/:dealId/join", optionalAuth, async (req, res) => {
         throw new Error("Delivery address is required");
       }
 
+      // currentJoins/joinedUsers write via increment rather than a computed
+      // literal - increments never conflict with each other under
+      // concurrent joins on the same deal doc, unlike a literal write that
+      // requires this transaction to hold the freshest read. The maxGroupSize
+      // check above and the thresholdReachedAt crossing-detection below still
+      // need the transactional read of currentJoins itself (that part is
+      // inherently serialized - see the join contention writeup), but the
+      // write no longer needs to restate the value it read.
       const nextJoins = currentJoins + 1;
       const updates = {
-        currentJoins: nextJoins,
-        joinedUsers: nextJoins,
+        currentJoins: FieldValue.increment(1),
+        joinedUsers: FieldValue.increment(1),
         updatedAt: FieldValue.serverTimestamp(),
       };
-
-      const prevAvg = asNumber(deal.avgJoinTimeSeconds, 0);
-      const prevCount = asNumber(deal.joinEventsCount, 0);
-      if (Number.isFinite(Number(joinTimeSeconds))) {
-        const joinSeconds = Number(joinTimeSeconds);
-        const newAvg = Math.round((prevAvg * prevCount + joinSeconds) / (prevCount + 1));
-        updates.avgJoinTimeSeconds = newAvg;
-        updates.joinEventsCount = prevCount + 1;
-      }
 
       if (nextJoins >= minGroupSize && !deal.thresholdReachedAt) {
         updates.thresholdReachedAt = FieldValue.serverTimestamp();
@@ -377,6 +411,22 @@ router.post("/api/deals/:dealId/join", optionalAuth, async (req, res) => {
       tx.update(dealRef, updates);
       return { joined: true, currentJoins: nextJoins };
     });
+
+    // Advisory analytics only (see deriveAvgJoinTimeSeconds in lib.js) - kept
+    // outside the transaction entirely since increments don't need it for
+    // correctness, further shrinking the transaction that's actually gating
+    // maxGroupSize/thresholdReachedAt.
+    if (result.joined && Number.isFinite(Number(joinTimeSeconds))) {
+      db.collection(DEALS_COLLECTION)
+        .doc(dealId)
+        .update({
+          joinTimeSecondsSum: FieldValue.increment(Number(joinTimeSeconds)),
+          joinEventsCount: FieldValue.increment(1),
+        })
+        .catch((error) => {
+          console.warn("Failed to record join time analytics:", error.message || error);
+        });
+    }
 
     return res.json({ ok: true, ...result });
   } catch (error) {
@@ -413,6 +463,11 @@ router.post("/api/deals/:dealId/leave", optionalAuth, async (req, res) => {
         throw new Error("Cannot leave a deal after payment has been made");
       }
 
+      // Kept as a literal computed write (not FieldValue.increment) - unlike
+      // join, there's no non-commutative field driving contention here, and
+      // Math.max(0, ...) protects against ever going negative if currentJoins
+      // and the dealJoins docs ever drift (see the existing
+      // reconcile:joins script) - a blind decrement wouldn't have that floor.
       const nextJoins = Math.max(0, currentJoins - 1);
 
       tx.set(

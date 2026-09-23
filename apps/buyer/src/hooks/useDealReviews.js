@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -12,6 +13,7 @@ import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
 
 const REVIEW_COLLECTION = "reviews";
+const REVIEWS_LIMIT = 100;
 
 export const useDealReviews = (dealId) => {
   const { user } = useAuth();
@@ -27,7 +29,7 @@ export const useDealReviews = (dealId) => {
 
     setLoading(true);
     const ref = collection(db, "deals", dealId, REVIEW_COLLECTION);
-    const q = query(ref, orderBy("createdAt", "desc"));
+    const q = query(ref, orderBy("createdAt", "desc"), limit(REVIEWS_LIMIT));
     const unsubscribe = onSnapshot(
       q,
       (snap) => {

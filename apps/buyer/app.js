@@ -27,7 +27,8 @@ import AddressFormScreen from "./src/screens/AddressFormScreen";
 import RoleMismatchScreen from "./src/screens/RoleMismatchScreen";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { usePushToken } from "./src/hooks/usePushToken";
-import { useUserProfile } from "./src/hooks/useUserProfile";
+import { useUserProfile, UserProfileProvider } from "./src/hooks/useUserProfile";
+import { DealStateProvider } from "./src/hooks/useDealState";
 import { useVersionGate } from "./src/hooks/useVersionGate";
 import {
   getStoredThemeMode,
@@ -174,13 +175,17 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ThemeProvider initialMode="light" app="buyer">
-          <ThemeBootstrap>
-            <NavigationContainer>
-              <AppNavigator />
-            </NavigationContainer>
-          </ThemeBootstrap>
-        </ThemeProvider>
+        <UserProfileProvider>
+          <DealStateProvider>
+            <ThemeProvider initialMode="light" app="buyer">
+              <ThemeBootstrap>
+                <NavigationContainer>
+                  <AppNavigator />
+                </NavigationContainer>
+              </ThemeBootstrap>
+            </ThemeProvider>
+          </DealStateProvider>
+        </UserProfileProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -3,7 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
   RefreshControl,
   StyleSheet,
   StatusBar,
@@ -18,7 +18,7 @@ import {
   ViewModeToggle,
   getStatusColor,
   getStatusLabel,
-  getDealImages,
+  getDealThumbnails,
   toDate,
 } from "@dealsworld/shared";
 import { useSellerLiveDeals } from "../hooks/useSellerLiveDeals";
@@ -74,25 +74,65 @@ export default function SellerHomeScreen({ navigation }) {
     return <DealBuddyLoadingScreen label="Loading deals..." />;
   }
 
+  const renderDeal = ({ item: deal }) => {
+    const displayStatus = getDealDisplayStatus(deal, now);
+    const expiryDate = toDate(deal.expiresAt);
+    const endsInLabel =
+      expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
+        ? formatEndsIn(expiryDate.getTime(), now)
+        : null;
+
+    return (
+      <View style={viewMode === "grid" ? styles.gridItem : null}>
+        <DealCard
+          compact={viewMode === "grid"}
+          title={deal.title}
+          category={deal.category || null}
+          images={getDealThumbnails(deal)}
+          joins={deal.currentJoins ?? deal.joinedUsers ?? 0}
+          targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
+          maxCount={deal.maxGroupSize ?? null}
+          accentColor={getStatusColor(displayStatus, theme)}
+          badgeLabel={getStatusLabel(displayStatus)}
+          statusLabel={getStatusLabel(displayStatus)}
+          viewsCount={deal.viewsCount ?? deal.views ?? 0}
+          favoritesCount={deal.favoritesCount ?? deal.favouritesCount ?? 0}
+          ratingAvg={deal.ratingAvg ?? deal.rating ?? null}
+          ratingCount={deal.ratingCount ?? 0}
+          originalPrice={deal.originalPrice}
+          discountPrice={deal.discountPrice}
+          expiryLabel={endsInLabel}
+          actionLabel="View Deal"
+          onActionPress={() => navigation.navigate("DealDetails", { deal })}
+        />
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        <SellerDashboardHeader
-          navigation={navigation}
-          now={now}
-          displayName={sellerDisplayName}
-          unreadCount={unreadCount}
-        />
+      <SellerDashboardHeader
+        navigation={navigation}
+        now={now}
+        displayName={sellerDisplayName}
+        unreadCount={unreadCount}
+      />
 
-        <View style={[styles.listWrap, !hasDeals && styles.listWrapEmpty]}>
+      <FlatList
+        key={viewMode}
+        data={liveDeals}
+        keyExtractor={(deal) => deal.id}
+        numColumns={viewMode === "grid" ? 2 : 1}
+        columnWrapperStyle={viewMode === "grid" ? styles.gridRow : undefined}
+        renderItem={renderDeal}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, !hasDeals && styles.listWrapEmpty]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListHeaderComponent={
           <CardHeader
-            title="Live Deals"
+            title={`Live Deals (${liveDeals?.length || 0})`}
             right={
               <View style={styles.headerRight}>
                 <ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />
@@ -102,58 +142,17 @@ export default function SellerHomeScreen({ navigation }) {
               </View>
             }
           />
-
-          {hasDeals ? (
-            <View style={viewMode === "grid" ? styles.grid : null}>
-              {liveDeals.map((deal) => {
-              const displayStatus = getDealDisplayStatus(deal, now);
-              const expiryDate = toDate(deal.expiresAt);
-              const endsInLabel =
-                expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
-                  ? formatEndsIn(expiryDate.getTime(), now)
-                  : null;
-
-              return (
-                <View
-                  key={deal.id}
-                  style={viewMode === "grid" ? styles.gridItem : null}
-                >
-                <DealCard
-                  compact={viewMode === "grid"}
-                  title={deal.title}
-                  category={deal.category || null}
-                  images={getDealImages(deal)}
-                  joins={deal.currentJoins ?? deal.joinedUsers ?? 0}
-                  targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
-                  maxCount={deal.maxGroupSize ?? null}
-                  accentColor={getStatusColor(displayStatus, theme)}
-                  badgeLabel={getStatusLabel(displayStatus)}
-                  statusLabel={getStatusLabel(displayStatus)}
-                  viewsCount={deal.viewsCount ?? deal.views ?? 0}
-                  favoritesCount={deal.favoritesCount ?? deal.favouritesCount ?? 0}
-                  ratingAvg={deal.ratingAvg ?? deal.rating ?? null}
-                  ratingCount={deal.ratingCount ?? 0}
-                  originalPrice={deal.originalPrice}
-                  discountPrice={deal.discountPrice}
-                  expiryLabel={endsInLabel}
-                  actionLabel="View Deal"
-                  onActionPress={() => navigation.navigate("DealDetails", { deal })}
-                />
-                </View>
-              );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyWrap}>
-              <EmptyState
-                icon="pricetag-outline"
-                title="No live deals right now."
-                subtitle="Create a deal to get it in front of buyers."
-              />
-            </View>
-          )}
-        </View>
-      </ScrollView>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              icon="pricetag-outline"
+              title="No live deals right now."
+              subtitle="Create a deal to get it in front of buyers."
+            />
+          </View>
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -166,8 +165,6 @@ const createStyles = (theme) =>
     },
     scrollContent: {
       flexGrow: 1,
-    },
-    listWrap: {
       paddingHorizontal: 20,
       paddingTop: 24,
       paddingBottom: 32,
@@ -180,11 +177,8 @@ const createStyles = (theme) =>
       alignItems: "center",
       gap: 12,
     },
-    grid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
+    gridRow: {
       justifyContent: "space-between",
-      marginTop: 16,
     },
     gridItem: {
       width: "48%",

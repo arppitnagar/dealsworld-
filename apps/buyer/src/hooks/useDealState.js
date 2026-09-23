@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   collection,
   doc,
@@ -12,7 +19,15 @@ import { useAuth } from "../context/AuthContext";
 
 const DEAL_STATE_COLLECTION = "dealStates";
 
-export const useDealState = () => {
+const DealStateContext = createContext(null);
+
+// The actual listener + mutators, run exactly once by DealStateProvider.
+// Every screen that needs join/favorite/viewed state calls useDealState()
+// below, which reads this shared value instead of opening its own
+// listener - previously HomeScreen, DealsScreen, DealDetailsScreen, and
+// SearchScreen each mounted an independent onSnapshot on the same
+// (unbounded, ever-growing) users/{uid}/dealStates collection.
+function useDealStateInternal() {
   const { user } = useAuth();
   const [stateMap, setStateMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
@@ -217,4 +232,21 @@ export const useDealState = () => {
     setDeliveryAddress,
     loading,
   };
+}
+
+export function DealStateProvider({ children }) {
+  const value = useDealStateInternal();
+  return (
+    <DealStateContext.Provider value={value}>
+      {children}
+    </DealStateContext.Provider>
+  );
+}
+
+export const useDealState = () => {
+  const context = useContext(DealStateContext);
+  if (!context) {
+    throw new Error("useDealState must be used within a DealStateProvider");
+  }
+  return context;
 };

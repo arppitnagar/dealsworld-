@@ -12,10 +12,6 @@ export const STATUS_FILTERS = [
   { key: "expired", label: "Expired", icon: TimerOff },
 ];
 
-export function normalizeText(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
 export function getDealLifecycleStatus(deal) {
   const approvalStatus = String(
     deal?.approvalStatus || deal?.approval?.status || "",
@@ -95,34 +91,6 @@ export function getAllStatusCounts(deals, nowMs = Date.now()) {
     acc[filter.key] = getStatusCount(deals, filter.key, nowMs);
     return acc;
   }, {});
-}
-
-export function isDealOwnedBySeller(deal, ownership) {
-  if (!deal || !ownership) return false;
-  const idSet = ownership.ids || new Set();
-  const nameSet = ownership.names || new Set();
-  if (!idSet.size && !nameSet.size) return false;
-
-  const idFields = [
-    deal?.sellerId,
-    deal?.vendorId,
-    deal?.vendorid,
-    deal?.legacySellerId,
-    deal?.sellerCode,
-    deal?.code,
-  ]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-
-  if (idFields.some((value) => idSet.has(value))) {
-    return true;
-  }
-
-  const nameFields = [deal?.sellerName, deal?.sellerDisplayName, deal?.vendorName]
-    .map((value) => normalizeText(value))
-    .filter(Boolean);
-
-  return nameFields.some((value) => nameSet.has(value));
 }
 
 export function formatEndsIn(expiryMs, nowMs = Date.now()) {

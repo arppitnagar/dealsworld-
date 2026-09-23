@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -481,358 +482,357 @@ export default function AdminWorkbench({
     [payments, paymentFilter],
   );
 
+  const renderDealRow = ({ item: deal }) => {
+    const detail = getDealDetailData(deal);
+    const isPending = String(deal.approvalStatus || "").toLowerCase() === "pending";
+    return (
+      <View style={styles.listItem}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.itemTitle}>{deal.title || "Untitled deal"}</Text>
+          <StatusChip label={deal.computedStatus} />
+        </View>
+        <Text style={styles.bodyText}>ID: {deal.id}</Text>
+        <Text style={styles.bodyText}>Seller: {formatSellerLabel(deal)}</Text>
+        <Text style={styles.bodyText}>
+          Category: {deal.category || "-"} | Location: {deal.location || "-"}
+        </Text>
+        {/pick/i.test(String(deal.deliveryMode || "")) ? (
+          <Text style={styles.bodyText}>
+            Store Address: {resolveStoreAddress(deal)}
+          </Text>
+        ) : null}
+        <Text style={styles.bodyText}>
+          Joined: {detail.joined}/{detail.target} | Views: {detail.views}
+        </Text>
+        <Text style={styles.bodyText}>Expires: {detail.expiresAtLabel}</Text>
+        <View style={styles.chipWrap}>
+          <ActionButton title="View Details" onPress={() => setSelectedDeal(deal)} dark />
+          {isPending ? (
+            <ActionButton
+              title="Accept"
+              onPress={() => openDealActionPrompt(deal, "approve")}
+              success
+              disabled={workingDealId === deal.id}
+              loading={workingDealId === deal.id}
+            />
+          ) : null}
+          {isPending ? (
+            <ActionButton
+              title="Reject"
+              onPress={() => openDealActionPrompt(deal, "reject")}
+              danger
+              disabled={workingDealId === deal.id}
+              loading={workingDealId === deal.id}
+            />
+          ) : null}
+        </View>
+        {isPending ? (
+          <TextInput
+            style={styles.input}
+            placeholder="Reject reason (optional)"
+            value={rejectReasonByDeal[deal.id] || ""}
+            onChangeText={(text) =>
+              setRejectReasonByDeal((current) => ({ ...current, [deal.id]: text }))
+            }
+          />
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderPaymentRow = ({ item: entry }) => (
+    <View style={styles.listItem}>
+      <View style={styles.rowBetween}>
+        <Text style={styles.itemTitle}>{entry.paymentId || entry.id}</Text>
+        <StatusChip label={entry.status || "unknown"} />
+      </View>
+      <Text style={styles.bodyText}>Deal: {entry.dealId || "-"}</Text>
+      <Text style={styles.bodyText}>
+        Buyer:{" "}
+        {formatUserLabelById(
+          entry.buyerId,
+          userDisplayNameById,
+          entry.buyerName || entry.buyerDisplayName,
+          "Unknown buyer",
+        )}{" "}
+        | Seller:{" "}
+        {formatUserLabelById(
+          entry.sellerId,
+          userDisplayNameById,
+          entry.sellerName || entry.sellerDisplayName || entry.vendorName,
+          "Unknown seller",
+        )}
+      </Text>
+      <Text style={styles.bodyText}>
+        Amount: {formatCurrency(entry.amount)} {String(entry.currency || "INR").toUpperCase()}
+      </Text>
+      <Text style={styles.bodyText}>Created: {formatDateTime(entry.createdAt)}</Text>
+    </View>
+  );
+
+  const adminProfileFooter = (
+    <AdminProfileCard user={user} profile={profile} onReloadProfile={onReloadProfile} />
+  );
+
   return (
     <View style={styles.page}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Card>
-          <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.title}>Admin Console</Text>
-              <Text style={styles.bodyText}>
-                {profile?.displayName || user?.email || "Admin"}
-              </Text>
-            </View>
-            <View style={styles.headerActions}>
-              <ActionButton title="Refresh" onPress={refreshCurrentTab} />
-              <ActionButton title="Logout" onPress={onLogout} />
-            </View>
-          </View>
-          <View style={styles.tabWrap}>
-            <TabButton
-              label={`Deals (${dealCounts.pending})`}
-              active={activeTab === "deals"}
-              onPress={() => setActiveTab("deals")}
-            />
-            <TabButton
-              label={`Sellers (${sellers.length})`}
-              active={activeTab === "sellers"}
-              onPress={() => setActiveTab("sellers")}
-            />
-            <TabButton
-              label={`Buyers (${buyers.length})`}
-              active={activeTab === "buyers"}
-              onPress={() => setActiveTab("buyers")}
-            />
-            <TabButton
-              label={`Payments (${payments.length})`}
-              active={activeTab === "payments"}
-              onPress={() => setActiveTab("payments")}
-            />
-            <TabButton
-              label="Analytics"
-              active={activeTab === "analytics"}
-              onPress={() => setActiveTab("analytics")}
-            />
-            <TabButton
-              label="App Updates"
-              active={activeTab === "settings"}
-              onPress={() => setActiveTab("settings")}
-            />
-          </View>
-        </Card>
-
-        {activeTab === "deals" ? (
-          <Card>
-            <Text style={styles.sectionTitle}>Deals Dashboard</Text>
+      <Card>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>Admin Console</Text>
             <Text style={styles.bodyText}>
-              Approval is required only for Deals.
+              {profile?.displayName || user?.email || "Admin"}
             </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Search deals..."
-              value={dealQuery}
-              onChangeText={setDealQuery}
-            />
-            <View style={styles.chipWrap}>
-              {DEAL_FILTERS.map((filter) => (
-                <TabButton
-                  key={filter}
-                  label={`${filter} (${dealCounts[filter] ?? 0})`}
-                  active={dealFilter === filter}
-                  onPress={() => setDealFilter(filter)}
-                  compact
-                />
-              ))}
-            </View>
-            {dealsError ? <Text style={styles.errorText}>{dealsError}</Text> : null}
-            {dealsLoading ? (
-              <ActivityIndicator />
-            ) : filteredDeals.length === 0 ? (
-              <Text style={styles.bodyText}>No deals found.</Text>
-            ) : (
-              filteredDeals.map((deal) => {
-                const detail = getDealDetailData(deal);
-                const isPending =
-                  String(deal.approvalStatus || "").toLowerCase() === "pending";
-                return (
-                  <View key={deal.id} style={styles.listItem}>
-                    <View style={styles.rowBetween}>
-                      <Text style={styles.itemTitle}>
-                        {deal.title || "Untitled deal"}
-                      </Text>
-                      <StatusChip label={deal.computedStatus} />
-                    </View>
-                    <Text style={styles.bodyText}>ID: {deal.id}</Text>
-                    <Text style={styles.bodyText}>
-                      Seller: {formatSellerLabel(deal)}
-                    </Text>
-                    <Text style={styles.bodyText}>
-                      Category: {deal.category || "-"} | Location:{" "}
-                      {deal.location || "-"}
-                    </Text>
-                    {/pick/i.test(String(deal.deliveryMode || "")) ? (
-                      <Text style={styles.bodyText}>
-                        Store Address: {resolveStoreAddress(deal)}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.bodyText}>
-                      Joined: {detail.joined}/{detail.target} | Views: {detail.views}
-                    </Text>
-                    <Text style={styles.bodyText}>
-                      Expires: {detail.expiresAtLabel}
-                    </Text>
-                    <View style={styles.chipWrap}>
-                      <ActionButton
-                        title="View Details"
-                        onPress={() => setSelectedDeal(deal)}
-                        dark
-                      />
-                      {isPending ? (
-                        <ActionButton
-                          title="Accept"
-                          onPress={() => openDealActionPrompt(deal, "approve")}
-                          success
-                          disabled={workingDealId === deal.id}
-                        />
-                      ) : null}
-                      {isPending ? (
-                        <ActionButton
-                          title="Reject"
-                          onPress={() => openDealActionPrompt(deal, "reject")}
-                          danger
-                          disabled={workingDealId === deal.id}
-                        />
-                      ) : null}
-                    </View>
-                    {isPending ? (
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Reject reason (optional)"
-                        value={rejectReasonByDeal[deal.id] || ""}
-                        onChangeText={(text) =>
-                          setRejectReasonByDeal((current) => ({
-                            ...current,
-                            [deal.id]: text,
-                          }))
-                        }
-                      />
-                    ) : null}
-                  </View>
-                );
-              })
-            )}
-          </Card>
-        ) : null}
-
-        {activeTab === "sellers" ? (
-          <UsersPanel
-            title="Sellers Dashboard"
-            description="Disable or enable seller users."
-            loading={usersLoading}
-            error={usersError}
-            query={sellerQuery}
-            onQueryChange={setSellerQuery}
-            entries={sellers}
-            workingUserId={workingUserId}
-            onRequestToggleUserStatus={openUserActionPrompt}
+          </View>
+          <View style={styles.headerActions}>
+            <ActionButton title="Refresh" onPress={refreshCurrentTab} />
+            <ActionButton title="Logout" onPress={onLogout} />
+          </View>
+        </View>
+        <View style={styles.tabWrap}>
+          <TabButton
+            label={`Deals (${dealCounts.pending})`}
+            active={activeTab === "deals"}
+            onPress={() => setActiveTab("deals")}
           />
-        ) : null}
-
-        {activeTab === "buyers" ? (
-          <UsersPanel
-            title="Buyers Dashboard"
-            description="Disable or enable buyer users."
-            loading={usersLoading}
-            error={usersError}
-            query={buyerQuery}
-            onQueryChange={setBuyerQuery}
-            entries={buyers}
-            workingUserId={workingUserId}
-            onRequestToggleUserStatus={openUserActionPrompt}
+          <TabButton
+            label={`Sellers (${sellers.length})`}
+            active={activeTab === "sellers"}
+            onPress={() => setActiveTab("sellers")}
           />
-        ) : null}
+          <TabButton
+            label={`Buyers (${buyers.length})`}
+            active={activeTab === "buyers"}
+            onPress={() => setActiveTab("buyers")}
+          />
+          <TabButton
+            label={`Payments (${payments.length})`}
+            active={activeTab === "payments"}
+            onPress={() => setActiveTab("payments")}
+          />
+          <TabButton
+            label="Analytics"
+            active={activeTab === "analytics"}
+            onPress={() => setActiveTab("analytics")}
+          />
+          <TabButton
+            label="App Updates"
+            active={activeTab === "settings"}
+            onPress={() => setActiveTab("settings")}
+          />
+        </View>
+      </Card>
 
-        {activeTab === "payments" ? (
-          <Card>
-            <Text style={styles.sectionTitle}>Payments Dashboard</Text>
-            <View style={styles.chipWrap}>
-              {PAYMENT_FILTERS.map((filter) => (
-                <TabButton
-                  key={filter}
-                  label={filter}
-                  active={paymentFilter === filter}
-                  onPress={() => setPaymentFilter(filter)}
-                  compact
-                />
-              ))}
-            </View>
-            {paymentsError ? (
-              <Text style={styles.errorText}>{paymentsError}</Text>
-            ) : null}
-            {paymentsLoading ? (
-              <ActivityIndicator />
-            ) : filteredPayments.length === 0 ? (
-              <Text style={styles.bodyText}>No payments found.</Text>
-            ) : (
-              filteredPayments.map((entry) => (
-                <View key={entry.id} style={styles.listItem}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.itemTitle}>{entry.paymentId || entry.id}</Text>
-                    <StatusChip label={entry.status || "unknown"} />
-                  </View>
-                  <Text style={styles.bodyText}>Deal: {entry.dealId || "-"}</Text>
-                  <Text style={styles.bodyText}>
-                    Buyer:{" "}
-                    {formatUserLabelById(
-                      entry.buyerId,
-                      userDisplayNameById,
-                      entry.buyerName || entry.buyerDisplayName,
-                      "Unknown buyer",
-                    )}{" "}
-                    | Seller:{" "}
-                    {formatUserLabelById(
-                      entry.sellerId,
-                      userDisplayNameById,
-                      entry.sellerName || entry.sellerDisplayName || entry.vendorName,
-                      "Unknown seller",
-                    )}
-                  </Text>
-                  <Text style={styles.bodyText}>
-                    Amount: {formatCurrency(entry.amount)}{" "}
-                    {String(entry.currency || "INR").toUpperCase()}
-                  </Text>
-                  <Text style={styles.bodyText}>
-                    Created: {formatDateTime(entry.createdAt)}
-                  </Text>
-                </View>
-              ))
-            )}
-          </Card>
-        ) : null}
-
-        {activeTab === "analytics" ? (
-          <Card>
-            <View style={styles.headerRow}>
-              <Text style={styles.sectionTitle}>Analytics Dashboard</Text>
-              <ActionButton title="Reload" onPress={() => loadAnalytics(true)} />
-            </View>
-            {analyticsError ? (
-              <Text style={styles.errorText}>{analyticsError}</Text>
-            ) : null}
-            {analyticsLoading || !analytics ? (
-              <ActivityIndicator />
-            ) : (
-              <>
-                <MetricsBlock
-                  title="Deals"
-                  items={[
-                    ["Total", analytics?.deals?.total],
-                    ["Pending", analytics?.deals?.pending],
-                    ["Approved", analytics?.deals?.approved],
-                    ["Active", analytics?.deals?.active],
-                    ["Rejected", analytics?.deals?.rejected],
-                    ["Conversion", `${analytics?.deals?.conversionRate || 0}%`],
-                  ]}
-                />
-                <MetricsBlock
-                  title="Users"
-                  items={[
-                    ["Total", analytics?.users?.total],
-                    ["Sellers", analytics?.users?.sellers],
-                    ["Buyers", analytics?.users?.buyers],
-                    ["Blocked", analytics?.users?.blocked],
-                  ]}
-                />
-                <MetricsBlock
-                  title="Payments"
-                  items={[
-                    ["Total", analytics?.payments?.total],
-                    ["Captured", analytics?.payments?.captured],
-                    ["Refunded", analytics?.payments?.refunded],
-                    ["Failed", analytics?.payments?.failed],
-                    ["Volume", formatCurrency(analytics?.payments?.volume)],
-                  ]}
-                />
-                <Text style={styles.bodyText}>
-                  Updated: {formatDateTime(analytics.updatedAt)}
-                </Text>
-              </>
-            )}
-          </Card>
-        ) : null}
-
-        {activeTab === "settings" ? (
-          <Card>
-            <View style={styles.headerRow}>
-              <Text style={styles.sectionTitle}>Force App Update</Text>
-              <ActionButton title="Reload" onPress={() => loadVersionGate(true)} />
-            </View>
-            <Text style={styles.bodyText}>
-              Set the oldest app version still allowed to sign in. Anyone on
-              an older build is blocked with an update screen until they
-              upgrade.
-            </Text>
-            {versionGateError ? (
-              <Text style={styles.errorText}>{versionGateError}</Text>
-            ) : null}
-            {versionGateLoading && !hasLoadedVersionGate ? (
-              <ActivityIndicator />
-            ) : (
-              <>
-                <VersionGateAppFields
-                  label="Buyer app (DealBuddy)"
-                  values={versionGate.buyer || {}}
-                  onChange={(field, value) =>
-                    updateVersionGateField("buyer", field, value)
-                  }
-                />
-                <VersionGateAppFields
-                  label="Seller app (SellerBuddy)"
-                  values={versionGate.seller || {}}
-                  onChange={(field, value) =>
-                    updateVersionGateField("seller", field, value)
-                  }
-                />
-                {versionGateSaveError ? (
-                  <Text style={styles.errorText}>{versionGateSaveError}</Text>
-                ) : null}
-                {versionGateSaved ? (
-                  <Text style={styles.bodyText}>Saved.</Text>
-                ) : null}
-                <View style={styles.chipWrap}>
-                  <ActionButton
-                    title={versionGateSaving ? "Saving..." : "Save changes"}
-                    onPress={saveVersionGate}
-                    disabled={versionGateSaving}
-                    dark
+      {activeTab === "deals" ? (
+        <FlatList
+          style={styles.listFlex}
+          contentContainerStyle={styles.scrollContainer}
+          data={filteredDeals}
+          keyExtractor={(deal) => deal.id}
+          renderItem={renderDealRow}
+          ListHeaderComponent={
+            <Card>
+              <Text style={styles.sectionTitle}>Deals Dashboard</Text>
+              <Text style={styles.bodyText}>Approval is required only for Deals.</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Search deals..."
+                value={dealQuery}
+                onChangeText={setDealQuery}
+              />
+              <View style={styles.chipWrap}>
+                {DEAL_FILTERS.map((filter) => (
+                  <TabButton
+                    key={filter}
+                    label={`${filter} (${dealCounts[filter] ?? 0})`}
+                    active={dealFilter === filter}
+                    onPress={() => setDealFilter(filter)}
+                    compact
                   />
-                </View>
-              </>
-            )}
-          </Card>
-        ) : null}
+                ))}
+              </View>
+              {dealsError ? <Text style={styles.errorText}>{dealsError}</Text> : null}
+            </Card>
+          }
+          ListEmptyComponent={
+            <Card>
+              {dealsLoading ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.bodyText}>No deals found.</Text>
+              )}
+            </Card>
+          }
+          ListFooterComponent={adminProfileFooter}
+        />
+      ) : activeTab === "sellers" ? (
+        <UsersPanel
+          title="Sellers Dashboard"
+          description="Disable or enable seller users."
+          loading={usersLoading}
+          error={usersError}
+          query={sellerQuery}
+          onQueryChange={setSellerQuery}
+          entries={sellers}
+          workingUserId={workingUserId}
+          onRequestToggleUserStatus={openUserActionPrompt}
+          footer={adminProfileFooter}
+        />
+      ) : activeTab === "buyers" ? (
+        <UsersPanel
+          title="Buyers Dashboard"
+          description="Disable or enable buyer users."
+          loading={usersLoading}
+          error={usersError}
+          query={buyerQuery}
+          onQueryChange={setBuyerQuery}
+          entries={buyers}
+          workingUserId={workingUserId}
+          onRequestToggleUserStatus={openUserActionPrompt}
+          footer={adminProfileFooter}
+        />
+      ) : activeTab === "payments" ? (
+        <FlatList
+          style={styles.listFlex}
+          contentContainerStyle={styles.scrollContainer}
+          data={filteredPayments}
+          keyExtractor={(entry) => entry.id}
+          renderItem={renderPaymentRow}
+          ListHeaderComponent={
+            <Card>
+              <Text style={styles.sectionTitle}>Payments Dashboard</Text>
+              <View style={styles.chipWrap}>
+                {PAYMENT_FILTERS.map((filter) => (
+                  <TabButton
+                    key={filter}
+                    label={filter}
+                    active={paymentFilter === filter}
+                    onPress={() => setPaymentFilter(filter)}
+                    compact
+                  />
+                ))}
+              </View>
+              {paymentsError ? <Text style={styles.errorText}>{paymentsError}</Text> : null}
+            </Card>
+          }
+          ListEmptyComponent={
+            <Card>
+              {paymentsLoading ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.bodyText}>No payments found.</Text>
+              )}
+            </Card>
+          }
+          ListFooterComponent={adminProfileFooter}
+        />
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          {activeTab === "analytics" ? (
+            <Card>
+              <View style={styles.headerRow}>
+                <Text style={styles.sectionTitle}>Analytics Dashboard</Text>
+                <ActionButton title="Reload" onPress={() => loadAnalytics(true)} />
+              </View>
+              {analyticsError ? (
+                <Text style={styles.errorText}>{analyticsError}</Text>
+              ) : null}
+              {analyticsLoading || !analytics ? (
+                <ActivityIndicator />
+              ) : (
+                <>
+                  <MetricsBlock
+                    title="Deals"
+                    items={[
+                      ["Total", analytics?.deals?.total],
+                      ["Pending", analytics?.deals?.pending],
+                      ["Approved", analytics?.deals?.approved],
+                      ["Active", analytics?.deals?.active],
+                      ["Rejected", analytics?.deals?.rejected],
+                      ["Conversion", `${analytics?.deals?.conversionRate || 0}%`],
+                    ]}
+                  />
+                  <MetricsBlock
+                    title="Users"
+                    items={[
+                      ["Total", analytics?.users?.total],
+                      ["Sellers", analytics?.users?.sellers],
+                      ["Buyers", analytics?.users?.buyers],
+                      ["Blocked", analytics?.users?.blocked],
+                    ]}
+                  />
+                  <MetricsBlock
+                    title="Payments"
+                    items={[
+                      ["Total", analytics?.payments?.total],
+                      ["Captured", analytics?.payments?.captured],
+                      ["Refunded", analytics?.payments?.refunded],
+                      ["Failed", analytics?.payments?.failed],
+                      ["Volume", formatCurrency(analytics?.payments?.volume)],
+                    ]}
+                  />
+                  <Text style={styles.bodyText}>
+                    Updated: {formatDateTime(analytics.updatedAt)}
+                  </Text>
+                </>
+              )}
+            </Card>
+          ) : null}
 
-        <Card>
-          <View style={styles.headerRow}>
-            <Text style={styles.sectionTitle}>Admin Profile</Text>
-            <ActionButton title="Reload" onPress={onReloadProfile} />
-          </View>
-          <Text style={styles.bodyText}>UID: {user.uid}</Text>
-          <Text style={styles.bodyText}>Email: {user.email || "-"}</Text>
-          <Text style={styles.bodyText}>Role: {profile?.role || "-"}</Text>
-          <Text style={styles.bodyText}>Status: {profile?.status || "-"}</Text>
-        </Card>
-      </ScrollView>
+          {activeTab === "settings" ? (
+            <Card>
+              <View style={styles.headerRow}>
+                <Text style={styles.sectionTitle}>Force App Update</Text>
+                <ActionButton title="Reload" onPress={() => loadVersionGate(true)} />
+              </View>
+              <Text style={styles.bodyText}>
+                Set the oldest app version still allowed to sign in. Anyone on
+                an older build is blocked with an update screen until they
+                upgrade.
+              </Text>
+              {versionGateError ? (
+                <Text style={styles.errorText}>{versionGateError}</Text>
+              ) : null}
+              {versionGateLoading && !hasLoadedVersionGate ? (
+                <ActivityIndicator />
+              ) : (
+                <>
+                  <VersionGateAppFields
+                    label="Buyer app (DealBuddy)"
+                    values={versionGate.buyer || {}}
+                    onChange={(field, value) =>
+                      updateVersionGateField("buyer", field, value)
+                    }
+                  />
+                  <VersionGateAppFields
+                    label="Seller app (SellerBuddy)"
+                    values={versionGate.seller || {}}
+                    onChange={(field, value) =>
+                      updateVersionGateField("seller", field, value)
+                    }
+                  />
+                  {versionGateSaveError ? (
+                    <Text style={styles.errorText}>{versionGateSaveError}</Text>
+                  ) : null}
+                  {versionGateSaved ? (
+                    <Text style={styles.bodyText}>Saved.</Text>
+                  ) : null}
+                  <View style={styles.chipWrap}>
+                    <ActionButton
+                      title={versionGateSaving ? "Saving..." : "Save changes"}
+                      onPress={saveVersionGate}
+                      disabled={versionGateSaving}
+                      dark
+                    />
+                  </View>
+                </>
+              )}
+            </Card>
+          ) : null}
+
+          {adminProfileFooter}
+        </ScrollView>
+      )}
 
       <DealDetailsModal
         visible={Boolean(selectedDeal)}
@@ -872,46 +872,76 @@ function UsersPanel({
   entries,
   workingUserId,
   onRequestToggleUserStatus,
+  footer,
 }) {
+  const renderEntry = ({ item: entry }) => {
+    const isBlocked = String(entry.status || "active").toLowerCase() === "blocked";
+    return (
+      <View style={styles.listItem}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.itemTitle}>
+            {entry.displayName || entry.email || entry.id}
+          </Text>
+          <StatusChip label={entry.status || "active"} />
+        </View>
+        <Text style={styles.bodyText}>UID: {entry.id}</Text>
+        <Text style={styles.bodyText}>Email: {entry.email || "-"}</Text>
+        <ActionButton
+          title={isBlocked ? "Enable User" : "Disable User"}
+          onPress={() => onRequestToggleUserStatus(entry)}
+          disabled={workingUserId === entry.id}
+          loading={workingUserId === entry.id}
+          {...(isBlocked ? { success: true } : { danger: true })}
+        />
+      </View>
+    );
+  };
+
+  return (
+    <FlatList
+      style={styles.listFlex}
+      contentContainerStyle={styles.scrollContainer}
+      data={entries}
+      keyExtractor={(entry) => entry.id}
+      renderItem={renderEntry}
+      ListHeaderComponent={
+        <Card>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          <Text style={styles.bodyText}>{description}</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Search user..."
+            value={query}
+            onChangeText={onQueryChange}
+          />
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        </Card>
+      }
+      ListEmptyComponent={
+        <Card>
+          {loading ? (
+            <ActivityIndicator />
+          ) : (
+            <Text style={styles.bodyText}>No users found.</Text>
+          )}
+        </Card>
+      }
+      ListFooterComponent={footer}
+    />
+  );
+}
+
+function AdminProfileCard({ user, profile, onReloadProfile }) {
   return (
     <Card>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Text style={styles.bodyText}>{description}</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Search user..."
-        value={query}
-        onChangeText={onQueryChange}
-      />
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      {loading ? (
-        <ActivityIndicator />
-      ) : entries.length === 0 ? (
-        <Text style={styles.bodyText}>No users found.</Text>
-      ) : (
-        entries.map((entry) => {
-          const isBlocked =
-            String(entry.status || "active").toLowerCase() === "blocked";
-          return (
-            <View key={entry.id} style={styles.listItem}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.itemTitle}>
-                  {entry.displayName || entry.email || entry.id}
-                </Text>
-                <StatusChip label={entry.status || "active"} />
-              </View>
-              <Text style={styles.bodyText}>UID: {entry.id}</Text>
-              <Text style={styles.bodyText}>Email: {entry.email || "-"}</Text>
-              <ActionButton
-                title={isBlocked ? "Enable User" : "Disable User"}
-                onPress={() => onRequestToggleUserStatus(entry)}
-                disabled={workingUserId === entry.id}
-                {...(isBlocked ? { success: true } : { danger: true })}
-              />
-            </View>
-          );
-        })
-      )}
+      <View style={styles.headerRow}>
+        <Text style={styles.sectionTitle}>Admin Profile</Text>
+        <ActionButton title="Reload" onPress={onReloadProfile} />
+      </View>
+      <Text style={styles.bodyText}>UID: {user.uid}</Text>
+      <Text style={styles.bodyText}>Email: {user.email || "-"}</Text>
+      <Text style={styles.bodyText}>Role: {profile?.role || "-"}</Text>
+      <Text style={styles.bodyText}>Status: {profile?.status || "-"}</Text>
     </Card>
   );
 }
@@ -1026,12 +1056,14 @@ function DealDetailsModal({
                     onPress={() => onRequestApproveDeal(deal)}
                     success
                     disabled={workingDealId === deal.id}
+                    loading={workingDealId === deal.id}
                   />
                   <ActionButton
                     title="Reject Deal"
                     onPress={() => onRequestRejectDeal(deal)}
                     danger
                     disabled={workingDealId === deal.id}
+                    loading={workingDealId === deal.id}
                   />
                 </View>
               </Card>
@@ -1063,9 +1095,10 @@ function DealActionConfirmModal({
           <View style={styles.confirmActions}>
             <ActionButton title="Cancel" onPress={onCancel} disabled={isBusy} />
             <ActionButton
-              title={isBusy ? "Please wait..." : isApprove ? "Accept Deal" : "Reject Deal"}
+              title={isApprove ? "Accept Deal" : "Reject Deal"}
               onPress={onConfirm}
               disabled={isBusy}
+              loading={isBusy}
               {...(isApprove ? { success: true } : { danger: true })}
             />
           </View>
@@ -1094,9 +1127,10 @@ function UserActionConfirmModal({
           <View style={styles.confirmActions}>
             <ActionButton title="Cancel" onPress={onCancel} disabled={isBusy} />
             <ActionButton
-              title={isBusy ? "Please wait..." : prompt.confirmTitle}
+              title={prompt.confirmTitle}
               onPress={onConfirm}
               disabled={isBusy}
+              loading={isBusy}
               {...(prompt.success ? { success: true } : { danger: true })}
             />
           </View>
@@ -1131,7 +1165,7 @@ function DetailLine({ label, value }) {
   );
 }
 
-function ActionButton({ title, onPress, disabled, dark, success, danger }) {
+function ActionButton({ title, onPress, disabled, dark, success, danger, loading }) {
   return (
     <TouchableOpacity
       style={[
@@ -1139,12 +1173,16 @@ function ActionButton({ title, onPress, disabled, dark, success, danger }) {
         dark ? styles.btnDark : null,
         success ? styles.btnSuccess : null,
         danger ? styles.btnDanger : null,
-        disabled ? styles.btnDisabled : null,
+        (disabled || loading) ? styles.btnDisabled : null,
       ]}
       onPress={onPress}
-      disabled={disabled}
+      disabled={disabled || loading}
     >
-      <Text style={styles.btnText}>{title}</Text>
+      {loading ? (
+        <ActivityIndicator size="small" color={theme.colors.onPrimary} />
+      ) : (
+        <Text style={styles.btnText}>{title}</Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -1401,6 +1439,7 @@ function getDealDetailData(deal) {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: theme.colors.dashboardBg },
+  listFlex: { flex: 1 },
   scrollContainer: { padding: 20, gap: 14 },
   card: {
     backgroundColor: theme.colors.surface,

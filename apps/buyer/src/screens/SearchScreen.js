@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet } from "react-native";
+import { View, ScrollView, RefreshControl, StyleSheet, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   useTheme,
@@ -8,9 +8,10 @@ import {
   DealCard,
   DealBuddyLoadingScreen,
   ViewModeToggle,
-  getDealImages,
+  getDealThumbnails,
 } from "@dealsworld/shared";
 import { useDeals } from "../hooks/useDeals";
+import { useDealSearch } from "../hooks/useDealSearch";
 import { useMyDeliveries, getDeliveryBadge } from "../hooks/useDeliveryStatus";
 import { useDealState } from "../hooks/useDealState";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -18,7 +19,6 @@ import { useNotifications } from "../hooks/useNotifications";
 import { useDealSearchControls } from "../hooks/useDealSearchControls";
 import DashboardHeader from "../components/DashboardHeader";
 import DealSearchModals from "../components/DealSearchModals";
-import { searchMatchesDeal } from "../utils/dealSearch";
 import {
   getExpiryMs,
   getJoinCount,
@@ -38,7 +38,20 @@ import {
 export default function SearchScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { data: deals, isLoading, refetch } = useDeals();
+  const controls = useDealSearchControls();
+  // Unlike Home's paginated preview feed, this screen's browse mode is
+  // titled "All Deals" and has no infinite-scroll trigger to load more as
+  // you scroll - it must fetch the full set up front (same as DealsScreen),
+  // or the count and the list both silently cap at one page (20).
+  const { data: deals, isLoading, refetch } = useDeals({ fullSet: true });
+  // Real search now goes server-side (Typesense) instead of walking every
+  // field of every fetched deal client-side - only enabled while actually
+  // searching. Browsing (not searching) is unaffected and stays on the
+  // normal feed, same as Home/Deals - it never had the search-specific
+  // scale problem.
+  const searchQuery = useDealSearch(controls.searchText, {
+    enabled: controls.isSearching,
+  });
   const {
     viewedIds,
     favoriteIds,
@@ -49,7 +62,6 @@ export default function SearchScreen({ navigation }) {
   const { data: myDeliveries } = useMyDeliveries();
   const { profile, updateProfile } = useUserProfile();
   const { unreadCount } = useNotifications();
-  const controls = useDealSearchControls();
 
   const viewMode = profile?.dashboardViewMode === "grid" ? "grid" : "list";
   const handleChangeViewMode = (mode) => {
@@ -60,17 +72,22 @@ export default function SearchScreen({ navigation }) {
   // Land on the same active deals everyone else sees - searching narrows
   // that list down, it never starts from an empty one.
   const filteredDeals = useMemo(() => {
-    if (!deals) return [];
     const now = Date.now();
-    return deals.filter((deal) => {
-      if (!isDealActive(deal, now)) return false;
-      if (controls.isSearching) return searchMatchesDeal(deal, controls.searchText);
-      return true;
-    });
-  }, [deals, controls.isSearching, controls.searchText]);
+    const source = controls.isSearching ? searchQuery.data?.deals ?? [] : deals ?? [];
+    // isDealActive is re-checked even on search results - a deal's Firestore
+    // status can flip (or its expiry pass) faster than the ~20s Typesense
+    // sync interval picks it up.
+    return source.filter((deal) => isDealActive(deal, now));
+  }, [deals, searchQuery.data, controls.isSearching]);
 
   const sortedDeals = controls.applyFieldFilterAndSort(filteredDeals);
   const hasDeals = sortedDeals?.length > 0;
+  const searchUnavailable = controls.isSearching && searchQuery.isError;
+  // Only the very first search of a session has no placeholder data to fall
+  // back on. Unlike the isLoading/dealStateLoading case below, this must NOT
+  // blank the whole screen - the search box needs to stay visible and
+  // interactive so it's clear the app is still working, not stuck.
+  const searchInitialLoading = controls.isSearching && searchQuery.isLoading;
 
   if (isLoading || dealStateLoading) {
     return <DealBuddyLoadingScreen label="Loading deals..." />;
@@ -100,11 +117,22 @@ export default function SearchScreen({ navigation }) {
 
         <View style={[styles.listWrap, !hasDeals && styles.listWrapEmpty]}>
           <CardHeader
-            title={controls.isSearching ? "Search Results" : "All Deals"}
-            right={<ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />}
+            title={`${controls.isSearching ? "Search Results" : "All Deals"} (${sortedDeals?.length || 0})`}
+            right={
+              <View style={styles.headerRight}>
+                {controls.isSearching && searchQuery.isFetching ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : null}
+                <ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />
+              </View>
+            }
           />
 
-          {hasDeals ? (
+          {searchInitialLoading ? (
+            <View style={styles.emptyWrap}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+          ) : hasDeals ? (
             <View style={viewMode === "grid" ? styles.grid : null}>
               {sortedDeals.map((deal) => {
               const expiryMs = getExpiryMs(deal);
@@ -125,7 +153,7 @@ export default function SearchScreen({ navigation }) {
                   compact={viewMode === "grid"}
                   title={deal.title}
                   category={deal?.category || null}
-                  images={getDealImages(deal)}
+                  images={getDealThumbnails(deal)}
                   joins={getJoinCount(deal)}
                   targetCount={getMinGroupSize(deal)}
                   maxCount={getMaxGroupSize(deal)}
@@ -180,14 +208,18 @@ export default function SearchScreen({ navigation }) {
               <EmptyState
                 icon="search-outline"
                 title={
-                  controls.isSearching
-                    ? "No deals match your search."
-                    : "No active deals right now."
+                  searchUnavailable
+                    ? "Search is temporarily unavailable."
+                    : controls.isSearching
+                      ? "No deals match your search."
+                      : "No active deals right now."
                 }
                 subtitle={
-                  controls.isSearching
-                    ? "Try a different search term."
-                    : "Pull to refresh or check back later."
+                  searchUnavailable
+                    ? "Please try again in a moment."
+                    : controls.isSearching
+                      ? "Try a different search term."
+                      : "Pull to refresh or check back later."
                 }
               />
             </View>
@@ -213,6 +245,11 @@ const createStyles = (theme) =>
       paddingHorizontal: 20,
       paddingTop: 24,
       paddingBottom: 32,
+    },
+    headerRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
     },
     listWrapEmpty: {
       flex: 1,

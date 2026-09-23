@@ -557,10 +557,14 @@ export default function CreateDealScreen({ route, navigation }) {
    */
   const resolveImagesForSave = async (uris) => {
     const list = (uris || []).filter(Boolean);
-    if (!list.length) return [];
+    if (!list.length) return { images: [], thumbImages: [] };
 
     const localUris = list.filter((uri) => !/^https?:\/\//i.test(uri));
-    if (!localUris.length) return list;
+    if (!localUris.length) {
+      // Already-uploaded URLs from a previous save have no thumbnail info
+      // available here - list views fall back to the full-res URL for these.
+      return { images: list, thumbImages: list };
+    }
 
     const formData = new FormData();
     localUris.forEach((uri, index) => {
@@ -574,13 +578,25 @@ export default function CreateDealScreen({ route, navigation }) {
       headers: { "Content-Type": "multipart/form-data" },
     });
     const uploadedUrls = response.data?.urls || [];
+    const uploadedThumbUrls = response.data?.thumbUrls || [];
 
     let uploadIndex = 0;
-    return list
-      .map((uri) =>
-        /^https?:\/\//i.test(uri) ? uri : uploadedUrls[uploadIndex++] ?? null,
-      )
-      .filter(Boolean);
+    const images = [];
+    const thumbImages = [];
+    list.forEach((uri) => {
+      if (/^https?:\/\//i.test(uri)) {
+        images.push(uri);
+        thumbImages.push(uri);
+        return;
+      }
+      const url = uploadedUrls[uploadIndex];
+      const thumbUrl = uploadedThumbUrls[uploadIndex] ?? url;
+      uploadIndex += 1;
+      if (!url) return;
+      images.push(url);
+      thumbImages.push(thumbUrl);
+    });
+    return { images, thumbImages };
   };
 
   /* ---------- VALIDATION ---------- */
@@ -714,7 +730,8 @@ export default function CreateDealScreen({ route, navigation }) {
 
     setLoading(true);
     try {
-      const resolvedImages = await resolveImagesForSave(images);
+      const { images: resolvedImages, thumbImages: resolvedThumbImages } =
+        await resolveImagesForSave(images);
 
       // 1. Prepare the data object ONCE
       const resolvedCategory =
@@ -754,6 +771,8 @@ export default function CreateDealScreen({ route, navigation }) {
         images: resolvedImages,
         image: resolvedImages[0] || null,
         imageUrl: resolvedImages[0] || null,
+        thumbImages: resolvedThumbImages,
+        thumbUrl: resolvedThumbImages[0] || null,
         deliveryCharge:
           form.deliveryMode === "Paid Home Delivery"
             ? Number(parseNumber(form.deliveryCharge)) || 0
