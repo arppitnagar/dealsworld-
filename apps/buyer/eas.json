@@ -12,7 +12,13 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://dealsworld.onrender.com/api"
+      }
     },
     "production": {
       "autoIncrement": true
