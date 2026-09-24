@@ -165,11 +165,21 @@ router.get("/api/admin/deals", requireAuth, requireRole("admin"), async (req, re
     // Use at most one indexed server-side filter first to reduce read volume.
     let query = db.collection(DEALS_COLLECTION);
     if (sellerFilter) {
-      query = query.where("sellerId", "==", sellerFilter);
+      // sellerId + createdAt composite index already exists (firestore.indexes.json).
+      query = query.where("sellerId", "==", sellerFilter).orderBy("createdAt", "desc");
     } else if (approvalFilter) {
+      // No approvalStatus + createdAt composite index deployed yet - ordering
+      // here would throw. Sorted below instead, same as before.
       query = query.where("approvalStatus", "==", approvalFilter);
     } else if (statusFilter) {
+      // Same gap for lifecycleStatus + createdAt.
       query = query.where("lifecycleStatus", "==", statusFilter);
+    } else {
+      // No filter at all - a plain orderBy needs no composite index, and
+      // without it `.limit()` took an arbitrary (not most-recent) slice of
+      // the collection once it grew past `limit`, so newly created deals
+      // could be missing from the admin list entirely.
+      query = query.orderBy("createdAt", "desc");
     }
 
     const snap = await query.limit(limit).get();
