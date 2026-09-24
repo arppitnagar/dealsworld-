@@ -490,6 +490,17 @@ router.post("/api/deals/:dealId/join", optionalAuth, async (req, res) => {
         updatedAt: FieldValue.serverTimestamp(),
       };
 
+      // uniqueJoinersCount counts distinct buyers who have EVER joined this
+      // deal, once each - unlike joinEventsCount (advisory analytics above),
+      // it must not grow on a leave-then-rejoin cycle, so it only increments
+      // the first time this buyer's join doc is created. Conversion/Drop-off
+      // Pulse (DealDetails.js) rely on this to stay unique-buyer-based:
+      // currentJoins is already a unique "currently joined" count, so
+      // uniqueJoinersCount - currentJoins gives unique buyers who dropped off.
+      if (!joinSnap.exists) {
+        updates.uniqueJoinersCount = FieldValue.increment(1);
+      }
+
       if (nextJoins >= minGroupSize && !deal.thresholdReachedAt) {
         updates.thresholdReachedAt = FieldValue.serverTimestamp();
       }

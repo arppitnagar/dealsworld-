@@ -10,6 +10,7 @@
     "migrate:sellerid": "node scripts/migrateSellerId.js",
     "backfill:sellername": "node scripts/backfillSellerName.js",
     "reconcile:joins": "node scripts/reconcileJoinCounts.js",
+    "backfill:uniquejoiners": "node scripts/backfillUniqueJoinersCount.js",
     "cleanup:fields": "node scripts/cleanupFields.js",
     "backfill:dealcreatedat": "node scripts/backfillDealCreatedAt.js",
     "seed:testdeals": "node scripts/seedTestDeals.js",

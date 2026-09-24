@@ -871,6 +871,7 @@ function extractDealPayload(input = {}, sellerId = null) {
     favoritesCount: asNumber(input.favoritesCount ?? input.favouritesCount, 0),
     leftCount: asNumber(input.leftCount, 0),
     joinEventsCount: asNumber(input.joinEventsCount, 0),
+    uniqueJoinersCount: asNumber(input.uniqueJoinersCount, 0),
     avgJoinTimeSeconds: input.avgJoinTimeSeconds ?? null,
     thresholdReachedAt: input.thresholdReachedAt || null,
     lastViewedAt: input.lastViewedAt || null,

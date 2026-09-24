@@ -79,16 +79,22 @@ export default function DealDetails({ route, navigation }) {
     safeGet(deal, "joinedCount") ??
     0;
   const viewsCount = safeGet(deal, "viewsCount") ?? safeGet(deal, "views") ?? null;
-  const leftCount = safeGet(deal, "leftUsers") ?? safeGet(deal, "leftCount") ?? null;
   const favoritesCountRaw =
     safeGet(deal, "favoritesCount") ?? safeGet(deal, "favouritesCount") ?? 0;
   const favoritesCount = Number.isFinite(Number(favoritesCountRaw))
     ? Number(favoritesCountRaw)
     : 0;
+  // uniqueJoinersCount is distinct buyers who have EVER joined (see the
+  // join route in deals.js) - unlike joinsCount (currently joined) or the
+  // old leftCount (leave events), both stay correct across a buyer's
+  // leave-then-rejoin cycles instead of double-counting them.
+  const uniqueJoinersCount = Number(safeGet(deal, "uniqueJoinersCount")) || 0;
   const conversionRate =
-    viewsCount && viewsCount > 0 ? (joinsCount / viewsCount) * 100 : null;
+    viewsCount && viewsCount > 0 ? (uniqueJoinersCount / viewsCount) * 100 : null;
   const dropOffRate =
-    leftCount !== null && joinsCount > 0 ? (leftCount / joinsCount) * 100 : null;
+    uniqueJoinersCount > 0
+      ? ((uniqueJoinersCount - joinsCount) / uniqueJoinersCount) * 100
+      : null;
   const createdAtDate = toDate(safeGet(deal, "createdAt"));
   const approvedAtDate = toDate(deal?.approval?.approvedAt || deal?.approvedAt);
   const activeStartDate = approvedAtDate || createdAtDate;

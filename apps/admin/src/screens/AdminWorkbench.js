@@ -1412,11 +1412,15 @@ function getDealDetailData(deal) {
     deal?.favoritesCount ?? deal?.favouritesCount ?? deal?.likedCount,
     0,
   );
-  const joinEvents = safeNumber(deal?.joinEventsCount, 0);
-  const leftCount = safeNumber(deal?.leftCount, 0);
+  // uniqueJoinersCount is distinct buyers who ever joined (see deals.js's
+  // /join route) - unlike joinEventsCount/leftCount, it doesn't double-count
+  // a buyer who left and rejoined, so it keeps conversion/drop-off unique-buyer-based.
+  const uniqueJoiners = safeNumber(deal?.uniqueJoinersCount, 0);
   const conversionRate = views > 0 ? Number(((joined / views) * 100).toFixed(2)) : 0;
   const dropOffRate =
-    joinEvents > 0 ? Number(((leftCount / joinEvents) * 100).toFixed(2)) : 0;
+    uniqueJoiners > 0
+      ? Number((((uniqueJoiners - joined) / uniqueJoiners) * 100).toFixed(2))
+      : 0;
   const createdAtMs = getTimeMs(deal?.createdAt);
   const thresholdAtMs = getTimeMs(deal?.thresholdReachedAt);
   const timeToThresholdMs =

@@ -838,6 +838,7 @@ export default function CreateDealScreen({ route, navigation }) {
           viewsCount: 0,
           leftCount: 0,
           joinEventsCount: 0,
+          uniqueJoinersCount: 0,
           avgJoinTimeSeconds: null,
           thresholdReachedAt: null,
           lastViewedAt: null,

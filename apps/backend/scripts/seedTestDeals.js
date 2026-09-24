@@ -114,6 +114,7 @@ function buildDeal(index, seller, nowMs) {
     favoritesCount: randomInt(0, 20),
     leftCount: 0,
     joinEventsCount: 0,
+    uniqueJoinersCount: 0,
     joinTimeSecondsSum: 0,
     avgJoinTimeSeconds: null,
     thresholdReachedAt: null,
