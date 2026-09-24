@@ -18,15 +18,17 @@ import {
   ConfirmModal,
   useConfirmModal,
   useI18n,
+  useLocalizedNotifications,
   goBackOrNavigate,
 } from "@dealsworld/shared";
 import { useNotifications } from "../hooks/useNotifications";
+import apiClient from "../api/client";
 
 export default function NotificationsScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const {
-    notifications,
+    notifications: rawNotifications,
     loading,
     unreadCount,
     markNotificationRead,
@@ -41,6 +43,7 @@ export default function NotificationsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const { confirm, confirmModalProps } = useConfirmModal();
   const { language, t } = useI18n();
+  const notifications = useLocalizedNotifications(rawNotifications, language, apiClient);
 
   const handleRefresh = async () => {
     setRefreshing(true);

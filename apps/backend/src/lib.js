@@ -685,8 +685,13 @@ async function pushNotification({ userId, type, message, meta = {}, userData }) 
       type,
       title,
       body,
-      // Kept so a client could re-render the text in another language later.
+      // messageKey + messageVars let a client re-render this notification in
+      // whatever language it's currently viewing in (POST /notifications/render)
+      // instead of being stuck with the language active when it was sent -
+      // title/body above only remain as the fallback for the OS push banner
+      // and for notifications sent before this existed.
       messageKey: message.key,
+      messageVars: message.vars || null,
       ...meta,
       isRead: false,
       createdAt: FieldValue.serverTimestamp(),

@@ -3,6 +3,7 @@ export { default as AppButton } from "./components/ui/AppButton";
 export { default as AppInput } from "./components/ui/AppInput";
 export { default as ConfirmModal } from "./components/ui/ConfirmModal";
 export { default as useConfirmModal } from "./hooks/useConfirmModal";
+export { default as useLocalizedNotifications } from "./hooks/useLocalizedNotifications";
 export { theme, createTheme } from "./theme/theme";
 export { ThemeProvider, useTheme } from "./theme/ThemeProvider";
 export { getUi } from "./styles/ui";

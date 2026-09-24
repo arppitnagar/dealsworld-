@@ -13,6 +13,7 @@ const adminRoutes = require("./routes/admin");
 const paymentsRoutes = require("./routes/payments");
 const uploadsRoutes = require("./routes/uploads");
 const chatRoutes = require("./routes/chat");
+const notificationsRoutes = require("./routes/notifications");
 
 const app = express();
 app.use(cors());
@@ -61,5 +62,6 @@ app.use(adminRoutes);
 app.use(paymentsRoutes);
 app.use(uploadsRoutes);
 app.use(chatRoutes);
+app.use(notificationsRoutes);
 
 module.exports = app;
