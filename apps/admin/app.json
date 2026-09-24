@@ -2,11 +2,21 @@
   "expo": {
     "name": "AdminBuddy",
     "slug": "adminbuddy",
+    "version": "1.0.0",
+    "ios": {
+      "infoPlist": {
+        "CFBundleDisplayName": "AdminBuddy"
+      }
+    },
+    "android": {
+      "package": "com.dealsworld.adminbuddy"
+    },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
       "expo-asset"
-    ]
+    ],
+    "owner": "arppit"
   }
 }
