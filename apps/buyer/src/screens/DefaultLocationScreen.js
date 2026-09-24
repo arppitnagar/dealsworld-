@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Dimensions, StyleSheet } from "react-native";
-import { useTheme, useI18n, TopPageHeader, CitySearchList } from "@dealsworld/shared";
+import { useTheme, useI18n, TopPageHeader, CitySearchList, goBackOrNavigate } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import apiClient from "../api/client";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -32,14 +32,14 @@ export default function DefaultLocationScreen({ navigation }) {
 
   const handleSelect = (city) => {
     updateProfile({ defaultLocation: city || null });
-    navigation.goBack();
+    goBackOrNavigate(navigation);
   };
 
   return (
     <View style={styles.screen}>
       <TopPageHeader
         title={t("profile.defaultLocation")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
       <View style={styles.body}>

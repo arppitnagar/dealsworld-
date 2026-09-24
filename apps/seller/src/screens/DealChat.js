@@ -35,6 +35,7 @@ import {
   AppInput,
   useI18n,
   getCategoryLabel,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 
 export default function DealChat({ route, navigation }) {
@@ -276,7 +277,7 @@ export default function DealChat({ route, navigation }) {
       <TopPageHeader
         title={deal?.title || t("chat.title")}
         subtitle={deal?.category ? getCategoryLabel(deal.category, t) : t("dealLayout.deal")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         style={styles.header}
         titleStyle={styles.headerTitle}
         subtitleStyle={styles.headerSubtitle}

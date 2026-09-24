@@ -41,6 +41,7 @@ import {
   useI18n,
   getCategoryLabel,
   getDeliveryModeLabel,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { getAddressLabel } from "../utils/addressLabels";
 import { useAddresses } from "../hooks/useAddresses";
@@ -865,7 +866,7 @@ export default function CreateDealScreen({ route, navigation }) {
               : t("createDeal.createTitle")
         }
         subtitle={t("createDeal.subtitle")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         style={styles.header}
         titleStyle={styles.headerTitle}
         subtitleStyle={styles.headerSubtitle}
@@ -1343,7 +1344,7 @@ export default function CreateDealScreen({ route, navigation }) {
                 style={{ width: 200, height: 200 }}
                 onAnimationFinish={() => {
                   setShowSuccess(false); // Close modal state
-                  navigation.goBack();
+                  goBackOrNavigate(navigation);
                 }}
               />
               <Text style={styles.successText}>{t("createDeal.submitted")}</Text>

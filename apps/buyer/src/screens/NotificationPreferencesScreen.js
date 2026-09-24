@@ -18,6 +18,7 @@ import {
   ConfirmModal,
   useConfirmModal,
   useI18n,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -129,7 +130,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
           maxPrice: max,
         },
       });
-      navigation.goBack();
+      goBackOrNavigate(navigation);
     } catch (error) {
       await alert({ title: t("notificationPrefs.saveFailed"), message: error.message || t("common.tryAgain"), destructive: true });
     } finally {
@@ -141,7 +142,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
     <View style={styles.screen}>
       <TopPageHeader
         title={t("profile.notificationPreference")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
 

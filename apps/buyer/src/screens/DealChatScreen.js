@@ -17,6 +17,7 @@ import {
   TopPageHeader,
   useI18n,
   getCategoryLabel,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
@@ -276,7 +277,7 @@ export default function DealChatScreen({ route, navigation }) {
       <TopPageHeader
         title={deal?.title || t("chat.title")}
         subtitle={deal?.category ? getCategoryLabel(deal.category, t) : t("dealLayout.deal")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         style={styles.header}
         titleStyle={styles.headerTitle}
         subtitleStyle={styles.headerSubtitle}

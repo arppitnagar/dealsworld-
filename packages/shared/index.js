@@ -107,3 +107,4 @@ export {
   isRTLLanguage,
 } from "./i18n/languages";
 export { canRestartInApp, restartApp } from "./i18n/layoutDirection";
+export { goBackOrNavigate } from "./utils/navigation";

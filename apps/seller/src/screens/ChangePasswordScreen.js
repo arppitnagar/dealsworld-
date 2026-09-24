@@ -18,6 +18,7 @@ import {
   ConfirmModal,
   useConfirmModal,
   useI18n,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { auth } from "../config/firebase";
 import {
@@ -87,7 +88,7 @@ export default function ChangePasswordScreen({ navigation }) {
     <View style={styles.screen}>
       <TopPageHeader
         title={t("profile.changePassword")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
 

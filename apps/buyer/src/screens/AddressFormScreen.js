@@ -17,6 +17,7 @@ import {
   ConfirmModal,
   useConfirmModal,
   useI18n,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { getAddressLabel } from "../utils/addressLabels";
 import { useAddresses } from "../hooks/useAddresses";
@@ -86,7 +87,7 @@ export default function AddressFormScreen({ navigation, route }) {
           await setDefaultAddress(newId);
         }
       }
-      navigation.goBack();
+      goBackOrNavigate(navigation);
     } catch (error) {
       await alert({ title: t("common.error"), message: error?.message || t("addresses.saveFailed"), destructive: true });
     } finally {
@@ -103,7 +104,7 @@ export default function AddressFormScreen({ navigation, route }) {
     >
       <TopPageHeader
         title={existing ? t("addresses.edit") : t("addresses.add")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
 

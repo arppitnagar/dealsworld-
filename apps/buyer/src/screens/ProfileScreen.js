@@ -17,6 +17,7 @@ import {
   useConfirmModal,
   useI18n,
   getLanguageInfo,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -49,7 +50,7 @@ export default function ProfileScreen({ navigation }) {
     <View style={styles.screen}>
       <TopPageHeader
         title={t("profile.title")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
 

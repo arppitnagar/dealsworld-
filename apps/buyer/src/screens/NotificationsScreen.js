@@ -18,6 +18,7 @@ import {
   ConfirmModal,
   useConfirmModal,
   useI18n,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { useNotifications } from "../hooks/useNotifications";
 
@@ -162,7 +163,7 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <TopPageHeader title={t("notifications.title")} onBack={() => navigation.goBack()} rounded />
+      <TopPageHeader title={t("notifications.title")} onBack={() => goBackOrNavigate(navigation)} rounded />
 
       <FlatList
         data={notifications}

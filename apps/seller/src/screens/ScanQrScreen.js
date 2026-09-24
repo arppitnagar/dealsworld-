@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
-import { AppButton, TopPageHeader, useTheme, useI18n } from "@dealsworld/shared";
+import { AppButton, TopPageHeader, useTheme, useI18n, goBackOrNavigate } from "@dealsworld/shared";
 import { useConfirmPickup } from "../hooks/useDeliveryStatus";
 
 // Matches the payload PickupQrDisplay.js encodes on the buyer side:
@@ -77,7 +77,7 @@ export default function ScanQrScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <TopPageHeader title={t("scanQr.title")} onBack={() => navigation.goBack()} rounded />
+      <TopPageHeader title={t("scanQr.title")} onBack={() => goBackOrNavigate(navigation)} rounded />
 
       <View style={styles.cameraWrap}>
         {!permission ? (

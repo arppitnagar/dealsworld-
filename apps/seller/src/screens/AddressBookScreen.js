@@ -16,6 +16,7 @@ import {
   ConfirmModal,
   useConfirmModal,
   useI18n,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { getAddressLabel } from "../utils/addressLabels";
 import { useAddresses } from "../hooks/useAddresses";
@@ -104,7 +105,7 @@ export default function AddressBookScreen({ navigation }) {
     <View>
       <TopPageHeader
         title={t("addresses.title")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
       <View style={styles.heroCard}>

@@ -15,6 +15,7 @@ import {
   ConfirmModal,
   useConfirmModal,
   useI18n,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -61,7 +62,7 @@ export default function UserDetailsScreen({ navigation }) {
     <View style={styles.screen}>
       <TopPageHeader
         title={t("profile.userDetails")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
 

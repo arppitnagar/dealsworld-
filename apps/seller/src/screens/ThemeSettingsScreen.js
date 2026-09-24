@@ -7,7 +7,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme, useI18n, TopPageHeader } from "@dealsworld/shared";
+import { useTheme, useI18n, TopPageHeader, goBackOrNavigate } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { setStoredThemeMode } from "../utils/themeStorage";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -28,7 +28,7 @@ export default function ThemeSettingsScreen({ navigation }) {
     <View style={styles.screen}>
       <TopPageHeader
         title={t("themeSettings.title")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
 

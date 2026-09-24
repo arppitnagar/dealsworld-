@@ -42,6 +42,7 @@ import {
   normalizeLanguage,
   getDeliveryModeLabel,
   getCategoryLabel,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { getAddressLabel } from "../utils/addressLabels";
 import {
@@ -607,7 +608,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         <Text style={styles.notFoundText}>{t("dealDetails.notFound")}</Text>
         <AppButton
           title={t("dealDetails.goBack")}
-          onPress={() => navigation.goBack()}
+          onPress={() => goBackOrNavigate(navigation)}
           style={{ borderRadius: theme.radii.md }}
         />
       </View>
@@ -853,7 +854,7 @@ export default function DealDetailsScreen({ route, navigation }) {
     <>
       <DealDetailsLayout
         headerTitle={t("dealDetails.title")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         actions={null}
         footer={footerContent}
         images={getDealImages(deal)}

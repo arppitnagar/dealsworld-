@@ -15,6 +15,7 @@ import {
   AppButton,
   canRestartInApp,
   restartApp,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -38,7 +39,7 @@ export default function LanguageSettingsScreen({ navigation }) {
     <View style={styles.screen}>
       <TopPageHeader
         title={t("languageSettings.title")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         rounded
       />
 

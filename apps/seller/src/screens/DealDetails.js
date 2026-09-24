@@ -36,6 +36,7 @@ import {
   useI18n,
   getCategoryLabel,
   getDeliveryModeLabel,
+  goBackOrNavigate,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -599,7 +600,7 @@ export default function DealDetails({ route, navigation }) {
     <View style={styles.container}>
       <DealDetailsLayout
         headerTitle={t("dealDetails.title")}
-        onBack={() => navigation.goBack()}
+        onBack={() => goBackOrNavigate(navigation)}
         actions={null}
         footer={footerContent}
         images={getDealImages(deal)}
