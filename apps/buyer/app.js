@@ -22,6 +22,7 @@ import UserDetailsScreen from "./src/screens/UserDetailsScreen";
 import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
 import ThemeSettingsScreen from "./src/screens/ThemeSettingsScreen";
 import NotificationPreferencesScreen from "./src/screens/NotificationPreferencesScreen";
+import DefaultLocationScreen from "./src/screens/DefaultLocationScreen";
 import AddressBookScreen from "./src/screens/AddressBookScreen";
 import AddressFormScreen from "./src/screens/AddressFormScreen";
 import RoleMismatchScreen from "./src/screens/RoleMismatchScreen";
@@ -101,6 +102,10 @@ function AppNavigator() {
           <Stack.Screen
             name="NotificationPreferences"
             component={NotificationPreferencesScreen}
+          />
+          <Stack.Screen
+            name="DefaultLocation"
+            component={DefaultLocationScreen}
           />
           <Stack.Screen name="AddressBook" component={AddressBookScreen} />
           <Stack.Screen name="AddressForm" component={AddressFormScreen} />

@@ -75,6 +75,7 @@ async function resolveSeller() {
 
 function buildDeal(index, seller, nowMs) {
   const category = pick(CATEGORIES);
+  const city = pick(LOCATIONS);
   const title = `${pick(TITLE_TEMPLATES)(category)} #${index + 1}`;
   const originalPrice = randomInt(200, 5000);
   const discountPrice = Math.max(50, Math.round(originalPrice * (0.5 + Math.random() * 0.3)));
@@ -102,6 +103,8 @@ function buildDeal(index, seller, nowMs) {
     joinedUsers: 0,
     currentJoins: 0,
     location: pick(LOCATIONS),
+    city,
+    cityLower: city.toLowerCase(),
     images: [],
     image: null,
     imageUrl: null,

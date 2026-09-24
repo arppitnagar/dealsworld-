@@ -1,6 +1,12 @@
 import React, { useMemo } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { Search, X, Bell, ShoppingBag } from "lucide-react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
+import { Search, X, Bell, ShoppingBag, MapPin, RefreshCw } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme, AppInput } from "@dealsworld/shared";
@@ -17,7 +23,10 @@ export default function DashboardHeader({
   navigation,
   now = Date.now(),
   displayName,
+  defaultLocation,
   unreadCount = 0,
+  onPressRefresh,
+  refreshing = false,
   searchText,
   onChangeSearchText,
   sortActive,
@@ -49,6 +58,24 @@ export default function DashboardHeader({
           </View>
         </View>
         <View style={styles.topActions}>
+          {onPressRefresh ? (
+            // Temporary, manual stand-in for the polling now held off to
+            // save Firestore quota (see packages/shared/config/polling.js) -
+            // pulls the latest deal status/new deals on demand instead of on
+            // a timer.
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={onPressRefresh}
+              disabled={refreshing}
+              activeOpacity={0.85}
+            >
+              {refreshing ? (
+                <ActivityIndicator size="small" color={theme.colors.text} />
+              ) : (
+                <RefreshCw size={17} color={theme.colors.text} />
+              )}
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => navigation.navigate("Notifications")}
@@ -75,6 +102,17 @@ export default function DashboardHeader({
         <Text style={styles.greetingLabel}>{greetingLabel}</Text>
         <Text style={styles.greetingName}>{displayName || "Buyer"}</Text>
       </View>
+
+      <TouchableOpacity
+        style={styles.locationPill}
+        onPress={() => navigation.navigate("DefaultLocation")}
+        activeOpacity={0.85}
+      >
+        <MapPin size={13} color={theme.colors.primary} />
+        <Text style={styles.locationPillText} numberOfLines={1}>
+          {defaultLocation || "All Cities"}
+        </Text>
+      </TouchableOpacity>
 
       {showSearchControls && (
         <View style={styles.searchRow}>
@@ -218,6 +256,25 @@ const createStyles = (theme) =>
       fontWeight: "800",
       color: theme.colors.text,
       letterSpacing: -0.3,
+    },
+    locationPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 5,
+      marginHorizontal: 20,
+      marginTop: 8,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    locationPillText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: theme.colors.primary,
     },
     searchRow: {
       flexDirection: "row",

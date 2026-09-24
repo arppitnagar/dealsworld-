@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import apiClient from "../api/client";
+import { POLLING_ENABLED } from "@dealsworld/shared";
 
 const DEALS_PAGE_SIZE = 20;
 // Matches the old single-fetch endpoint's effective ceiling (it always
@@ -62,12 +63,16 @@ async function postWithNetworkRetry(url, body, config = {}) {
 // shot (same ceiling the old single-fetch endpoint used) instead of
 // paginating. Both queries always exist (React Query's rules of hooks
 // don't allow conditionally calling one); only one is enabled at a time.
-export const useDeals = ({ fullSet = false } = {}) => {
+export const useDeals = ({ fullSet = false, city } = {}) => {
   const pagedQuery = useInfiniteQuery({
-    queryKey: ["deals", "paged"],
+    queryKey: ["deals", "paged", city || null],
     queryFn: async ({ pageParam }) => {
       const { data } = await apiClient.get("/deals", {
-        params: { limit: DEALS_PAGE_SIZE, cursor: pageParam || undefined },
+        params: {
+          limit: DEALS_PAGE_SIZE,
+          cursor: pageParam || undefined,
+          city: city || undefined,
+        },
       });
       return data;
     },
@@ -80,16 +85,16 @@ export const useDeals = ({ fullSet = false } = {}) => {
     refetchOnWindowFocus: true,
     refetchOnMount: "always",
     refetchOnReconnect: true,
-    refetchInterval: fullSet ? false : 4_000,
+    refetchInterval: POLLING_ENABLED && !fullSet ? 4_000 : false,
     refetchIntervalInBackground: false,
     placeholderData: (previous) => previous,
   });
 
   const fullQuery = useQuery({
-    queryKey: ["deals", "full"],
+    queryKey: ["deals", "full", city || null],
     queryFn: async () => {
       const { data } = await apiClient.get("/deals", {
-        params: { limit: FULL_SET_LIMIT },
+        params: { limit: FULL_SET_LIMIT, city: city || undefined },
       });
       return data.deals;
     },
@@ -99,7 +104,7 @@ export const useDeals = ({ fullSet = false } = {}) => {
     refetchOnWindowFocus: true,
     refetchOnMount: "always",
     refetchOnReconnect: true,
-    refetchInterval: fullSet ? 4_000 : false,
+    refetchInterval: POLLING_ENABLED && fullSet ? 4_000 : false,
     refetchIntervalInBackground: false,
     placeholderData: (previous) => previous,
   });
@@ -147,7 +152,7 @@ export const useJoinedDeals = () => {
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: true,
     refetchOnMount: "always",
-    refetchInterval: 8_000,
+    refetchInterval: POLLING_ENABLED ? 8_000 : false,
     refetchIntervalInBackground: false,
     placeholderData: (previous) => previous,
   });

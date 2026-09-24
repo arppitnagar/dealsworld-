@@ -49,6 +49,7 @@ export { default as OtpDisplay } from "./components/OtpDisplay";
 export { default as OtpInput } from "./components/OtpInput";
 export { default as PickupQrDisplay } from "./components/PickupQrDisplay";
 export { default as DealFormFields } from "./components/DealFormFields";
+export { default as CitySearchList } from "./components/CitySearchList";
 export { default as AuthScreen } from "./components/AuthScreen.js";
 export { default as DealBuddyLoader } from "./components/DealBuddyLoader";
 export { default as DealBuddyLoadingScreen } from "./components/DealBuddyLoadingScreen";
@@ -77,6 +78,7 @@ export {
 } from "./utils/priceBreakup";
 export { getDealImages, getDealThumbnails } from "./utils/dealImages";
 export { DEAL_CATEGORIES, DEAL_CATEGORY_LABELS } from "./utils/dealCategories";
+export { POLLING_ENABLED } from "./config/polling";
 export { validatePassword } from "./utils/passwordPolicy";
 export {
   DEAL_SORT_FIELDS,

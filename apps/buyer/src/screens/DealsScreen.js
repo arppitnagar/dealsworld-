@@ -68,8 +68,12 @@ export default function DealsScreen({ navigation }) {
   // fetches everything in one shot - unlike Home, it doesn't paginate. It
   // still gets the FlatList virtualization win for what can be up to ~200
   // rendered cards.
-  const { data: deals, isLoading, refetch } = useDeals({ fullSet: true });
-  const { data: joinedDeals } = useJoinedDeals();
+  const { profile, updateProfile } = useUserProfile();
+  const { data: deals, isLoading, refetch } = useDeals({
+    fullSet: true,
+    city: profile?.defaultLocation,
+  });
+  const { data: joinedDeals, refetch: refetchJoinedDeals } = useJoinedDeals();
   const {
     viewedIds,
     favoriteIds,
@@ -77,12 +81,24 @@ export default function DealsScreen({ navigation }) {
     toggleFavorite: toggleFavoriteDeal,
     loading: dealStateLoading,
   } = useDealState();
-  const { data: myDeliveries } = useMyDeliveries();
-  const { profile, updateProfile } = useUserProfile();
+  const { data: myDeliveries, refetch: refetchDeliveries } = useMyDeliveries();
   const { unreadCount } = useNotifications();
   const controls = useDealSearchControls();
   const [selectedFilter, setSelectedFilter] = useState(null);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+
+  // Stands in for the polling now held off to save Firestore quota (see
+  // packages/shared/config/polling.js) - pulls deal status/new deals on
+  // demand instead of on a timer.
+  const handleManualRefresh = async () => {
+    setManualRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchJoinedDeals(), refetchDeliveries()]);
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
 
   const viewMode = profile?.dashboardViewMode === "grid" ? "grid" : "list";
   const handleChangeViewMode = (mode) => {
@@ -229,7 +245,10 @@ export default function DealsScreen({ navigation }) {
       <DashboardHeader
         navigation={navigation}
         displayName={profile?.displayName}
+        defaultLocation={profile?.defaultLocation}
         unreadCount={unreadCount}
+        onPressRefresh={handleManualRefresh}
+        refreshing={manualRefreshing}
         searchText={controls.searchText}
         onChangeSearchText={controls.setSearchText}
         sortActive={Boolean(controls.sortField)}
@@ -250,7 +269,12 @@ export default function DealsScreen({ navigation }) {
           styles.scrollContent,
           !sortedDeals?.length && styles.listWrapEmpty,
         ]}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading || manualRefreshing}
+            onRefresh={handleManualRefresh}
+          />
+        }
         ListHeaderComponent={
           <CardHeader
             title={`${sectionTitle} (${sortedDeals?.length || 0})`}

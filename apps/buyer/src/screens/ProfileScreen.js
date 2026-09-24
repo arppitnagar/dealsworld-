@@ -126,6 +126,12 @@ export default function ProfileScreen({ navigation }) {
             label="Notification Preference"
             onPress={() => navigation.navigate("NotificationPreferences")}
             theme={theme}
+          />
+          <MenuItem
+            icon="location-outline"
+            label="Default Location"
+            onPress={() => navigation.navigate("DefaultLocation")}
+            theme={theme}
             divider={false}
           />
         </View>

@@ -42,6 +42,7 @@ function toTypesenseDocument(doc) {
     description: String(fullDeal.description || ""),
     category: String(listDeal.category || ""),
     location: String(listDeal.location || ""),
+    city: String(listDeal.city || ""),
     deliveryMode: String(listDeal.deliveryMode || ""),
     sellerId: String(listDeal.sellerId || ""),
     sellerName: String(listDeal.sellerName || ""),

@@ -22,6 +22,7 @@ router.get("/api/deals/search", async (req, res) => {
   try {
     const q = String(req.query.q || "").trim() || "*";
     const category = String(req.query.category || "").trim();
+    const city = String(req.query.city || "").trim();
     const minPrice = Number(req.query.minPrice);
     const maxPrice = Number(req.query.maxPrice);
     const limitRaw = Number(req.query.limit);
@@ -33,6 +34,7 @@ router.get("/api/deals/search", async (req, res) => {
     // surface unapproved/inactive deals no matter what the client sends.
     const filters = ["status:=active", "approvalStatus:=approved"];
     if (category) filters.push(`category:=${escapeFilterValue(category)}`);
+    if (city) filters.push(`city:=${escapeFilterValue(city)}`);
     if (Number.isFinite(minPrice)) filters.push(`discountPrice:>=${minPrice}`);
     if (Number.isFinite(maxPrice)) filters.push(`discountPrice:<=${maxPrice}`);
 

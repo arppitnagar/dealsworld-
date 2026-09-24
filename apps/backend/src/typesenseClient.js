@@ -28,6 +28,7 @@ const DEALS_SCHEMA = {
     { name: "description", type: "string", optional: true },
     { name: "category", type: "string", facet: true, optional: true },
     { name: "location", type: "string", facet: true, optional: true },
+    { name: "city", type: "string", facet: true, optional: true },
     { name: "deliveryMode", type: "string", facet: true, optional: true },
     { name: "sellerId", type: "string", facet: true, optional: true },
     { name: "sellerName", type: "string", optional: true },

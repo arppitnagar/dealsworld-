@@ -38,6 +38,7 @@ const {
   toMillis,
 } = require("../lib");
 const { maybeExpireDeal } = require("../expirySweep");
+const { client: typesenseClient, DEALS_INDEX_NAME } = require("../typesenseClient");
 
 const router = express.Router();
 
@@ -55,6 +56,7 @@ router.get("/api/deals", async (req, res) => {
     // before this endpoint had real cursor pagination.
     const fetchLimit = Math.min(limit * 5, MAX_DEAL_LIMIT);
     const cursor = String(req.query.cursor || "").trim();
+    const cityFilter = String(req.query.city || "").trim().toLowerCase();
 
     let query = db
       .collection(DEALS_COLLECTION)
@@ -80,6 +82,7 @@ router.get("/api/deals", async (req, res) => {
       const deal = sanitizeDealForResponse(doc);
       if (isExpiredDeal(deal, nowMs)) return;
       if (normalizeApprovalStatus(deal) !== "approved") return;
+      if (cityFilter && String(deal.cityLower || "") !== cityFilter) return;
       survivors.push({ doc, deal });
     });
 
@@ -104,6 +107,38 @@ router.get("/api/deals", async (req, res) => {
     res.json({ deals: hydratedDeals, nextCursor });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Distinct city list for the buyer's default-location picker and the
+// seller's City field, sourced from Typesense facets rather than a
+// Firestore scan - a facet query costs nothing extra in Firestore reads
+// (relevant given this project's prior Firestore-quota exhaustion), and
+// Typesense already indexes every active/approved deal's `city`.
+router.get("/api/deals/cities", async (req, res) => {
+  try {
+    const result = await typesenseClient
+      .collections(DEALS_INDEX_NAME)
+      .documents()
+      .search({
+        q: "*",
+        query_by: "title",
+        filter_by: "status:=active && approvalStatus:=approved",
+        facet_by: "city",
+        max_facet_values: 250,
+        per_page: 0,
+      });
+    const counts = result.facet_counts?.[0]?.counts || [];
+    const cities = counts
+      .map((entry) => String(entry.value || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    res.json({ cities });
+  } catch (error) {
+    // Typesense being unreachable shouldn't block the seller/buyer city
+    // pickers - they degrade to "type your own" / "no cities yet" instead.
+    console.warn("Fetching city list failed:", error.message || error);
+    res.json({ cities: [] });
   }
 });
 

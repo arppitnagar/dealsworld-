@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
+import { POLLING_ENABLED } from "@dealsworld/shared";
 
 export const useDispatchDeal = () => {
   const queryClient = useQueryClient();
@@ -56,7 +57,7 @@ export const useDeliveryStatusList = (dealId, { enabled = true } = {}) => {
       return data;
     },
     enabled: Boolean(dealId) && enabled,
-    refetchInterval: 10_000,
+    refetchInterval: POLLING_ENABLED ? 10_000 : false,
   });
 };
 

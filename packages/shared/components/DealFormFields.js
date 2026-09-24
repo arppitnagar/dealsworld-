@@ -35,6 +35,7 @@ export default function DealFormFields({
   onMinBuyersChange,
   onMaxBuyersChange,
   onCategoryPress,
+  onCityPress,
   onDeliveryModePress,
   onExpiresAtPress,
   onBlurPrice,
@@ -531,9 +532,35 @@ export default function DealFormFields({
             <Text style={styles.error}>{errors.expiresAt}</Text>
           ) : null}
 
+          <Text style={[styles.label, errors.city && styles.labelError]}>
+            City
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.input,
+              errors.city && styles.inputError,
+              isReadOnly && styles.readOnlyInput,
+            ]}
+            disabled={isReadOnly}
+            onPress={onCityPress}
+          >
+            <Text
+              style={
+                isReadOnly
+                  ? { color: theme.colors.textMuted }
+                  : { color: theme.colors.text }
+              }
+            >
+              {form.city || "Select city"}
+            </Text>
+          </TouchableOpacity>
+
+          {errors.city ? <Text style={styles.error}>{errors.city}</Text> : null}
+
           <AppInput
-            label="Location"
-            placeholder="e.g. Mumbai, Andheri"
+            label="Area / Landmark (optional)"
+            placeholder="e.g. Andheri West"
             value={form.location}
             editable={!isReadOnly}
             onChangeText={(value) => handleFieldChange("location", value)}

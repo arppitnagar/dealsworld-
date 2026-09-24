@@ -54,6 +54,7 @@ export default function HomeScreen({ navigation }) {
   // to a one-shot full fetch (pausing infinite scroll) while any are active.
   // See useDeals.js.
   const needsFullSet = Boolean(controls.sortField) || controls.isSearching || controls.hasFieldFilter;
+  const { profile, updateProfile } = useUserProfile();
   const {
     data: deals,
     isLoading,
@@ -61,7 +62,7 @@ export default function HomeScreen({ navigation }) {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useDeals({ fullSet: needsFullSet });
+  } = useDeals({ fullSet: needsFullSet, city: profile?.defaultLocation });
   const {
     viewedIds,
     favoriteIds,
@@ -69,9 +70,21 @@ export default function HomeScreen({ navigation }) {
     toggleFavorite: toggleFavoriteDeal,
     loading: dealStateLoading,
   } = useDealState();
-  const { data: myDeliveries } = useMyDeliveries();
-  const { profile, updateProfile } = useUserProfile();
+  const { data: myDeliveries, refetch: refetchDeliveries } = useMyDeliveries();
   const { unreadCount } = useNotifications();
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+
+  // Stands in for the polling now held off to save Firestore quota (see
+  // packages/shared/config/polling.js) - pulls deal status/new deals on
+  // demand instead of on a timer.
+  const handleManualRefresh = async () => {
+    setManualRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchDeliveries()]);
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
 
   // Defaults to "list" until the profile loads/has a saved preference;
   // persisted per-buyer so the dashboard reopens the way they left it.
@@ -180,7 +193,10 @@ export default function HomeScreen({ navigation }) {
         navigation={navigation}
         now={now}
         displayName={profile?.displayName}
+        defaultLocation={profile?.defaultLocation}
         unreadCount={unreadCount}
+        onPressRefresh={handleManualRefresh}
+        refreshing={manualRefreshing}
         searchText={controls.searchText}
         onChangeSearchText={controls.setSearchText}
         sortActive={Boolean(controls.sortField)}
@@ -199,7 +215,12 @@ export default function HomeScreen({ navigation }) {
         renderItem={renderDeal}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, !hasDeals && styles.listWrapEmpty]}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading || manualRefreshing}
+            onRefresh={handleManualRefresh}
+          />
+        }
         onEndReached={() => {
           if (hasNextPage && !isFetchingNextPage) fetchNextPage();
         }}

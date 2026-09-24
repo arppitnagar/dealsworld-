@@ -166,7 +166,7 @@ const LIST_RESPONSE_FIELDS = [
   "thumbUrl", "thumbImages",
   "currentJoins", "joinedUsers", "minGroupSize", "minThreshold", "maxGroupSize",
   "viewsCount", "favoritesCount", "ratingAvg", "ratingCount",
-  "originalPrice", "discountPrice", "location", "deliveryMode",
+  "originalPrice", "discountPrice", "location", "city", "cityLower", "deliveryMode",
   "expiresAt", "expiryTime", "status", "lifecycleStatus", "thresholdReachedAt",
   "approvalStatus", "approved", "sellerId", "sellerName", "dealCode",
   "createdAt", "updatedAt",
@@ -834,6 +834,8 @@ function extractDealPayload(input = {}, sellerId = null) {
     joinedUsers: Math.max(0, currentJoins),
     currentJoins: Math.max(0, currentJoins),
     location: String(input.location || ""),
+    city: String(input.city || "").trim(),
+    cityLower: String(input.city || "").trim().toLowerCase(),
     images,
     image: input.image ?? images[0] ?? null,
     imageUrl: input.imageUrl ?? input.image ?? images[0] ?? null,
@@ -878,6 +880,7 @@ function applyDealUpdate(input = {}) {
     "maxGroupSize",
     "pricingTiers",
     "location",
+    "city",
     "image",
     "imageUrl",
     "images",
@@ -888,6 +891,10 @@ function applyDealUpdate(input = {}) {
       updates[field] = input[field];
     }
   });
+
+  if (input.city !== undefined) {
+    updates.cityLower = String(input.city || "").trim().toLowerCase();
+  }
 
   if (input.images !== undefined) {
     const images = normalizeImages(input.images);

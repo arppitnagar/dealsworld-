@@ -30,6 +30,7 @@ import {
   useTheme,
   getFormStyles,
   DealFormFields,
+  CitySearchList,
   TopPageHeader,
   validatePricingTiers,
   MAX_PRICING_TIERS,
@@ -135,7 +136,8 @@ const dealSchema = Yup.object().shape({
   expiresAt: Yup.date()
     .required("Expiry date is required")
     .min(new Date(), "Expiry date cannot be in the past"),
-  location: Yup.string().transform(trimString).required("Location is required"),
+  city: Yup.string().transform(trimString).required("City is required"),
+  location: Yup.string().transform(trimString),
   deliveryMode: Yup.string().required("Delivery mode is required"),
   deliveryCharge: Yup.number().when("deliveryMode", {
     is: "Paid Home Delivery",
@@ -233,6 +235,7 @@ export default function CreateDealScreen({ route, navigation }) {
         ? new Date(deal.expiresAt)
         : null,
     location: deal?.location || "",
+    city: deal?.city || "",
     sellerId: deal?.sellerId || user?.uid || "",
   });
 
@@ -247,10 +250,25 @@ export default function CreateDealScreen({ route, navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [deliveryModalVisible, setDeliveryModalVisible] = useState(false);
+  const [cityModalVisible, setCityModalVisible] = useState(false);
+  const [cityOptions, setCityOptions] = useState([]);
   const [storeAddressModalVisible, setStoreAddressModalVisible] =
     useState(false);
   const [selectedStoreAddressId, setSelectedStoreAddressId] = useState(null);
   const { addresses, loading: addressesLoading } = useAddresses();
+
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .get("/deals/cities")
+      .then(({ data }) => {
+        if (!cancelled) setCityOptions(data?.cities || []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -770,6 +788,8 @@ export default function CreateDealScreen({ route, navigation }) {
         deliveryMode: form.deliveryMode,
         title: form.title?.trim() || "",
         location: form.location?.trim() || "",
+        city: form.city?.trim() || "",
+        cityLower: form.city?.trim().toLowerCase() || "",
         images: resolvedImages,
         image: resolvedImages[0] || null,
         imageUrl: resolvedImages[0] || null,
@@ -991,6 +1011,7 @@ export default function CreateDealScreen({ route, navigation }) {
             onTierFieldChange={handleTierFieldChange}
             onGstChange={handleGstChange}
             onCategoryPress={() => setCategoryModalVisible(true)}
+            onCityPress={() => setCityModalVisible(true)}
             onDeliveryModePress={() => setDeliveryModalVisible(true)}
             onExpiresAtPress={() => setShowDatePicker(true)}
             onBlurPrice={(field) =>
@@ -1067,7 +1088,22 @@ export default function CreateDealScreen({ route, navigation }) {
               onChange={(e, d) => {
                 setShowDatePicker(false);
                 if (d) {
-                  setForm((prev) => ({ ...prev, expiresAt: d }));
+                  // The picker returns the selected date at local midnight
+                  // (00:00:00) - stored as-is, a deal expiring "today" would
+                  // already read as expired the moment it's created (any
+                  // time after midnight is already past that timestamp).
+                  // Pin to the end of the selected day instead, so "expires
+                  // today" actually means through the end of today.
+                  const endOfDay = new Date(
+                    d.getFullYear(),
+                    d.getMonth(),
+                    d.getDate(),
+                    23,
+                    59,
+                    59,
+                    999,
+                  );
+                  setForm((prev) => ({ ...prev, expiresAt: endOfDay }));
                   clearFieldErrors("expiresAt");
                 }
               }}
@@ -1144,6 +1180,34 @@ export default function CreateDealScreen({ route, navigation }) {
                 <Text>{mode}</Text>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* CITY MODAL */}
+      <Modal transparent visible={cityModalVisible} animationType="slide">
+        <View style={styles.overlay}>
+          <View style={[styles.card, styles.storeAddressModalCard]}>
+            <View style={styles.storeAddressModalHeader}>
+              <Text style={styles.storeAddressModalTitle}>Select City</Text>
+              <TouchableOpacity
+                onPress={() => setCityModalVisible(false)}
+                style={styles.storeAddressModalClose}
+              >
+                <Ionicons name="close" size={18} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <CitySearchList
+              cities={cityOptions}
+              selectedCity={form.city}
+              allowCustom
+              maxHeight={360}
+              onSelect={(city) => {
+                setForm((p) => ({ ...p, city: city || "" }));
+                clearFieldErrors("city");
+                setCityModalVisible(false);
+              }}
+            />
           </View>
         </View>
       </Modal>

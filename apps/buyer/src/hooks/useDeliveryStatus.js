@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 import { isUnsuccessfulDeal } from "../utils/dealCategories";
+import { POLLING_ENABLED } from "@dealsworld/shared";
 
 // Shared by list screens (Home/Deals/Search) to turn a useMyDeliveries() map
 // entry into the DealCard `deliveryBadge` prop.
@@ -58,7 +59,9 @@ export const useMyDelivery = (dealId) => {
     },
     enabled: Boolean(dealId),
     refetchInterval: (query) =>
-      query.state.data?.deliveryStatus === "in_transit" ? 8_000 : false,
+      POLLING_ENABLED && query.state.data?.deliveryStatus === "in_transit"
+        ? 8_000
+        : false,
   });
 };
 
@@ -108,7 +111,7 @@ export const useMyDeliveries = () => {
       return data;
     },
     staleTime: 5_000,
-    refetchInterval: 8_000,
+    refetchInterval: POLLING_ENABLED ? 8_000 : false,
     refetchIntervalInBackground: false,
   });
 };
