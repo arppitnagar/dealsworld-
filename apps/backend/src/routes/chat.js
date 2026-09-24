@@ -51,8 +51,8 @@ router.post("/api/deals/:dealId/chat-notify", requireAuth, async (req, res) => {
       (uid, index, all) => uid && uid !== senderId && all.indexOf(uid) === index,
     );
 
-    const title = `New message · ${deal.title || "Deal chat"}`;
-    const body =
+    // The chat text itself goes out as typed; only the wrapper is localized.
+    const preview =
       message.length > MESSAGE_PREVIEW_LENGTH
         ? `${message.slice(0, MESSAGE_PREVIEW_LENGTH)}…`
         : message;
@@ -62,8 +62,7 @@ router.post("/api/deals/:dealId/chat-notify", requireAuth, async (req, res) => {
         pushNotification({
           userId,
           type: "chat",
-          title,
-          body,
+          message: { key: "chatMessage", vars: { title: deal.title || "", text: preview } },
           meta: { dealId },
         }),
       ),

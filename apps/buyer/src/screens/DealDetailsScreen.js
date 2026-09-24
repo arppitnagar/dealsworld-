@@ -37,13 +37,20 @@ import {
   getNextTierInfo,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
+  getLanguageInfo,
+  normalizeLanguage,
+  getDeliveryModeLabel,
+  getCategoryLabel,
 } from "@dealsworld/shared";
+import { getAddressLabel } from "../utils/addressLabels";
 import {
   useDeals,
   useJoinedDeals,
   useRecordDealView,
   useLeaveDeal,
   useJoinDeal,
+  useDealTranslation,
 } from "../hooks/useDeals";
 import {
   useMyDelivery,
@@ -92,10 +99,10 @@ function formatCityLine(city, state, pincode) {
   return parts.join(", ");
 }
 
-function formatReviewDate(value) {
+function formatReviewDate(value, language = "en") {
   const date = toDate(value);
   if (!date) return "";
-  return date.toLocaleDateString("en-IN", {
+  return date.toLocaleDateString(`${language}-IN`, {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -156,6 +163,9 @@ export default function DealDetailsScreen({ route, navigation }) {
   const { mutate: joinDeal, isLoading: joining } = useJoinDeal();
   const { mutate: leaveDeal, isLoading: leaving } = useLeaveDeal();
   const { data: myDelivery } = useMyDelivery(dealId);
+  const { language, t } = useI18n();
+  const { data: translation } = useDealTranslation(dealId);
+  const [showOriginal, setShowOriginal] = useState(false);
   const { mutate: confirmDelivery, isPending: confirmingDelivery } = useConfirmDelivery();
   const { mutate: payForDeal, isPending: paying } = usePayForDeal();
   const [otpValue, setOtpValue] = useState("");
@@ -201,6 +211,25 @@ export default function DealDetailsScreen({ route, navigation }) {
       joinedDeals?.find((d) => d.id === dealId),
     [deals, joinedDeals, dealId],
   );
+  // Deal lists only translate titles (apps/backend/src/translation.js); the
+  // description is translated when the deal is opened (useDealTranslation).
+  // Until that arrives, this shows whatever the list already had.
+  const localized = useMemo(() => {
+    const translatedTitle = translation?.title || deal?.title || "";
+    const translatedDescription = translation?.description ?? deal?.description;
+    return {
+      translatedTitle,
+      translatedDescription,
+      originalTitle: translation?.originalTitle || deal?.originalTitle || translatedTitle,
+      originalDescription: translation?.originalDescription ?? deal?.description,
+      isTranslated: Boolean(translation?.translatedTo || deal?.translatedTo),
+      sourceLanguage: normalizeLanguage(translation?.sourceLanguage || deal?.sourceLanguage),
+    };
+  }, [translation, deal]);
+  const displayTitle = showOriginal ? localized.originalTitle : localized.translatedTitle;
+  const displayDescription = showOriginal
+    ? localized.originalDescription
+    : localized.translatedDescription;
   const dealState = useMemo(
     () => (dealId ? dealStates.get(dealId) : null),
     [dealId, dealStates],
@@ -234,8 +263,9 @@ export default function DealDetailsScreen({ route, navigation }) {
   // set cap is hit, which is the only thing that actually blocks joining.
   const dealFull =
     Number.isFinite(maxGroupSize) && maxGroupSize > 0 && joinCount >= maxGroupSize;
-  const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
-  const isPickup = /pick/i.test(deliveryModeLabel);
+  const deliveryModeRaw = String(deal?.deliveryMode || "").trim();
+  const deliveryModeLabel = getDeliveryModeLabel(deliveryModeRaw, t);
+  const isPickup = /pick/i.test(deliveryModeRaw);
   const storeAddress =
     formatAddressText(deal?.storeAddress) ||
     formatAddressText(deal?.pickupAddress) ||
@@ -266,13 +296,13 @@ export default function DealDetailsScreen({ route, navigation }) {
     !hasJoined ||
     (!isDealEnded && (myPaymentStatus === null || myPaymentStatus === "unpaid"));
   const deliveryHeroStatus = showUnsuccessfulSection
-    ? { label: "Unsuccessful", color: theme.colors.error }
+    ? { label: t("delivery.unsuccessful"), color: theme.colors.error }
     : deliveryStatus === "delivered"
-      ? { label: "Delivered", color: theme.colors.success }
+      ? { label: t("delivery.delivered"), color: theme.colors.success }
       : deliveryStatus === "in_transit"
-        ? { label: "In Transit", color: theme.colors.primary }
+        ? { label: t("delivery.inTransit"), color: theme.colors.primary }
         : deliveryStatus === "ready_for_pickup"
-          ? { label: "Ready for Pickup", color: theme.colors.primary }
+          ? { label: t("delivery.readyForPickup"), color: theme.colors.primary }
           : null;
   const hasAnyAddress = Array.isArray(addresses) && addresses.length > 0;
   const defaultAddress = useMemo(
@@ -359,7 +389,7 @@ export default function DealDetailsScreen({ route, navigation }) {
   const handleConfirmAddress = async () => {
     const address = addresses?.find((item) => item.id === selectedAddressId);
     if (!address) {
-      await alert({ title: "Select address", message: "Please choose a delivery address." });
+      await alert({ title: t("dealDetails.selectAddressTitle"), message: t("dealDetails.selectAddressMessage") });
       return;
     }
     setShowAddressModal(false);
@@ -375,9 +405,9 @@ export default function DealDetailsScreen({ route, navigation }) {
   const handleJoin = async (address) => {
     if (joining) return;
     const ok = await confirm({
-      title: "Join this deal?",
-      message: "You're about to join this group deal. You can leave anytime before it closes.",
-      confirmText: "Join Deal",
+      title: t("dealDetails.joinConfirmTitle"),
+      message: t("dealDetails.joinConfirmMessage"),
+      confirmText: t("dealDetails.joinConfirmButton"),
     });
     if (!ok) return;
     const deliveryAddressPayload = address || dealState?.deliveryAddress || null;
@@ -409,11 +439,11 @@ export default function DealDetailsScreen({ route, navigation }) {
                 .includes("network"));
           const message =
             isNetworkIssue
-              ? "Network issue while joining. Please check internet and try again."
+              ? t("dealDetails.joinNetworkError")
               : error?.response?.data?.error ||
                 error?.message ||
-                "Unable to join this deal.";
-          alert({ title: "Join failed", message, destructive: true });
+                t("dealDetails.joinError");
+          alert({ title: t("dealDetails.joinFailed"), message, destructive: true });
         },
       },
     );
@@ -422,16 +452,16 @@ export default function DealDetailsScreen({ route, navigation }) {
   const handlePay = async () => {
     if (!dealId || paying) return;
     const ok = await confirm({
-      title: "Confirm payment?",
-      message: `You're about to pay ${formatINR(priceBreakup.total)} for this deal. This can't be undone.`,
-      confirmText: "Pay Now",
+      title: t("dealDetails.payConfirmTitle"),
+      message: t("dealDetails.payConfirmMessage", { amount: formatINR(priceBreakup.total) }),
+      confirmText: t("dealDetails.payNow"),
     });
     if (!ok) return;
     payForDeal(dealId, {
       onError: (error) => {
         const message =
-          error?.response?.data?.error || error?.message || "Unable to process payment.";
-        alert({ title: "Payment failed", message, destructive: true });
+          error?.response?.data?.error || error?.message || t("dealDetails.payError");
+        alert({ title: t("dealDetails.payFailed"), message, destructive: true });
       },
     });
   };
@@ -447,8 +477,8 @@ export default function DealDetailsScreen({ route, navigation }) {
         },
         onError: (error) => {
           const message =
-            error?.response?.data?.error || error?.message || "Unable to confirm delivery.";
-          alert({ title: "Incorrect code", message, destructive: true });
+            error?.response?.data?.error || error?.message || t("dealDetails.confirmDeliveryError");
+          alert({ title: t("dealDetails.incorrectCode"), message, destructive: true });
         },
       },
     );
@@ -470,31 +500,30 @@ export default function DealDetailsScreen({ route, navigation }) {
         : null;
 
     const priceLine = hasOriginal
-      ? `Deal Price: ${formatINR(discountValue)} | MRP ${formatINR(originalValue)}`
+      ? t("share.priceWithMrp", { price: formatINR(discountValue), mrp: formatINR(originalValue) })
       : hasDiscount
-        ? `Deal Price: ${formatINR(discountValue)}`
+        ? t("share.price", { price: formatINR(discountValue) })
         : null;
 
     const headline = percentOff
-      ? `Save ${percentOff}% on ${deal.title || "this deal"}`
-      : deal.title || "Deal Details";
+      ? t("share.headline", { percent: percentOff, title: displayTitle || t("share.thisDeal") })
+      : displayTitle || t("dealDetails.title");
 
     const shareUrl =
       deal.shareUrl ||
       deal.link ||
       `${SHARE_BASE_URL}/${deal.id}`;
-    const storeLinks = `Install DealBuddy: iOS ${APP_STORE_URL} | Android ${PLAY_STORE_URL}`;
+    const storeLinks = t("share.install", { ios: APP_STORE_URL, android: PLAY_STORE_URL });
 
-    const introLine =
-      "Hey Buddy! Just snagged a sizzling deal on DealBuddy 🔥 Check this out!";
+    const introLine = t("share.intro");
     const lineParts = [
       introLine,
       headline,
       priceLine,
-      deal.category ? `Category: ${deal.category}` : null,
-      deal.location ? `Location: ${deal.location}` : null,
-      expiryText ? `Expiry: ${expiryText}` : null,
-      shareUrl ? `View: ${shareUrl}` : null,
+      deal.category ? t("share.category", { category: getCategoryLabel(deal.category, t) }) : null,
+      deal.location ? t("share.location", { location: deal.location }) : null,
+      expiryText ? t("share.expiry", { expiry: expiryText }) : null,
+      shareUrl ? t("share.view", { url: shareUrl }) : null,
       storeLinks,
     ].filter(Boolean);
 
@@ -512,19 +541,19 @@ export default function DealDetailsScreen({ route, navigation }) {
   const handleSubmitReview = async () => {
     if (!dealId) return;
     if (!isBuyer) {
-      await alert({ title: "Not allowed", message: "Only buyers can submit reviews." });
+      await alert({ title: t("reviews.notAllowed"), message: t("reviews.onlyBuyersSubmit") });
       return;
     }
     if (!user?.uid) {
-      await alert({ title: "Login required", message: "Please sign in to leave a review." });
+      await alert({ title: t("reviews.loginRequired"), message: t("reviews.signInToReview") });
       return;
     }
     if (submittingReview) return;
 
     const ok = await confirm({
-      title: "Submit this review?",
-      message: "Your rating and comment will be visible to the seller and other buyers.",
-      confirmText: "Submit Review",
+      title: t("reviews.confirmTitle"),
+      message: t("reviews.confirmMessage"),
+      confirmText: t("reviews.submit"),
     });
     if (!ok) return;
 
@@ -535,11 +564,11 @@ export default function DealDetailsScreen({ route, navigation }) {
         comment: commentText,
         displayName: profile?.displayName || user?.displayName,
       });
-      await alert({ title: "Thanks!", message: "Your rating has been saved.", tone: "success" });
+      await alert({ title: t("reviews.thanks"), message: t("reviews.saved"), tone: "success" });
     } catch (error) {
       const message =
-        error?.message || "We could not save your review. Please try again.";
-      await alert({ title: "Review failed", message, destructive: true });
+        error?.message || t("reviews.saveError");
+      await alert({ title: t("reviews.failed"), message, destructive: true });
     } finally {
       setSubmittingReview(false);
     }
@@ -575,9 +604,9 @@ export default function DealDetailsScreen({ route, navigation }) {
   if (!deal) {
     return (
       <View style={styles.notFoundScreen}>
-        <Text style={styles.notFoundText}>Deal not found.</Text>
+        <Text style={styles.notFoundText}>{t("dealDetails.notFound")}</Text>
         <AppButton
-          title="Go Back"
+          title={t("dealDetails.goBack")}
           onPress={() => navigation.goBack()}
           style={{ borderRadius: theme.radii.md }}
         />
@@ -586,7 +615,7 @@ export default function DealDetailsScreen({ route, navigation }) {
   }
 
   const expiryDate = toDate(deal.expiresAt || deal.expiryTime);
-  const expiryLabel = expiryDate ? formatExpiryLabel(expiryDate) : null;
+  const expiryLabel = expiryDate ? formatExpiryLabel(expiryDate, Date.now(), t, language) : null;
   const originalValue = Number(deal.originalPrice);
   const hasOriginal = Number.isFinite(originalValue) && originalValue > 0;
   // The live price at the current headcount - equal to deal.discountPrice
@@ -627,25 +656,25 @@ export default function DealDetailsScreen({ route, navigation }) {
   const pulseCards = [
     {
       key: "live",
-      label: "Live Pulse",
+      label: t("insights.live"),
       value: formatNumber(totalInteractions),
-      caption: "Total interactions on this deal",
+      caption: t("insights.liveCaption"),
       icon: "analytics-outline",
       colors: [theme.colors.primary, theme.colors.primaryDeep],
     },
     {
       key: "favorite",
-      label: "Favourite Pulse",
+      label: t("insights.favourite"),
       value: formatNumber(favoritesCount),
-      caption: "Marked as favourite",
+      caption: t("insights.favouriteCaption"),
       icon: "heart-outline",
       colors: [theme.colors.danger, theme.colors.purple],
     },
     {
       key: "joined",
-      label: "Join Pulse",
+      label: t("insights.join"),
       value: formatNumber(joinCount),
-      caption: "Joined this deal",
+      caption: t("insights.joinCaption"),
       icon: "people-outline",
       colors: [theme.colors.success, theme.colors.primary],
     },
@@ -655,24 +684,24 @@ export default function DealDetailsScreen({ route, navigation }) {
     if (!dealId) return;
     if (joining || leaving) {
       await alert({
-        title: "Please wait",
-        message: "We are updating your deal status. Try again in a moment.",
+        title: t("dealDetails.pleaseWait"),
+        message: t("dealDetails.updatingStatus"),
       });
       return;
     }
     if (!hasJoined && dealFull) {
       await alert({
-        title: "Deal full",
-        message: "This deal has reached its maximum number of buyers.",
+        title: t("dealDetails.fullTitle"),
+        message: t("dealDetails.fullMessage"),
       });
       return;
     }
     if (hasJoined) {
       if (leaving) return;
       const ok = await confirm({
-        title: "Leave this deal?",
-        message: "You'll lose your spot in this group buy and may need to rejoin if it fills up.",
-        confirmText: "Leave Deal",
+        title: t("dealDetails.leaveConfirmTitle"),
+        message: t("dealDetails.leaveConfirmMessage"),
+        confirmText: t("dealDetails.leaveConfirmButton"),
         destructive: true,
       });
       if (!ok) return;
@@ -695,11 +724,11 @@ export default function DealDetailsScreen({ route, navigation }) {
                 .toLowerCase()
                 .includes("timeout"));
           const message = isNetworkIssue
-            ? "Network issue while leaving. Please check internet and try again."
+            ? t("dealDetails.leaveNetworkError")
             : error?.response?.data?.error ||
               error?.message ||
-              "Unable to leave this deal.";
-          alert({ title: "Leave failed", message, destructive: true });
+              t("dealDetails.leaveError");
+          alert({ title: t("dealDetails.leaveFailed"), message, destructive: true });
         },
       });
       return;
@@ -708,16 +737,16 @@ export default function DealDetailsScreen({ route, navigation }) {
     if (requiresDeliveryAddress) {
       if (addressesLoading) {
         await alert({
-          title: "Please wait",
-          message: "Loading your saved addresses. Try again in a moment.",
+          title: t("dealDetails.pleaseWait"),
+          message: t("dealDetails.loadingAddressesWait"),
         });
         return;
       }
       if (!addressesLoading && !hasAnyAddress) {
         const addAddress = await confirm({
-          title: "Delivery address needed",
-          message: "Please add a delivery address before joining this deal.",
-          confirmText: "Add Address",
+          title: t("dealDetails.addressNeededTitle"),
+          message: t("dealDetails.addressNeededMessage"),
+          confirmText: t("addresses.add"),
         });
         if (addAddress) navigation.navigate("AddressForm");
         return;
@@ -733,8 +762,8 @@ export default function DealDetailsScreen({ route, navigation }) {
 
       if (!selectedAddress) {
         await alert({
-          title: "Select delivery address",
-          message: "Please choose one delivery address from your saved addresses.",
+          title: t("dealDetails.selectDeliveryAddress"),
+          message: t("dealDetails.chooseSavedAddress"),
         });
         setShowAddressModal(true);
         return;
@@ -758,7 +787,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         {
           key: "home",
           onPress: () => navigation.navigate("MainTabs", { screen: "Home" }),
-          label: "Home",
+          label: t("tabs.home"),
           icon: (color) => (
             <Ionicons name="home-outline" size={20} color={color} />
           ),
@@ -768,7 +797,7 @@ export default function DealDetailsScreen({ route, navigation }) {
           onPress: handleToggleJoin,
           active: hasJoined,
           tone: hasJoined ? "danger" : undefined,
-          label: hasJoined ? "Leave" : dealFull ? "Full" : "Join",
+          label: hasJoined ? t("dealDetails.leave") : dealFull ? t("dealDetails.full") : t("common.join"),
           loading: joining || leaving,
           icon: (color) =>
             !hasJoined && dealFull ? (
@@ -784,7 +813,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         {
           key: "share",
           onPress: handleShareDeal,
-          label: "Share",
+          label: t("dealDetails.share"),
           icon: (color) => (
             <Ionicons name="share-social-outline" size={20} color={color} />
           ),
@@ -793,7 +822,7 @@ export default function DealDetailsScreen({ route, navigation }) {
           key: "chat",
           onPress: () =>
             navigation.navigate("DealChat", { dealId: deal.id, deal }),
-          label: "Chat",
+          label: t("dealDetails.chat"),
           icon: (color) => (
             <Ionicons
               name="chatbubble-ellipses-outline"
@@ -807,7 +836,7 @@ export default function DealDetailsScreen({ route, navigation }) {
           onPress: handleToggleFavorite,
           active: isFavorite,
           tone: isFavorite ? "danger" : undefined,
-          label: "Liked",
+          label: t("dealDetails.liked"),
           icon: (color) => (
             <Heart
               size={20}
@@ -823,13 +852,36 @@ export default function DealDetailsScreen({ route, navigation }) {
   return (
     <>
       <DealDetailsLayout
-        headerTitle="Deal Details"
+        headerTitle={t("dealDetails.title")}
         onBack={() => navigation.goBack()}
         actions={null}
         footer={footerContent}
         images={getDealImages(deal)}
-        title={deal.title || "Deal"}
-        description={deal.description}
+        title={displayTitle || t("dealLayout.deal")}
+        description={displayDescription}
+        descriptionNote={
+          localized.isTranslated ? (
+            <TouchableOpacity
+              style={styles.translationNote}
+              onPress={() => setShowOriginal((value) => !value)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.translationNoteText}>
+                {localized.sourceLanguage
+                  ? t("dealDetails.translatedFrom", {
+                      language: getLanguageInfo(localized.sourceLanguage).nativeName,
+                    })
+                  : t("dealDetails.translated")}
+                {" · "}
+                <Text style={styles.translationNoteLink}>
+                  {showOriginal
+                    ? t("dealDetails.showTranslation")
+                    : t("dealDetails.showOriginal")}
+                </Text>
+              </Text>
+            </TouchableOpacity>
+          ) : null
+        }
         sellerName={sellerDisplayName}
         category={deal.category}
         location={deal.location}
@@ -838,7 +890,12 @@ export default function DealDetailsScreen({ route, navigation }) {
         discountPercent={percentOff}
         priceNote={
           nextTierInfo
-            ? `Need ${nextTierInfo.buyersNeeded} more buyer${nextTierInfo.buyersNeeded === 1 ? "" : "s"} so everyone pays ${formatINR(nextTierInfo.nextPrice)}`
+            ? t(
+                nextTierInfo.buyersNeeded === 1
+                  ? "dealDetails.nextTierOne"
+                  : "dealDetails.nextTier",
+                { count: nextTierInfo.buyersNeeded, price: formatINR(nextTierInfo.nextPrice) },
+              )
             : null
         }
         expiryLabel={expiryLabel}
@@ -853,7 +910,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         variant="dashboard"
         contentStyle={styles.scrollContent}
       >
-        <InfoCard title="Deal Insights" style={styles.insightsCard}>
+        <InfoCard title={t("insights.title")} style={styles.insightsCard}>
           <LinearGradient
             colors={pulseCards[0].colors}
             start={{ x: 0, y: 0 }}
@@ -902,7 +959,7 @@ export default function DealDetailsScreen({ route, navigation }) {
           </View>
         </InfoCard>
 
-        <InfoCard title="Logistics" style={styles.logisticsCard}>
+        <InfoCard title={t("logistics.title")} style={styles.logisticsCard}>
           <View style={styles.logisticsItem}>
             <View style={styles.logisticsIconWrap}>
               <Ionicons
@@ -912,7 +969,7 @@ export default function DealDetailsScreen({ route, navigation }) {
               />
             </View>
             <View style={styles.logisticsContent}>
-              <Text style={styles.logisticsLabel}>Deal ID</Text>
+              <Text style={styles.logisticsLabel}>{t("logistics.dealId")}</Text>
               <Text style={styles.logisticsValue}>{deal.dealCode || deal.id}</Text>
             </View>
           </View>
@@ -926,7 +983,7 @@ export default function DealDetailsScreen({ route, navigation }) {
               />
             </View>
             <View style={styles.logisticsContent}>
-              <Text style={styles.logisticsLabel}>Delivery mode</Text>
+              <Text style={styles.logisticsLabel}>{t("logistics.deliveryMode")}</Text>
               <Text style={styles.logisticsValue}>
                 {deliveryModeLabel || "-"}
               </Text>
@@ -944,7 +1001,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                   />
                 </View>
                 <View style={styles.logisticsContent}>
-                  <Text style={styles.logisticsLabel}>Store address</Text>
+                  <Text style={styles.logisticsLabel}>{t("logistics.storeAddress")}</Text>
                   <Text style={styles.logisticsValue}>
                     {storeAddress || "-"}
                   </Text>
@@ -955,16 +1012,13 @@ export default function DealDetailsScreen({ route, navigation }) {
         </InfoCard>
 
         {showPaymentSection ? (
-          <InfoCard title="Payment" style={styles.logisticsCard}>
+          <InfoCard title={t("payment.title")} style={styles.logisticsCard}>
             {myPaymentStatus === "unpaid" ? (
               <>
-                <Text style={styles.logisticsLabel}>
-                  Pay to secure your spot. Your payment is held by us and released to the seller
-                  only once you confirm delivery.
-                </Text>
+                <Text style={styles.logisticsLabel}>{t("payment.intro")}</Text>
                 <View style={styles.paymentActionsRow}>
                   <AppButton
-                    title={paying ? "Processing..." : `Pay ${formatINR(primaryPrice || 0)}`}
+                    title={paying ? t("payment.processing") : t("payment.payAmount", { amount: formatINR(primaryPrice || 0) })}
                     onPress={handlePay}
                     disabled={paying}
                     loading={paying}
@@ -973,7 +1027,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                   <TouchableOpacity
                     style={styles.breakupButton}
                     onPress={() => setShowBreakupModal(true)}
-                    accessibilityLabel="View price breakup"
+                    accessibilityLabel={t("payment.viewBreakup")}
                   >
                     <Ionicons
                       name="receipt-outline"
@@ -989,15 +1043,15 @@ export default function DealDetailsScreen({ route, navigation }) {
                   <StatusPill status={myPaymentStatus} />
                   <Text style={[styles.logisticsLabel, styles.paymentStatusText]}>
                     {myPaymentStatus === "paid_blocked"
-                      ? "Held until you confirm delivery."
+                      ? t("payment.held")
                       : myPaymentStatus === "released_to_seller"
-                        ? "Released to the seller after delivery."
-                        : "Refunded back to you."}
+                        ? t("payment.released")
+                        : t("payment.refunded")}
                   </Text>
                   <TouchableOpacity
                     style={styles.breakupButton}
                     onPress={() => setShowBreakupModal(true)}
-                    accessibilityLabel="View price breakup"
+                    accessibilityLabel={t("payment.viewBreakup")}
                   >
                     <Ionicons
                       name="receipt-outline"
@@ -1008,7 +1062,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                 </View>
                 {Number(myDelivery?.priceAdjustment) > 0 ? (
                   <Text style={styles.priceAdjustmentNote}>
-                    {`🎉 ${formatINR(myDelivery.priceAdjustment)} refunded — more buyers joined and the group price dropped after you paid.`}
+                    {t("payment.priceAdjustment", { amount: formatINR(myDelivery.priceAdjustment) })}
                   </Text>
                 ) : null}
               </>
@@ -1017,64 +1071,56 @@ export default function DealDetailsScreen({ route, navigation }) {
         ) : null}
 
         {showUnsuccessfulSection ? (
-          <InfoCard title="Deal Unsuccessful" style={styles.unsuccessfulCard}>
+          <InfoCard title={t("dealDetails.unsuccessfulTitle")} style={styles.unsuccessfulCard}>
             <View style={styles.unsuccessfulRow}>
               <Ionicons name="alert-circle-outline" size={20} color={theme.colors.error} />
-              <Text style={styles.unsuccessfulText}>
-                This deal ended without reaching its minimum group size, so it won't be
-                dispatched. You should receive a refund for your payment — contact the seller via
-                chat if you have questions.
-              </Text>
+              <Text style={styles.unsuccessfulText}>{t("dealDetails.unsuccessfulMessage")}</Text>
             </View>
           </InfoCard>
         ) : null}
 
         {showDeliverySection ? (
-          <InfoCard title={isPickup ? "Store Pickup" : "Delivery"} style={styles.deliveryOtpCard}>
+          <InfoCard title={isPickup ? t("delivery.storePickup") : t("delivery.title")} style={styles.deliveryOtpCard}>
             {deliveryStatus === "delivered" ? (
               <View style={styles.deliveryOtpDoneRow}>
                 <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
                 <Text style={styles.deliveryOtpDoneText}>
-                  {isPickup ? "Picked up" : "Delivered"}
-                  {myDelivery?.deliveredAt ? ` on ${formatReviewDate(myDelivery.deliveredAt)}` : ""}
+                  {myDelivery?.deliveredAt
+                    ? t(isPickup ? "delivery.pickedUpOn" : "delivery.deliveredOn", {
+                        date: formatReviewDate(myDelivery.deliveredAt, language),
+                      })
+                    : isPickup
+                      ? t("delivery.pickedUp")
+                      : t("delivery.delivered")}
                 </Text>
               </View>
             ) : isPickup ? (
               <>
-                <Text style={styles.deliveryOtpLabel}>Your pickup QR code</Text>
+                <Text style={styles.deliveryOtpLabel}>{t("delivery.pickupQr")}</Text>
                 <PickupQrDisplay
                   value={`DWPICKUP:${dealId}:${user?.uid || ""}:${myDelivery?.pickupQrToken || ""}`}
                 />
-                <Text style={styles.deliveryOtpHint}>
-                  Show this QR code to the seller at the store. It'll be scanned to confirm your
-                  pickup — no need to do anything else here.
-                </Text>
+                <Text style={styles.deliveryOtpHint}>{t("delivery.pickupQrHint")}</Text>
               </>
             ) : (
               <>
-                <Text style={styles.deliveryOtpLabel}>Your delivery confirmation code</Text>
+                <Text style={styles.deliveryOtpLabel}>{t("delivery.otpLabel")}</Text>
                 <OtpDisplay code={myDelivery?.deliveryOtp || ""} />
-                <Text style={styles.deliveryOtpHint}>
-                  Don't share this code with anyone except your delivery person. Enter it below
-                  once your order arrives to confirm delivery.
-                </Text>
+                <Text style={styles.deliveryOtpHint}>{t("delivery.otpHint")}</Text>
 
                 {myDelivery?.otpLocked ? (
-                  <Text style={styles.deliveryOtpLocked}>
-                    Too many incorrect attempts. Please contact the seller via chat to confirm
-                    delivery.
-                  </Text>
+                  <Text style={styles.deliveryOtpLocked}>{t("delivery.otpLocked")}</Text>
                 ) : (
                   <>
                     <OtpInput value={otpValue} onChangeText={setOtpValue} />
                     {typeof myDelivery?.attemptsRemaining === "number" &&
                     myDelivery.attemptsRemaining < 5 ? (
                       <Text style={styles.deliveryOtpAttempts}>
-                        {myDelivery.attemptsRemaining} attempt(s) remaining
+                        {t("delivery.attemptsRemaining", { count: myDelivery.attemptsRemaining })}
                       </Text>
                     ) : null}
                     <AppButton
-                      title={confirmingDelivery ? "Confirming..." : "Confirm Delivery"}
+                      title={confirmingDelivery ? t("delivery.confirming") : t("delivery.confirm")}
                       onPress={handleConfirmDelivery}
                       disabled={otpValue.length !== 6 || confirmingDelivery}
                       loading={confirmingDelivery}
@@ -1088,14 +1134,14 @@ export default function DealDetailsScreen({ route, navigation }) {
         ) : null}
 
         {SHOW_RATINGS_AND_REVIEWS && (
-        <InfoCard title="Ratings & Reviews" style={styles.reviewCard}>
+        <InfoCard title={t("reviews.title")} style={styles.reviewCard}>
           <View style={styles.reviewSummaryRow}>
             <View>
               <Text style={styles.reviewSummaryValue}>{ratingLabel}</Text>
               <Text style={styles.reviewSummarySub}>
                 {ratingCount > 0
-                  ? `${ratingCount} rating${ratingCount === 1 ? "" : "s"}`
-                  : "No ratings yet"}
+                  ? t(ratingCount === 1 ? "reviews.ratingCountOne" : "reviews.ratingCount", { count: ratingCount })
+                  : t("reviews.noRatings")}
               </Text>
             </View>
             <View style={styles.reviewStars}>
@@ -1126,12 +1172,12 @@ export default function DealDetailsScreen({ route, navigation }) {
           {isBuyer ? (
             <View style={styles.reviewInputWrap}>
               <Text style={styles.reviewInputLabel}>
-                {myReview ? "Update your review" : "Leave a review"}
+                {myReview ? t("reviews.updateYours") : t("reviews.leave")}
               </Text>
               <TextInput
                 value={commentText}
                 onChangeText={setCommentText}
-                placeholder="Share your experience..."
+                placeholder={t("reviews.placeholder")}
                 placeholderTextColor={theme.colors.textMuted}
                 style={styles.reviewInput}
                 multiline
@@ -1139,10 +1185,10 @@ export default function DealDetailsScreen({ route, navigation }) {
               <AppButton
                 title={
                   submittingReview
-                    ? "Saving..."
+                    ? t("common.saving")
                     : myReview
-                      ? "Update Review"
-                      : "Submit Review"
+                      ? t("reviews.update")
+                      : t("reviews.submit")
                 }
                 onPress={handleSubmitReview}
                 disabled={submittingReview}
@@ -1151,23 +1197,21 @@ export default function DealDetailsScreen({ route, navigation }) {
               />
             </View>
           ) : (
-            <Text style={styles.reviewEmptyText}>
-              Only buyers can leave reviews.
-            </Text>
+            <Text style={styles.reviewEmptyText}>{t("reviews.onlyBuyers")}</Text>
           )}
 
           <View style={styles.reviewList}>
             {reviewsLoading ? (
-              <Text style={styles.reviewEmptyText}>Loading reviews...</Text>
+              <Text style={styles.reviewEmptyText}>{t("reviews.loading")}</Text>
             ) : reviews?.length ? (
               reviews.map((item) => (
                 <View key={item.id} style={styles.reviewItem}>
                   <View style={styles.reviewItemHeader}>
                     <Text style={styles.reviewUser}>
-                      {item.userName || "Buyer"}
+                      {item.userName || t("common.buyer")}
                     </Text>
                     <Text style={styles.reviewDate}>
-                      {formatReviewDate(item.createdAt || item.updatedAt)}
+                      {formatReviewDate(item.createdAt || item.updatedAt, language)}
                     </Text>
                   </View>
                   <View style={styles.reviewRatingRow}>
@@ -1190,16 +1234,14 @@ export default function DealDetailsScreen({ route, navigation }) {
                 </View>
               ))
             ) : (
-              <Text style={styles.reviewEmptyText}>
-                Be the first to rate this deal.
-              </Text>
+              <Text style={styles.reviewEmptyText}>{t("reviews.beFirst")}</Text>
             )}
           </View>
         </InfoCard>
         )}
 
         {requiresDeliveryAddress && hasJoined ? (
-          <InfoCard title="Delivery Address" style={styles.deliveryCard}>
+          <InfoCard title={t("dealDetails.deliveryAddress")} style={styles.deliveryCard}>
             {deliveryAddress ? (
               <View>
                 {deliveryAddress.name ? (
@@ -1226,25 +1268,23 @@ export default function DealDetailsScreen({ route, navigation }) {
                   </Text>
                 ) : null}
                 <Text style={styles.deliveryMeta}>
-                  Delivery mode: {deliveryModeLabel || "Delivery"}
+                  {t("dealDetails.deliveryModeLine", { mode: deliveryModeLabel || t("delivery.title") })}
                 </Text>
               </View>
             ) : (
-              <Text style={styles.deliveryMeta}>
-                No delivery address saved yet.
-              </Text>
+              <Text style={styles.deliveryMeta}>{t("dealDetails.noDeliveryAddress")}</Text>
             )}
 
             <View style={styles.deliveryActions}>
               {canEditAddress ? (
                 <AppButton
-                  title={deliveryAddress ? "Change Address" : "Add Address"}
+                  title={deliveryAddress ? t("dealDetails.changeAddress") : t("addresses.add")}
                   onPress={async () => {
                     if (!addressesLoading && (!addresses || addresses.length === 0)) {
                       const addAddress = await confirm({
-                        title: "No saved address",
-                        message: "Please add a delivery address to continue.",
-                        confirmText: "Add Address",
+                        title: t("dealDetails.noSavedAddress"),
+                        message: t("dealDetails.addAddressToContinue"),
+                        confirmText: t("addresses.add"),
                       });
                       if (addAddress) navigation.navigate("AddressForm");
                       return;
@@ -1254,9 +1294,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                   style={styles.deliveryActionButton}
                 />
               ) : (
-                <Text style={styles.deliveryMeta}>
-                  Address is locked after payment and can no longer be changed.
-                </Text>
+                <Text style={styles.deliveryMeta}>{t("dealDetails.addressLocked")}</Text>
               )}
             </View>
           </InfoCard>
@@ -1285,7 +1323,7 @@ export default function DealDetailsScreen({ route, navigation }) {
               ]}
             >
               <View style={styles.addressHeader}>
-                <Text style={styles.addressTitle}>Select delivery address</Text>
+                <Text style={styles.addressTitle}>{t("dealDetails.selectDeliveryAddress")}</Text>
                 <TouchableOpacity
                   style={styles.addressClose}
                   onPress={() => setShowAddressModal(false)}
@@ -1298,16 +1336,14 @@ export default function DealDetailsScreen({ route, navigation }) {
                 </TouchableOpacity>
               </View>
               <Text style={styles.addressSubtitle}>
-                Delivery mode: {deliveryModeLabel || "Delivery"}
+                {t("dealDetails.deliveryModeLine", { mode: deliveryModeLabel || t("delivery.title") })}
               </Text>
               {!addressesLoading && hasAnyAddress && !hasDefaultAddress ? (
-                <Text style={styles.addressHint}>
-                  No default address selected. Please choose one from below.
-                </Text>
+                <Text style={styles.addressHint}>{t("dealDetails.noDefaultAddress")}</Text>
               ) : null}
 
               {addressesLoading ? (
-                <Text style={styles.addressLoading}>Loading addresses...</Text>
+                <Text style={styles.addressLoading}>{t("dealDetails.loadingAddresses")}</Text>
               ) : addresses?.length ? (
                 <ScrollView
                   style={styles.addressList}
@@ -1328,7 +1364,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                         <View style={styles.addressOptionHeader}>
                           <View style={styles.addressTag}>
                             <Text style={styles.addressTagText}>
-                              {item.label || "Address"}
+                              {getAddressLabel(item.label, t)}
                             </Text>
                           </View>
                           {item.isDefault ? (
@@ -1339,7 +1375,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                                 color={theme.colors.warningBright}
                               />
                               <Text style={styles.addressDefaultText}>
-                                Default
+                                {t("addresses.default")}
                               </Text>
                             </View>
                           ) : null}
@@ -1365,15 +1401,15 @@ export default function DealDetailsScreen({ route, navigation }) {
                 <View style={styles.addressEmptyWrap}>
                   <EmptyState
                     icon="location-outline"
-                    title="No saved addresses"
-                    subtitle="Add one to continue."
+                    title={t("addresses.emptyTitle")}
+                    subtitle={t("dealDetails.addOneToContinue")}
                   />
                 </View>
               )}
 
               <View style={styles.addressActions}>
                 <AppButton
-                  title="Add Address"
+                  title={t("addresses.add")}
                   onPress={() => {
                     setShowAddressModal(false);
                     navigation.navigate("AddressForm");
@@ -1381,7 +1417,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                   style={styles.addressActionButton}
                 />
                 <AppButton
-                  title="Use Selected Address"
+                  title={t("dealDetails.useSelectedAddress")}
                   onPress={handleConfirmAddress}
                   disabled={!selectedAddressId}
                   style={styles.addressActionButton}
@@ -1415,10 +1451,10 @@ export default function DealDetailsScreen({ route, navigation }) {
               />
               <Text style={styles.successText}>
                 {successFeedback === "leave"
-                  ? "Left deal!"
+                  ? t("dealDetails.leftFeedback")
                   : successFeedback === "delivered"
-                    ? "Delivered!"
-                    : "Joined!"}
+                    ? t("dealDetails.deliveredFeedback")
+                    : t("dealDetails.joinedFeedback")}
               </Text>
             </Animated.View>
           </View>
@@ -1435,6 +1471,18 @@ const createStyles = (theme) =>
     paddingTop: 20,
     paddingBottom: 56,
     gap: 20,
+  },
+  translationNote: {
+    marginTop: 6,
+    alignSelf: "flex-start",
+  },
+  translationNoteText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+  },
+  translationNoteLink: {
+    fontWeight: "700",
+    color: theme.colors.primary,
   },
   insightsCard: {
     backgroundColor: theme.colors.surfaceGlass,

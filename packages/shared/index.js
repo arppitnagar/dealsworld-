@@ -39,6 +39,7 @@ export { default as ChatSkeleton } from "./components/ChatSkeleton";
 export { default as SkeletonStatsRow } from "./components/SkeletonStatsRow";
 export { statusColors, getStatusColor, getStatusColors } from "./utils/statusColors";
 export { statusLabels, getStatusLabel } from "./utils/statusLabels";
+export { getDeliveryModeLabel } from "./utils/deliveryModeLabels";
 export { statusTokens, getStatusToken, getStatusTokens } from "./utils/statusTokens";
 export { getMetricsStyles } from "./styles/metrics";
 export { default as ImageHeader } from "./components/ImageHeader";
@@ -77,7 +78,11 @@ export {
   MAX_PRICING_TIERS,
 } from "./utils/priceBreakup";
 export { getDealImages, getDealThumbnails } from "./utils/dealImages";
-export { DEAL_CATEGORIES, DEAL_CATEGORY_LABELS } from "./utils/dealCategories";
+export {
+  DEAL_CATEGORIES,
+  DEAL_CATEGORY_LABELS,
+  getCategoryLabel,
+} from "./utils/dealCategories";
 export { POLLING_ENABLED } from "./config/polling";
 export { validatePassword } from "./utils/passwordPolicy";
 export {
@@ -90,3 +95,15 @@ export {
   applyDealFieldFilters,
   sortDealsByField,
 } from "./utils/dealSortFilter";
+export { I18nProvider, useI18n } from "./i18n/I18nProvider";
+export { default as useLanguageProfileSync } from "./i18n/useLanguageProfileSync";
+export { createTranslator, englishT } from "./i18n/translator";
+export {
+  LANGUAGES,
+  DEFAULT_LANGUAGE,
+  normalizeLanguage,
+  getLanguageInfo,
+  getDeviceLanguage,
+  isRTLLanguage,
+} from "./i18n/languages";
+export { canRestartInApp, restartApp } from "./i18n/layoutDirection";

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Search, X, Bell, Store } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useTheme, AppInput } from "@dealsworld/shared";
+import { useTheme, useI18n, AppInput } from "@dealsworld/shared";
 
 // The one persistent "dashboard" header - brand lockup, bell, avatar, and
 // greeting. Dashboard and the Deals tab render this exact same component so
@@ -26,8 +26,9 @@ export default function SellerDashboardHeader({
   showSearchControls = false,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const greetingLabel = getGreetingLabel(now);
+  const greetingLabel = getGreetingLabel(now, t);
   const avatarInitial = (displayName || "Seller").trim()[0]?.toUpperCase() || "S";
 
   return (
@@ -44,7 +45,7 @@ export default function SellerDashboardHeader({
             <Text style={styles.brandName}>
               Deal<Text style={{ color: theme.colors.primary }}>Buddy</Text>
             </Text>
-            <Text style={styles.brandSub}>SELLER HUB</Text>
+            <Text style={styles.brandSub}>{t("sellerHeader.brandSub")}</Text>
           </View>
         </View>
         <View style={styles.topActions}>
@@ -72,7 +73,7 @@ export default function SellerDashboardHeader({
 
       <View style={styles.greetingBlock}>
         <Text style={styles.greetingLabel}>{greetingLabel}</Text>
-        <Text style={styles.greetingName}>{displayName || "Seller"}</Text>
+        <Text style={styles.greetingName}>{displayName || t("common.seller")}</Text>
       </View>
 
       {showSearchControls && (
@@ -80,7 +81,7 @@ export default function SellerDashboardHeader({
           <AppInput
             value={searchText}
             onChangeText={onChangeSearchText}
-            placeholder="Search your deals"
+            placeholder={t("sellerHeader.searchPlaceholder")}
             containerStyle={styles.searchInputContainer}
             inputStyle={styles.searchInput}
             leftElement={<Search size={17} color={theme.colors.textMuted} />}
@@ -121,11 +122,11 @@ export default function SellerDashboardHeader({
   );
 }
 
-function getGreetingLabel(nowMs) {
+function getGreetingLabel(nowMs, t) {
   const hour = new Date(nowMs).getHours();
-  if (hour < 12) return "Good morning,";
-  if (hour < 18) return "Good afternoon,";
-  return "Good evening,";
+  if (hour < 12) return t("header.goodMorning");
+  if (hour < 18) return t("header.goodAfternoon");
+  return t("header.goodEvening");
 }
 
 const createStyles = (theme) =>

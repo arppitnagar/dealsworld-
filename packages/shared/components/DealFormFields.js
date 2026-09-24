@@ -13,6 +13,9 @@ import AppInput from "./ui/AppInput";
 import FormSection from "./FormSection";
 import PriceBreakupCard from "./PriceBreakupCard";
 import { useTheme } from "../theme/ThemeProvider";
+import { useI18n } from "../i18n/I18nProvider";
+import { getCategoryLabel } from "../utils/dealCategories";
+import { getDeliveryModeLabel } from "../utils/deliveryModeLabels";
 import { getFormStyles } from "../styles/forms";
 import { calculatePriceBreakup, MAX_PRICING_TIERS } from "../utils/priceBreakup";
 
@@ -48,6 +51,7 @@ export default function DealFormFields({
   onTierFieldChange,
 }) {
   const { theme } = useTheme();
+  const { language, t } = useI18n();
   const formStyles = useMemo(() => getFormStyles(theme), [theme]);
   const styles = useMemo(
     () =>
@@ -171,8 +175,19 @@ export default function DealFormFields({
   const showCategoryOther = category === "Other";
   const showDeliveryCharge = deliveryMode === "Paid Home Delivery";
   const expiryLabel = expiresAt
-    ? new Date(expiresAt).toDateString()
-    : "Select expiry date";
+    ? language === "en"
+      ? new Date(expiresAt).toDateString()
+      : new Date(expiresAt).toLocaleDateString(`${language}-IN`, {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+    : t("dealForm.selectExpiry");
+  const tierLabel = (minBuyers, maxBuyers, isLast) =>
+    isLast
+      ? t("sellerDealDetails.tierOpen", { min: minBuyers })
+      : t("sellerDealDetails.tierRange", { min: minBuyers, max: maxBuyers || "?" });
 
   const handleFieldChange = (key, value) => {
     if (!onFieldChange) return;
@@ -234,7 +249,7 @@ export default function DealFormFields({
         const price =
           index === 0 ? parsePriceNumber(form.discountPrice) : parsePriceNumber(row.price);
         return {
-          label: isLast ? `${minBuyers}+ buyers` : `${minBuyers}–${row.maxBuyers || "?"} buyers`,
+          label: tierLabel(minBuyers, row.maxBuyers, isLast),
           breakup: calculatePriceBreakup({
             basePrice: price,
             gstPercent: form.gstPercent,
@@ -247,7 +262,7 @@ export default function DealFormFields({
 
   return (
     <>
-      <FormSection title="Deal Details">
+      <FormSection title={t("dealDetails.title")}>
         {showImage ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.imageRow}>
@@ -287,8 +302,8 @@ export default function DealFormFields({
 
         {showTitle ? (
           <AppInput
-            label="Deal Title"
-            placeholder="e.g. iPhone 15 Pro Max"
+            label={t("dealForm.title")}
+            placeholder={t("dealForm.titlePlaceholder")}
             value={form.title}
             editable={!isReadOnly}
             onChangeText={(value) => handleFieldChange("title", value)}
@@ -298,8 +313,8 @@ export default function DealFormFields({
 
         {showDescription ? (
           <AppInput
-            label="Description"
-            placeholder="Describe the deal"
+            label={t("dealForm.description")}
+            placeholder={t("dealForm.descriptionPlaceholder")}
             multiline
             value={form.description}
             editable={!isReadOnly}
@@ -310,13 +325,13 @@ export default function DealFormFields({
       </FormSection>
 
       {showPricing ? (
-        <FormSection title="Pricing">
+        <FormSection title={t("dealForm.pricing")}>
           <View style={styles.row}>
             <AppInput
               containerStyle={styles.half}
-              label="Original Price"
+              label={t("dealForm.originalPrice")}
               keyboardType="decimal-pad"
-              placeholder="Rs 0.00"
+              placeholder={t("dealForm.pricePlaceholder")}
               value={form.originalPrice}
               editable={!isReadOnly}
               onChangeText={(value) => onPriceChange?.("originalPrice", value)}
@@ -326,9 +341,9 @@ export default function DealFormFields({
 
             <AppInput
               containerStyle={styles.half}
-              label="Deal Price"
+              label={t("dealForm.dealPrice")}
               keyboardType="decimal-pad"
-              placeholder="Rs 0.00"
+              placeholder={t("dealForm.pricePlaceholder")}
               value={form.discountPrice}
               editable={!isReadOnly}
               onChangeText={(value) => onPriceChange?.("discountPrice", value)}
@@ -340,9 +355,9 @@ export default function DealFormFields({
           <View style={styles.row}>
             <AppInput
               containerStyle={styles.half}
-              label="Minimum Buyers"
+              label={t("dealForm.minBuyers")}
               keyboardType="numeric"
-              placeholder="Minimum 2 buyers"
+              placeholder={t("dealForm.minBuyersPlaceholder")}
               value={minGroupSizeDerived ? tierRows[0]?.maxBuyers || "" : form.minGroupSize}
               editable={!isReadOnly && !minGroupSizeDerived}
               onChangeText={(value) => onMinBuyersChange?.(value)}
@@ -351,9 +366,9 @@ export default function DealFormFields({
 
             <AppInput
               containerStyle={styles.half}
-              label="Max Buyers (optional)"
+              label={t("dealForm.maxBuyers")}
               keyboardType="numeric"
-              placeholder="No limit"
+              placeholder={t("notificationPrefs.noLimit")}
               value={form.maxGroupSize}
               editable={!isReadOnly}
               onChangeText={(value) => onMaxBuyersChange?.(value)}
@@ -361,23 +376,17 @@ export default function DealFormFields({
             />
           </View>
           {minGroupSizeDerived ? (
-            <Text style={styles.tierHint}>
-              Auto-set from your first pricing tier below - edit "Up to
-              buyers" on Tier 1 to change it.
-            </Text>
+            <Text style={styles.tierHint}>{t("dealForm.minFromTier")}</Text>
           ) : null}
         </FormSection>
       ) : null}
 
       {showPricing ? (
-        <FormSection title="Group Pricing (optional)">
+        <FormSection title={t("dealForm.groupPricing")}>
           <View style={styles.tierToggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.label}>Price drops as more buyers join</Text>
-              <Text style={styles.tierHint}>
-                Off: everyone pays the Deal Price above. On: set cheaper
-                prices once more buyers join.
-              </Text>
+              <Text style={styles.label}>{t("dealForm.tiersToggle")}</Text>
+              <Text style={styles.tierHint}>{t("dealForm.tiersToggleHint")}</Text>
             </View>
             <Switch
               value={Boolean(form.pricingTiersEnabled)}
@@ -398,14 +407,12 @@ export default function DealFormFields({
                   <View key={index} style={styles.tierRow}>
                     <View style={styles.tierRowHeader}>
                       <Text style={styles.tierRangeLabel}>
-                        {isLast
-                          ? `${minBuyers}+ buyers`
-                          : `${minBuyers}–${row.maxBuyers || "?"} buyers`}
+                        {tierLabel(minBuyers, row.maxBuyers, isLast)}
                       </Text>
                       {!isFirst && !isReadOnly ? (
                         <TouchableOpacity
                           onPress={() => onRemoveTier?.(index)}
-                          accessibilityLabel={`Remove tier ${index + 1}`}
+                          accessibilityLabel={t("dealForm.removeTier", { number: index + 1 })}
                         >
                           <X size={16} color={theme.colors.error} />
                         </TouchableOpacity>
@@ -415,9 +422,9 @@ export default function DealFormFields({
                       {!isLast ? (
                         <AppInput
                           containerStyle={styles.half}
-                          label="Up to buyers"
+                          label={t("dealForm.upToBuyers")}
                           keyboardType="numeric"
-                          placeholder="e.g. 5"
+                          placeholder={t("dealForm.upToBuyersPlaceholder")}
                           value={row.maxBuyers}
                           editable={!isReadOnly}
                           onChangeText={(value) =>
@@ -430,9 +437,9 @@ export default function DealFormFields({
                       )}
                       <AppInput
                         containerStyle={styles.half}
-                        label={isFirst ? "Price at this tier (= Deal Price)" : "Price at this tier"}
+                        label={isFirst ? t("dealForm.tierPriceFirst") : t("dealForm.tierPrice")}
                         keyboardType="decimal-pad"
-                        placeholder="Rs 0.00"
+                        placeholder={t("dealForm.pricePlaceholder")}
                         value={isFirst ? form.discountPrice : row.price}
                         editable={!isReadOnly}
                         onChangeText={(value) =>
@@ -451,7 +458,7 @@ export default function DealFormFields({
 
               {tierRows.length < MAX_PRICING_TIERS && !isReadOnly ? (
                 <TouchableOpacity style={styles.addTierButton} onPress={onAddTier}>
-                  <Text style={styles.addTierText}>+ Add another tier</Text>
+                  <Text style={styles.addTierText}>{t("dealForm.addTier")}</Text>
                 </TouchableOpacity>
               ) : null}
 
@@ -464,9 +471,9 @@ export default function DealFormFields({
       ) : null}
 
       {showLogistics ? (
-        <FormSection title="Logistics">
+        <FormSection title={t("logistics.title")}>
           <Text style={[styles.label, errors.category && styles.labelError]}>
-            Category
+            {t("dealForm.category")}
           </Text>
 
           <TouchableOpacity
@@ -485,7 +492,7 @@ export default function DealFormFields({
                   : { color: theme.colors.text }
               }
             >
-              {form.category || "Select category"}
+              {form.category ? getCategoryLabel(form.category, t) : t("dealForm.selectCategory")}
             </Text>
           </TouchableOpacity>
 
@@ -495,8 +502,8 @@ export default function DealFormFields({
 
           {showCategoryOther ? (
             <AppInput
-              label="Other Category"
-              placeholder="e.g. Home Appliances"
+              label={t("dealForm.otherCategory")}
+              placeholder={t("dealForm.otherCategoryPlaceholder")}
               value={form.categoryOther}
               editable={!isReadOnly}
               onChangeText={(value) => handleFieldChange("categoryOther", value)}
@@ -505,7 +512,7 @@ export default function DealFormFields({
           ) : null}
 
           <Text style={[styles.label, errors.expiresAt && styles.labelError]}>
-            Expires At
+            {t("dealForm.expiresAt")}
           </Text>
 
           <TouchableOpacity
@@ -533,7 +540,7 @@ export default function DealFormFields({
           ) : null}
 
           <Text style={[styles.label, errors.city && styles.labelError]}>
-            City
+            {t("addresses.city")}
           </Text>
 
           <TouchableOpacity
@@ -552,15 +559,15 @@ export default function DealFormFields({
                   : { color: theme.colors.text }
               }
             >
-              {form.city || "Select city"}
+              {form.city || t("dealForm.selectCity")}
             </Text>
           </TouchableOpacity>
 
           {errors.city ? <Text style={styles.error}>{errors.city}</Text> : null}
 
           <AppInput
-            label="Area / Landmark (optional)"
-            placeholder="e.g. Andheri West"
+            label={t("dealForm.area")}
+            placeholder={t("dealForm.areaPlaceholder")}
             value={form.location}
             editable={!isReadOnly}
             onChangeText={(value) => handleFieldChange("location", value)}
@@ -568,7 +575,7 @@ export default function DealFormFields({
           />
 
           <Text style={[styles.label, errors.deliveryMode && styles.labelError]}>
-            Delivery Mode
+            {t("dealForm.deliveryMode")}
           </Text>
 
           <TouchableOpacity
@@ -587,7 +594,9 @@ export default function DealFormFields({
                   : { color: theme.colors.text }
               }
             >
-              {form.deliveryMode || "Select delivery mode"}
+              {form.deliveryMode
+                ? getDeliveryModeLabel(form.deliveryMode, t)
+                : t("dealForm.selectDeliveryMode")}
             </Text>
           </TouchableOpacity>
 
@@ -596,9 +605,9 @@ export default function DealFormFields({
           ) : null}
 
           <AppInput
-            label="GST (%)"
+            label={t("dealForm.gst")}
             keyboardType="decimal-pad"
-            placeholder="e.g. 18"
+            placeholder={t("dealForm.gstPlaceholder")}
             value={form.gstPercent}
             editable={!isReadOnly}
             onChangeText={(value) =>
@@ -611,9 +620,9 @@ export default function DealFormFields({
 
           {showDeliveryCharge ? (
             <AppInput
-              label="Delivery Charge"
+              label={t("dealForm.deliveryCharge")}
               keyboardType="decimal-pad"
-              placeholder="Rs 0.00"
+              placeholder={t("dealForm.pricePlaceholder")}
               value={form.deliveryCharge}
               editable={!isReadOnly}
               onChangeText={(value) =>
@@ -629,10 +638,8 @@ export default function DealFormFields({
       ) : null}
 
       {showTierBreakupPreview ? (
-        <FormSection title="Buyer Price Breakup Preview">
-          <Text style={styles.breakupHint}>
-            Exactly what the buyer sees at each tier before paying.
-          </Text>
+        <FormSection title={t("dealForm.breakupPreview")}>
+          <Text style={styles.breakupHint}>{t("dealForm.breakupPreviewTiersHint")}</Text>
           {tierBreakups.map((tier, index) => (
             <View key={index} style={styles.tierBreakupBlock}>
               <Text style={styles.tierRangeLabel}>{tier.label}</Text>
@@ -641,10 +648,8 @@ export default function DealFormFields({
           ))}
         </FormSection>
       ) : showBreakupPreview ? (
-        <FormSection title="Buyer Price Breakup Preview">
-          <Text style={styles.breakupHint}>
-            This is exactly what the buyer will see before paying.
-          </Text>
+        <FormSection title={t("dealForm.breakupPreview")}>
+          <Text style={styles.breakupHint}>{t("dealForm.breakupPreviewHint")}</Text>
           <PriceBreakupCard breakup={priceBreakup} />
         </FormSection>
       ) : null}

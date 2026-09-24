@@ -10,6 +10,7 @@ import {
 import { Search } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/ThemeProvider";
+import { useI18n } from "../i18n/I18nProvider";
 
 // Shared searchable city list - used both as the seller's City field
 // (allowCustom: typing a name not in `cities` offers a "Use ..." row so a
@@ -28,6 +29,7 @@ export default function CitySearchList({
   maxHeight = 420,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [query, setQuery] = useState("");
 
@@ -51,7 +53,7 @@ export default function CitySearchList({
         <Search size={16} color={theme.colors.textMuted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search city"
+          placeholder={t("citySearch.placeholder")}
           placeholderTextColor={theme.colors.textMuted}
           value={query}
           onChangeText={setQuery}
@@ -85,7 +87,7 @@ export default function CitySearchList({
                   color={theme.colors.primary}
                 />
                 <Text style={[styles.rowText, styles.customRowText]}>
-                  {`Use "${trimmedQuery}"`}
+                  {t("citySearch.useCustom", { city: trimmedQuery })}
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -114,7 +116,7 @@ export default function CitySearchList({
         ListEmptyComponent={
           !showCustomRow ? (
             <Text style={styles.emptyText}>
-              {cities.length ? "No matching cities." : "No cities yet."}
+              {cities.length ? t("citySearch.noMatches") : t("citySearch.empty")}
             </Text>
           ) : null
         }

@@ -1,3 +1,5 @@
+import { englishT } from "../i18n/translator";
+
 export function toDate(value) {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -43,23 +45,27 @@ export function toDate(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-export function formatDate(date) {
+// `language` is an app language code ("hi", ...); month names follow it.
+export function formatDate(date, language = "en") {
   if (!date) return "";
-  return date.toLocaleDateString("en-IN", {
+  return date.toLocaleDateString(`${language}-IN`, {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
 }
 
-export function formatExpiryLabel(date, nowMs = Date.now()) {
+export function formatExpiryLabel(date, nowMs = Date.now(), t = englishT, language = "en") {
   if (!date) return null;
   const ts = date.getTime();
-  return ts <= nowMs ? `Expired on ${formatDate(date)}` : `Expires on ${formatDate(date)}`;
+  const dateLabel = formatDate(date, language);
+  return ts <= nowMs
+    ? t("dates.expiredOn", { date: dateLabel })
+    : t("dates.expiresOn", { date: dateLabel });
 }
 
-export function formatCountdown(ms) {
-  if (ms <= 0) return "Expired";
+export function formatCountdown(ms, t = englishT) {
+  if (ms <= 0) return t("status.expired");
   const totalSeconds = Math.floor(ms / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
@@ -67,13 +73,13 @@ export function formatCountdown(ms) {
   const seconds = totalSeconds % 60;
 
   if (days > 0) {
-    return `Ends in ${days}d ${String(hours).padStart(2, "0")}h ${String(
-      minutes,
-    ).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+    return t("dates.endsIn", {
+      time: `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`,
+    });
   }
-  return `Ends in ${String(hours).padStart(2, "0")}:${String(
-    minutes,
-  ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return t("dates.endsIn", {
+    time: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
+  });
 }
 
 export function formatDuration(seconds) {

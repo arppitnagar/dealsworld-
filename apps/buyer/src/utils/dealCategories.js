@@ -1,5 +1,5 @@
 import { Flame, Zap, Eye, Heart, Users, PackageCheck } from "lucide-react-native";
-import { toDate } from "@dealsworld/shared";
+import { toDate, englishT } from "@dealsworld/shared";
 
 // The six ways a buyer can slice the deals feed - shown as pill filters on
 // the Deals tab (previously a chip row on Home; moved here so Home stays a
@@ -155,17 +155,18 @@ export function getAllCategoryCounts(deals, sets, now = Date.now()) {
   }, {});
 }
 
-export function formatEndsIn(expiryMs) {
+// `t` is useI18n()'s translator; English when omitted.
+export function formatEndsIn(expiryMs, t = englishT) {
   if (typeof expiryMs !== "number") return null;
   const diffMs = expiryMs - Date.now();
-  if (diffMs <= 0) return "Ends soon";
+  if (diffMs <= 0) return t("expiry.endsSoon");
   const totalSeconds = Math.floor(diffMs / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
-  if (days > 0) return `Ends in ${days}d`;
-  if (hours > 0) return `Ends in ${hours}h`;
+  if (days > 0) return t("expiry.endsInDays", { count: days });
+  if (hours > 0) return t("expiry.endsInHours", { count: hours });
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return `Ends in ${Math.max(minutes, 1)}m`;
+  return t("expiry.endsInMinutes", { count: Math.max(minutes, 1) });
 }
 
 export function formatCount(value) {

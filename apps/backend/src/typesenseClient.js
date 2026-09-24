@@ -5,7 +5,14 @@ const TYPESENSE_PORT = Number(process.env.TYPESENSE_PORT) || 8108;
 const TYPESENSE_PROTOCOL = process.env.TYPESENSE_PROTOCOL || "http";
 const TYPESENSE_API_KEY = process.env.TYPESENSE_API_KEY || "";
 
+const { SUPPORTED_LANGUAGES } = require("./constants");
+
 const DEALS_INDEX_NAME = "deals";
+
+// Machine-translated titles (see translation.js indexTranslatedTitles), so a
+// buyer can search in their own script - "जूते" finds "Mega Sale on Shoes".
+// Optional: only filled once a title has been translated into that language.
+const TRANSLATED_TITLE_FIELDS = SUPPORTED_LANGUAGES.map((lang) => `title_${lang}`);
 
 const client = new Typesense.Client({
   nodes: [
@@ -25,6 +32,7 @@ const DEALS_SCHEMA = {
   name: DEALS_INDEX_NAME,
   fields: [
     { name: "title", type: "string" },
+    ...TRANSLATED_TITLE_FIELDS.map((name) => ({ name, type: "string", optional: true })),
     { name: "description", type: "string", optional: true },
     { name: "category", type: "string", facet: true, optional: true },
     { name: "location", type: "string", facet: true, optional: true },
@@ -59,12 +67,36 @@ async function ensureDealsCollection() {
   const exists = await client.collections(DEALS_INDEX_NAME).exists();
   if (!exists) {
     await client.collections().create(DEALS_SCHEMA);
+    return;
   }
+  // Collections created before the translated-title fields existed get
+  // them added in place - no re-index needed, they're all optional.
+  const current = await client.collections(DEALS_INDEX_NAME).retrieve();
+  const existing = new Set((current.fields || []).map((field) => field.name));
+  const missing = DEALS_SCHEMA.fields.filter((field) => !existing.has(field.name));
+  if (missing.length) {
+    await client.collections(DEALS_INDEX_NAME).update({ fields: missing });
+  }
+}
+
+// ensureDealsCollection() once per process, for request paths (search) that
+// may run before the first sync pass has migrated the schema.
+let ensurePromise = null;
+function ensureDealsCollectionOnce() {
+  if (!ensurePromise) {
+    ensurePromise = ensureDealsCollection().catch((error) => {
+      ensurePromise = null;
+      throw error;
+    });
+  }
+  return ensurePromise;
 }
 
 module.exports = {
   client,
   DEALS_INDEX_NAME,
   DEALS_SCHEMA,
+  TRANSLATED_TITLE_FIELDS,
   ensureDealsCollection,
+  ensureDealsCollectionOnce,
 };

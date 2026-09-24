@@ -14,6 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
+import { useI18n } from "../i18n/I18nProvider";
+import { getCategoryLabel } from "../utils/dealCategories";
 import { formatINR } from "../utils/formatters";
 import StatusPill from "./StatusPill";
 
@@ -37,6 +39,9 @@ export default function DealDetailsLayout({
   headerBelow,
   title,
   description,
+  // Rendered right under the description - the buyer app puts its
+  // "Translated from ... · Show original" toggle here.
+  descriptionNote,
   sellerName,
   category,
   location,
@@ -64,6 +69,7 @@ export default function DealDetailsLayout({
   images,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const gallery = useMemo(() => {
     if (Array.isArray(images) && images.length) return images.filter(Boolean);
@@ -423,10 +429,10 @@ export default function DealDetailsLayout({
     (isDashboard ? theme.colors.primary : theme.colors.onPrimary);
   const fillColor = thresholdReached ? theme.colors.success : resolvedProgressColor;
   const headerLabel = maxValue
-    ? `${Math.min(joinedValue, maxValue)} of ${maxValue} joined`
+    ? t("dealCard.joinedOfMax", { count: Math.min(joinedValue, maxValue), max: maxValue })
     : isUncappedPastMin
-      ? `${joinedValue} buyer${joinedValue === 1 ? "" : "s"} joined`
-      : `Joined ${joinedValue} of ${targetValue}`;
+      ? t(joinedValue === 1 ? "dealLayout.buyersJoinedOne" : "dealLayout.buyersJoined", { count: joinedValue })
+      : t("dealCard.joinedOfTarget", { count: joinedValue, target: targetValue });
 
   const headerContent = (
     <>
@@ -546,12 +552,13 @@ export default function DealDetailsLayout({
           ) : null}
           <View style={styles.heroBody}>
           {showHeroAccent ? <View style={styles.heroAccent} /> : null}
-          <Text style={styles.heroTitle}>{title || "Deal"}</Text>
+          <Text style={styles.heroTitle}>{title || t("dealLayout.deal")}</Text>
           {description ? (
             <Text style={styles.heroDescription} numberOfLines={3}>
               {description}
             </Text>
           ) : null}
+          {descriptionNote || null}
           {statusLabel && !statusInline ? (
             <View style={styles.statusWrap}>
               <StatusPill label={statusLabel} color={statusColor} />
@@ -571,7 +578,7 @@ export default function DealDetailsLayout({
               ) : null}
               {category ? (
                 <View style={styles.heroChip}>
-                  <Text style={styles.heroChipText}>{category}</Text>
+                  <Text style={styles.heroChipText}>{getCategoryLabel(category, t)}</Text>
                 </View>
               ) : null}
               {location ? (
@@ -586,15 +593,15 @@ export default function DealDetailsLayout({
               {formattedPrice ? (
                 <Text style={styles.heroPrice}>{formattedPrice}</Text>
               ) : (
-                <Text style={styles.heroPriceMuted}>Price on request</Text>
+                <Text style={styles.heroPriceMuted}>{t("dealLayout.priceOnRequest")}</Text>
               )}
               {formattedOriginal && hasOriginal && hasDiscount ? (
-                <Text style={styles.heroMrp}>MRP {formattedOriginal}</Text>
+                <Text style={styles.heroMrp}>{t("dealLayout.mrp", { price: formattedOriginal })}</Text>
               ) : null}
               {percentOff ? (
                 <View style={styles.heroDiscountBadge}>
                   <Text style={styles.heroDiscountText}>
-                    {percentOff}% OFF
+                    {t("dealLayout.percentOff", { percent: percentOff })}
                   </Text>
                 </View>
               ) : null}
@@ -609,7 +616,7 @@ export default function DealDetailsLayout({
               <View style={styles.heroProgressHeader}>
                 <Text style={styles.heroProgressLabel}>{headerLabel}</Text>
                 <Text style={[styles.heroProgressPercent, { color: fillColor }]}>
-                  {isUncappedPastMin ? "Guaranteed" : `${percentLabel}%`}
+                  {isUncappedPastMin ? t("dealCard.guaranteed") : `${percentLabel}%`}
                 </Text>
               </View>
               <View style={styles.heroProgressTrack}>
@@ -656,9 +663,7 @@ export default function DealDetailsLayout({
               {thresholdReached ? (
                 <View style={styles.heroProgressBadge}>
                   <Text style={styles.heroProgressBadgeText}>
-                    {isFull
-                      ? "Deal full — max buyers reached"
-                      : "🎉 Minimum reached — guaranteed to ship"}
+                    {isFull ? t("dealLayout.full") : t("dealLayout.minimumReached")}
                   </Text>
                 </View>
               ) : null}

@@ -8,6 +8,13 @@ const NOTIFICATIONS_COLLECTION = "notifications";
 const ADDRESS_COLLECTION = "addresses";
 const COUNTERS_COLLECTION = "counters";
 const APP_CONFIG_COLLECTION = "appConfig";
+const DEAL_TRANSLATIONS_COLLECTION = "dealTranslations";
+
+// Codes a user can save as users/{uid}.preferredLanguage and request deals
+// in via ?lang= - mirrors packages/shared/i18n/languages.js.
+const SUPPORTED_LANGUAGES = [
+  "en", "hi", "mr", "ta", "te", "kn", "bn", "gu", "ml", "pa", "or", "as", "ur",
+];
 
 const DEFAULT_DEAL_LIMIT = 200;
 const MAX_DEAL_LIMIT = 1000;
@@ -33,6 +40,8 @@ module.exports = {
   ADDRESS_COLLECTION,
   COUNTERS_COLLECTION,
   APP_CONFIG_COLLECTION,
+  DEAL_TRANSLATIONS_COLLECTION,
+  SUPPORTED_LANGUAGES,
   DEFAULT_DEAL_LIMIT,
   MAX_DEAL_LIMIT,
   DEFAULT_ADDRESS_COUNTRY,

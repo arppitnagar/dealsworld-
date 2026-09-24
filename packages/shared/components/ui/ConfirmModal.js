@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useI18n } from "../../i18n/I18nProvider";
 import AppButton from "./AppButton";
 
 // App-wide "are you sure?" dialog, styled to match PriceBreakupModal's
@@ -11,8 +12,8 @@ export default function ConfirmModal({
   visible,
   title,
   message,
-  confirmText = "Confirm",
-  cancelText = "Cancel",
+  confirmText,
+  cancelText,
   destructive = false,
   tone,
   singleButton = false,
@@ -22,6 +23,7 @@ export default function ConfirmModal({
   onCancel,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const isSuccess = tone === "success";
@@ -64,7 +66,7 @@ export default function ConfirmModal({
           <View style={styles.actions}>
             {!singleButton ? (
               <AppButton
-                title={cancelText}
+                title={cancelText || t("common.cancel")}
                 variant="secondary"
                 onPress={onCancel}
                 disabled={loading}
@@ -73,7 +75,7 @@ export default function ConfirmModal({
               />
             ) : null}
             <AppButton
-              title={confirmText}
+              title={confirmText || t("common.confirm")}
               variant={destructive ? "danger" : "primary"}
               onPress={onConfirm}
               loading={loading}

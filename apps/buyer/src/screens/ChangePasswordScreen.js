@@ -17,6 +17,7 @@ import {
   TopPageHeader,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
 } from "@dealsworld/shared";
 import { auth } from "../config/firebase";
 import {
@@ -37,31 +38,32 @@ export default function ChangePasswordScreen({ navigation }) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { confirm, alert, confirmModalProps } = useConfirmModal();
+  const { t } = useI18n();
 
   const handleSave = async () => {
     const user = auth.currentUser;
     if (!user?.email) {
-      await alert({ title: "Error", message: "Missing user email for password update.", destructive: true });
+      await alert({ title: t("common.error"), message: t("changePassword.missingEmail"), destructive: true });
       return;
     }
     if (!oldPassword || !newPassword || !confirmPassword) {
-      await alert({ title: "Missing details", message: "Please fill all fields." });
+      await alert({ title: t("common.missingDetails"), message: t("common.fillAllFields") });
       return;
     }
     if (newPassword !== confirmPassword) {
-      await alert({ title: "Mismatch", message: "New password and confirmation do not match." });
+      await alert({ title: t("changePassword.mismatchTitle"), message: t("changePassword.mismatch") });
       return;
     }
-    const validationError = validatePassword(newPassword);
+    const validationError = validatePassword(newPassword, t);
     if (validationError) {
-      await alert({ title: "Weak password", message: validationError });
+      await alert({ title: t("password.weakTitle"), message: validationError });
       return;
     }
 
     const ok = await confirm({
-      title: "Update your password?",
-      message: "You'll need to use the new password next time you sign in.",
-      confirmText: "Update Password",
+      title: t("changePassword.confirmTitle"),
+      message: t("changePassword.confirmMessage"),
+      confirmText: t("changePassword.submit"),
     });
     if (!ok) return;
 
@@ -70,12 +72,12 @@ export default function ChangePasswordScreen({ navigation }) {
       const credential = EmailAuthProvider.credential(user.email, oldPassword);
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
-      await alert({ title: "Success", message: "Your password has been updated.", tone: "success" });
+      await alert({ title: t("common.success"), message: t("changePassword.updated"), tone: "success" });
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (error) {
-      await alert({ title: "Error", message: error?.message || "Failed to update password.", destructive: true });
+      await alert({ title: t("common.error"), message: error?.message || t("changePassword.failed"), destructive: true });
     } finally {
       setSaving(false);
     }
@@ -84,7 +86,7 @@ export default function ChangePasswordScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <TopPageHeader
-        title="Change Password"
+        title={t("profile.changePassword")}
         onBack={() => navigation.goBack()}
         rounded
       />
@@ -101,16 +103,14 @@ export default function ChangePasswordScreen({ navigation }) {
       >
         <View style={styles.heroCard}>
           <View style={styles.heroAccent} />
-          <Text style={styles.heroTitle}>Secure your account</Text>
-          <Text style={styles.heroSubtitle}>
-            Update your password to keep your account safe.
-          </Text>
+          <Text style={styles.heroTitle}>{t("changePassword.heroTitle")}</Text>
+          <Text style={styles.heroSubtitle}>{t("changePassword.heroSubtitle")}</Text>
         </View>
 
         <View style={styles.card}>
           <AppInput
-            label="Old Password"
-            placeholder="Old password"
+            label={t("changePassword.oldLabel")}
+            placeholder={t("changePassword.oldPlaceholder")}
             secureTextEntry={!showOldPassword}
             value={oldPassword}
             onChangeText={setOldPassword}
@@ -133,8 +133,8 @@ export default function ChangePasswordScreen({ navigation }) {
             onRightPress={() => setShowOldPassword((prev) => !prev)}
           />
           <AppInput
-            label="New Password"
-            placeholder="New password"
+            label={t("changePassword.newLabel")}
+            placeholder={t("changePassword.newPlaceholder")}
             secureTextEntry={!showNewPassword}
             value={newPassword}
             onChangeText={setNewPassword}
@@ -156,8 +156,8 @@ export default function ChangePasswordScreen({ navigation }) {
             onRightPress={() => setShowNewPassword((prev) => !prev)}
           />
           <AppInput
-            label="Confirm Password"
-            placeholder="Confirm new password"
+            label={t("changePassword.confirmLabel")}
+            placeholder={t("changePassword.confirmPlaceholder")}
             secureTextEntry={!showConfirmPassword}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
@@ -178,11 +178,9 @@ export default function ChangePasswordScreen({ navigation }) {
             }
             onRightPress={() => setShowConfirmPassword((prev) => !prev)}
           />
-          <Text style={styles.hint}>
-            Minimum 8 chars with upper, lower, number, and special character.
-          </Text>
+          <Text style={styles.hint}>{t("password.rules")}</Text>
           <AppButton
-            title={saving ? "Updating..." : "Update Password"}
+            title={saving ? t("common.updating") : t("changePassword.submit")}
             onPress={handleSave}
             loading={saving}
             style={styles.submit}

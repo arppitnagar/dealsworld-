@@ -9,6 +9,7 @@ import {
   DealBuddyLoadingScreen,
   ViewModeToggle,
   getDealThumbnails,
+  useI18n,
 } from "@dealsworld/shared";
 import { useDeals } from "../hooks/useDeals";
 import { useDealSearch } from "../hooks/useDealSearch";
@@ -38,6 +39,7 @@ import {
 export default function SearchScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const controls = useDealSearchControls();
   // Unlike Home's paginated preview feed, this screen's browse mode is
   // titled "All Deals" and has no infinite-scroll trigger to load more as
@@ -90,7 +92,7 @@ export default function SearchScreen({ navigation }) {
   const searchInitialLoading = controls.isSearching && searchQuery.isLoading;
 
   if (isLoading || dealStateLoading) {
-    return <DealBuddyLoadingScreen label="Loading deals..." />;
+    return <DealBuddyLoadingScreen label={t("common.loadingDeals")} />;
   }
 
   return (
@@ -117,7 +119,7 @@ export default function SearchScreen({ navigation }) {
 
         <View style={[styles.listWrap, !hasDeals && styles.listWrapEmpty]}>
           <CardHeader
-            title={`${controls.isSearching ? "Search Results" : "All Deals"} (${sortedDeals?.length || 0})`}
+            title={`${controls.isSearching ? t("home.searchResults") : t("deals.allDeals")} (${sortedDeals?.length || 0})`}
             right={
               <View style={styles.headerRight}>
                 {controls.isSearching && searchQuery.isFetching ? (
@@ -179,22 +181,22 @@ export default function SearchScreen({ navigation }) {
                   originalPrice={deal?.originalPrice}
                   discountPrice={deal?.discountPrice}
                   badgeLabel={deal?.location ? String(deal.location) : null}
-                  deliveryBadge={getDeliveryBadge(deal.id, myDeliveries, theme)}
-                  expiryLabel={formatEndsIn(expiryMs)}
+                  deliveryBadge={getDeliveryBadge(deal.id, myDeliveries, theme, t)}
+                  expiryLabel={formatEndsIn(expiryMs, t)}
                   isFavorite={favoriteIds.has(deal.id)}
                   onFavoritePress={() => toggleFavoriteDeal(deal.id)}
                   isJoined={joinedIds.has(deal.id)}
-                  joinLabel={joinedIds.has(deal.id) ? "Joined" : "Join"}
+                  joinLabel={joinedIds.has(deal.id) ? t("common.joined") : t("common.join")}
                   onJoinPress={() =>
                     navigation.navigate("DealDetails", { dealId: deal.id })
                   }
-                  payLabel={needsPay ? "Pay" : undefined}
+                  payLabel={needsPay ? t("common.pay") : undefined}
                   onPayPress={
                     needsPay
                       ? () => navigation.navigate("DealDetails", { dealId: deal.id })
                       : undefined
                   }
-                  actionLabel="View Deal"
+                  actionLabel={t("common.viewDeal")}
                   onActionPress={() =>
                     navigation.navigate("DealDetails", { dealId: deal.id })
                   }
@@ -209,17 +211,17 @@ export default function SearchScreen({ navigation }) {
                 icon="search-outline"
                 title={
                   searchUnavailable
-                    ? "Search is temporarily unavailable."
+                    ? t("search.unavailableTitle")
                     : controls.isSearching
-                      ? "No deals match your search."
-                      : "No active deals right now."
+                      ? t("home.emptySearchTitle")
+                      : t("deals.emptyTitle")
                 }
                 subtitle={
                   searchUnavailable
-                    ? "Please try again in a moment."
+                    ? t("search.unavailableSubtitle")
                     : controls.isSearching
-                      ? "Try a different search term."
-                      : "Pull to refresh or check back later."
+                      ? t("home.emptySearchSubtitle")
+                      : t("search.emptySubtitle")
                 }
               />
             </View>

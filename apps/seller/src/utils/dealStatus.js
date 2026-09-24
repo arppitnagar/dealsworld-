@@ -1,5 +1,5 @@
 import { CircleCheck, CheckCheck, Clock, CircleX, TimerOff } from "lucide-react-native";
-import { toDate } from "@dealsworld/shared";
+import { toDate, englishT } from "@dealsworld/shared";
 
 // The five ways a seller's deals are grouped - shown as rows in the
 // bottom-sheet status picker on the Deals tab (previously a horizontal chip
@@ -93,17 +93,18 @@ export function getAllStatusCounts(deals, nowMs = Date.now()) {
   }, {});
 }
 
-export function formatEndsIn(expiryMs, nowMs = Date.now()) {
+// `t` is useI18n()'s translator; English when omitted.
+export function formatEndsIn(expiryMs, nowMs = Date.now(), t = englishT) {
   if (typeof expiryMs !== "number") return null;
   const diffMs = expiryMs - nowMs;
-  if (diffMs <= 0) return "Ends soon";
+  if (diffMs <= 0) return t("expiry.endsSoon");
   const totalSeconds = Math.floor(diffMs / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
-  if (days > 0) return `Ends in ${days}d`;
-  if (hours > 0) return `Ends in ${hours}h`;
+  if (days > 0) return t("expiry.endsInDays", { count: days });
+  if (hours > 0) return t("expiry.endsInHours", { count: hours });
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return `Ends in ${Math.max(minutes, 1)}m`;
+  return t("expiry.endsInMinutes", { count: Math.max(minutes, 1) });
 }
 
 export function formatCount(value) {

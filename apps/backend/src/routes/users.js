@@ -9,6 +9,7 @@ const {
   validateAddress,
   requireAuth,
 } = require("../lib");
+const { normalizeLanguage } = require("../translation");
 
 const router = express.Router();
 
@@ -33,6 +34,13 @@ router.patch("/api/users/me", requireAuth, async (req, res) => {
         updates[field] = req.body[field];
       }
     });
+    if (req.body?.preferredLanguage !== undefined) {
+      const language = normalizeLanguage(req.body.preferredLanguage);
+      if (!language) {
+        return res.status(400).json({ error: "Unsupported language" });
+      }
+      updates.preferredLanguage = language;
+    }
     updates.updatedAt = FieldValue.serverTimestamp();
     await ref.set(updates, { merge: true });
     return res.json({ ok: true });

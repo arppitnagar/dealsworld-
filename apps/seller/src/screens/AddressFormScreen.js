@@ -16,11 +16,15 @@ import {
   TopPageHeader,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
 } from "@dealsworld/shared";
+import { getAddressLabel } from "../utils/addressLabels";
 import { useAddresses } from "../hooks/useAddresses";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getProfileBaseStyles } from "../styles/profileStyles";
 
+// Saved as these English values; only the chip text is translated (see
+// ../utils/addressLabels.js).
 const LABELS = ["Home", "Office", "Other"];
 
 export default function AddressFormScreen({ navigation, route }) {
@@ -44,17 +48,18 @@ export default function AddressFormScreen({ navigation, route }) {
   const [isDefault, setIsDefault] = useState(Boolean(existing?.isDefault));
   const [saving, setSaving] = useState(false);
   const { confirm, alert, confirmModalProps } = useConfirmModal();
+  const { t } = useI18n();
 
   const finalLabel = label === "Other" ? customLabel || "Other" : label;
 
   const handleSave = async () => {
     if (!line1.trim() || !city.trim() || !stateName.trim() || !pincode.trim()) {
-      await alert({ title: "Missing details", message: "Please fill required fields." });
+      await alert({ title: t("common.missingDetails"), message: t("addresses.fillRequired") });
       return;
     }
     const ok = await confirm({
-      title: existing ? "Save changes to this address?" : "Save this address?",
-      confirmText: "Save Address",
+      title: existing ? t("addresses.confirmUpdate") : t("addresses.confirmSave"),
+      confirmText: t("addresses.save"),
     });
     if (!ok) return;
     setSaving(true);
@@ -83,7 +88,7 @@ export default function AddressFormScreen({ navigation, route }) {
       }
       navigation.goBack();
     } catch (error) {
-      await alert({ title: "Error", message: error?.message || "Unable to save address.", destructive: true });
+      await alert({ title: t("common.error"), message: error?.message || t("addresses.saveFailed"), destructive: true });
     } finally {
       setSaving(false);
     }
@@ -97,7 +102,7 @@ export default function AddressFormScreen({ navigation, route }) {
       ]}
     >
       <TopPageHeader
-        title={existing ? "Edit Address" : "Add Address"}
+        title={existing ? t("addresses.edit") : t("addresses.add")}
         onBack={() => navigation.goBack()}
         rounded
       />
@@ -118,108 +123,106 @@ export default function AddressFormScreen({ navigation, route }) {
           <View style={styles.heroCard}>
             <View style={styles.heroAccent} />
             <Text style={styles.heroTitle}>
-              {existing ? "Update your address" : "Add a new address"}
+              {existing ? t("addresses.updateHero") : t("addresses.addHero")}
             </Text>
-            <Text style={styles.heroSubtitle}>
-              Keep delivery smooth with accurate details.
-            </Text>
+            <Text style={styles.heroSubtitle}>{t("addresses.formSubtitle")}</Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.sectionLabel}>Label</Text>
-            <View style={styles.labelRow}>
-              {LABELS.map((item) => (
-                <TouchableOpacity
-                  key={item}
+          <Text style={styles.sectionLabel}>{t("addresses.label")}</Text>
+          <View style={styles.labelRow}>
+            {LABELS.map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[
+                  styles.labelChip,
+                  label === item && styles.labelChipActive,
+                ]}
+                onPress={() => setLabel(item)}
+              >
+                <Text
                   style={[
-                    styles.labelChip,
-                    label === item && styles.labelChipActive,
+                    styles.labelChipText,
+                    label === item && styles.labelChipTextActive,
                   ]}
-                  onPress={() => setLabel(item)}
                 >
-                  <Text
-                    style={[
-                      styles.labelChipText,
-                      label === item && styles.labelChipTextActive,
-                    ]}
-                  >
-                    {item}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {label === "Other" ? (
-              <AppInput
-                label="Custom Label"
-                placeholder="e.g. Hostel"
-                value={customLabel}
-                onChangeText={setCustomLabel}
-              />
-            ) : null}
+                  {getAddressLabel(item, t)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {label === "Other" ? (
             <AppInput
-              label="Full Name"
-              placeholder="Recipient name"
-              value={name}
-              onChangeText={setName}
-              containerStyle={styles.inputSpacing}
+              label={t("addresses.customLabel")}
+              placeholder={t("addresses.customPlaceholder")}
+              value={customLabel}
+              onChangeText={setCustomLabel}
             />
-            <AppInput
-              label="Phone"
-              placeholder="Phone number"
-              keyboardType="phone-pad"
-              value={phone}
-              onChangeText={setPhone}
+          ) : null}
+          <AppInput
+            label={t("common.fullName")}
+            placeholder={t("addresses.recipientPlaceholder")}
+            value={name}
+            onChangeText={setName}
+            containerStyle={styles.inputSpacing}
+          />
+          <AppInput
+            label={t("common.phone")}
+            placeholder={t("common.phoneNumber")}
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+          />
+          <AppInput
+            label={t("addresses.line1")}
+            placeholder={t("addresses.line1Placeholder")}
+            value={line1}
+            onChangeText={setLine1}
+          />
+          <AppInput
+            label={t("addresses.line2")}
+            placeholder={t("addresses.line2Placeholder")}
+            value={line2}
+            onChangeText={setLine2}
+          />
+          <AppInput
+            label={t("addresses.city")}
+            placeholder={t("addresses.city")}
+            value={city}
+            onChangeText={setCity}
+          />
+          <AppInput
+            label={t("addresses.state")}
+            placeholder={t("addresses.state")}
+            value={stateName}
+            onChangeText={setStateName}
+          />
+          <TouchableOpacity
+            style={styles.defaultRow}
+            onPress={() => setIsDefault((prev) => !prev)}
+          >
+            <Ionicons
+              name={isDefault ? "star" : "star-outline"}
+              size={18}
+              color={
+                isDefault ? theme.colors.warningBright : theme.colors.textMuted
+              }
             />
-            <AppInput
-              label="Address Line 1"
-              placeholder="House no, street"
-              value={line1}
-              onChangeText={setLine1}
-            />
-            <AppInput
-              label="Address Line 2"
-              placeholder="Area, landmark"
-              value={line2}
-              onChangeText={setLine2}
-            />
-            <AppInput
-              label="City"
-              placeholder="City"
-              value={city}
-              onChangeText={setCity}
-            />
-            <AppInput
-              label="State"
-              placeholder="State"
-              value={stateName}
-              onChangeText={setStateName}
-            />
-            <TouchableOpacity
-              style={styles.defaultRow}
-              onPress={() => setIsDefault((prev) => !prev)}
-            >
-              <Ionicons
-                name={isDefault ? "star" : "star-outline"}
-                size={18}
-                color={
-                  isDefault ? theme.colors.warningBright : theme.colors.textMuted
-                }
-              />
-              <Text style={styles.defaultText}>Set as default address</Text>
-            </TouchableOpacity>
-            <AppInput
-              label="Pincode"
-              placeholder="Pincode"
-              keyboardType="numeric"
-              value={pincode}
-              onChangeText={setPincode}
-            />
-            <AppButton
-              title={saving ? "Saving..." : "Save Address"}
-              onPress={handleSave}
-              loading={saving}
-              style={styles.submit}
-            />
+            <Text style={styles.defaultText}>{t("addresses.setDefault")}</Text>
+          </TouchableOpacity>
+          <AppInput
+            label={t("addresses.pincode")}
+            placeholder={t("addresses.pincode")}
+            keyboardType="numeric"
+            value={pincode}
+            onChangeText={setPincode}
+          />
+          <AppButton
+            title={saving ? t("common.saving") : t("addresses.save")}
+            onPress={handleSave}
+            loading={saving}
+            style={styles.submit}
+          />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

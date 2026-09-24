@@ -44,11 +44,10 @@ async function notifyExpiry(dealId, { sellerId, title, expiryReason, refundedBuy
       pushNotification({
         userId: sellerId,
         type: "deal_expired",
-        title: "Deal expired",
-        body:
-          expiryReason === "payment_shortfall"
-            ? `"${title}" expired before all buyers completed payment. It has moved to Expired.`
-            : `"${title}" expired without reaching enough buyers. It has moved to Expired.`,
+        message: {
+          key: expiryReason === "payment_shortfall" ? "dealExpiredShortfall" : "dealExpiredQuorum",
+          vars: { title },
+        },
         meta: { dealId },
       }),
     );
@@ -58,8 +57,7 @@ async function notifyExpiry(dealId, { sellerId, title, expiryReason, refundedBuy
       pushNotification({
         userId: buyerId,
         type: "payment_refunded",
-        title: "Payment refunded",
-        body: `Your held payment for "${title}" has been released back to you because the deal expired.`,
+        message: { key: "refundedExpired", vars: { title } },
         meta: { dealId },
       }),
     );
@@ -145,7 +143,7 @@ async function expireDealTransactional(dealId, { via = "sweep" } = {}) {
       expiryReason,
       refundedBuyerIds,
       sellerId: getSellerId(deal),
-      title: deal.title || "your deal",
+      title: deal.title || "",
     };
   });
 

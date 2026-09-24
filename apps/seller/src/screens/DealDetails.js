@@ -33,6 +33,9 @@ import {
   getNextTierInfo,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
+  getCategoryLabel,
+  getDeliveryModeLabel,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -67,6 +70,7 @@ export default function DealDetails({ route, navigation }) {
   const { mutate: completeDeal, isPending: completing } = useCompleteDeal();
   const { mutate: expireDealEarly, isPending: expiringEarly } = useExpireDealEarly();
   const { confirm, alert, confirmModalProps } = useConfirmModal();
+  const { language, t } = useI18n();
 
   const joinsCount =
     safeGet(deal, "joinedUsers") ??
@@ -99,13 +103,13 @@ export default function DealDetails({ route, navigation }) {
   const expiryDate = toDate(safeGet(deal, "expiresAt"));
   const countdown =
     lifecycleStatus === "active" && expiryDate
-      ? formatCountdown(expiryDate.getTime() - now)
+      ? formatCountdown(expiryDate.getTime() - now, t)
       : null;
-  const expiryLabel = expiryDate ? formatExpiryLabel(expiryDate, now) : null;
+  const expiryLabel = expiryDate ? formatExpiryLabel(expiryDate, now, t, language) : null;
   const statusLabel =
     lifecycleStatus === "pending"
-      ? "Pending"
-      : getStatusLabel(lifecycleStatus);
+      ? t("sellerDealDetails.pending")
+      : getStatusLabel(lifecycleStatus, t);
   const originalValue = safeGet(deal, "originalPrice");
   const originalNumber = Number.isFinite(Number(originalValue))
     ? Number(originalValue)
@@ -129,8 +133,9 @@ export default function DealDetails({ route, navigation }) {
     deliveryMode: deal?.deliveryMode,
     deliveryCharge: deal?.deliveryCharge,
   });
-  const deliveryModeLabel = String(deal?.deliveryMode || "").trim();
-  const isPickup = /pick/i.test(deliveryModeLabel);
+  const deliveryModeRaw = String(deal?.deliveryMode || "").trim();
+  const deliveryModeLabel = getDeliveryModeLabel(deliveryModeRaw, t);
+  const isPickup = /pick/i.test(deliveryModeRaw);
   const isExpiredNow = expiryDate ? expiryDate.getTime() <= now : true;
   const isPersistedExpired =
     String(deal?.status || "").toLowerCase() === "expired" ||
@@ -177,52 +182,52 @@ export default function DealDetails({ route, navigation }) {
   const pulseCards = [
     {
       key: "live",
-      label: "Live Pulse",
+      label: t("insights.live"),
       value: formatNumber(totalInteractions),
-      caption: "Total interactions on this deal",
+      caption: t("insights.liveCaption"),
       icon: "analytics-outline",
       colors: [theme.colors.primary, theme.colors.primaryDeep],
     },
     {
       key: "views",
-      label: "View Pulse",
+      label: t("insights.views"),
       value: viewsCount !== null ? formatNumber(viewsCount) : "-",
-      caption: "Total deal views",
+      caption: t("insights.viewsCaption"),
       icon: "eye-outline",
       colors: [theme.colors.primary, theme.colors.primaryDeep],
     },
     {
       key: "favorites",
-      label: "Favourite Pulse",
+      label: t("insights.favourite"),
       value: formatNumber(favoritesCount),
-      caption: "Marked as favourite",
+      caption: t("insights.favouriteCaption"),
       icon: "heart-outline",
       colors: [theme.colors.danger, theme.colors.purple],
     },
     {
       key: "conversion",
-      label: "Conversion Pulse",
+      label: t("insights.conversion"),
       value: conversionRate !== null ? `${conversionRate.toFixed(1)}%` : "-",
-      caption: "Joined vs total views",
+      caption: t("insights.conversionCaption"),
       icon: "analytics-outline",
       colors: [theme.colors.success, theme.colors.primary],
     },
     {
       key: "threshold",
-      label: "Minimum-Buyer Pulse",
+      label: t("insights.threshold"),
       value:
         timeToThresholdSeconds !== null
           ? formatDuration(timeToThresholdSeconds)
           : "-",
-      caption: "Time to reach threshold",
+      caption: t("insights.thresholdCaption"),
       icon: "timer-outline",
       colors: [theme.colors.amberBorder, theme.colors.primary],
     },
     {
       key: "dropoff",
-      label: "Drop-off Pulse",
+      label: t("insights.dropoff"),
       value: dropOffRate !== null ? `${dropOffRate.toFixed(1)}%` : "-",
-      caption: "Joined then left",
+      caption: t("insights.dropoffCaption"),
       icon: "trending-down-outline",
       colors: [theme.colors.dangerDark, theme.colors.danger],
     },
@@ -247,6 +252,67 @@ export default function DealDetails({ route, navigation }) {
     return () => unsubscribe();
   }, [initialDeal?.id]);
 
+  // Title/description translated to the seller's selected display language.
+  // This screen reads Firestore directly (see above), bypassing the
+  // backend's normal localizeDeals() pass on GET /api/deals/:dealId, so it
+  // has to ask for a translation separately via translate-batch.
+  const [translatedText, setTranslatedText] = useState({ title: null, description: null });
+  useEffect(() => {
+    setTranslatedText({ title: null, description: null });
+    if (!deal?.id || (!deal.title && !deal.description)) return undefined;
+    let cancelled = false;
+    let attempt = 0;
+    const dealId = deal.id;
+    const sourceTitle = deal.title || "";
+    const sourceDescription = deal.description || "";
+
+    // See useSellerLiveDeals.js's translation effect for why this retries:
+    // the backend's short Azure wait window means a cold-cache request can
+    // come back with untranslated text while the real translation finishes
+    // in the background, with nothing else here to prompt a second look.
+    const fetchTranslation = () => {
+      apiClient
+        .post("/deals/translate-batch", {
+          items: [{ id: dealId, title: sourceTitle, description: sourceDescription }],
+          lang: language,
+          fields: ["title", "description"],
+        })
+        .then(({ data }) => {
+          if (cancelled) return;
+          const hit = data?.translations?.[dealId];
+          const nextTitle = hit?.title || null;
+          const nextDescription = hit?.description || null;
+          setTranslatedText({ title: nextTitle, description: nextDescription });
+          attempt += 1;
+          const stillUntranslated =
+            (sourceTitle && (!nextTitle || nextTitle === sourceTitle)) ||
+            (sourceDescription && (!nextDescription || nextDescription === sourceDescription));
+          if (stillUntranslated && attempt < 4 && language !== "en") {
+            setTimeout(() => {
+              if (!cancelled) fetchTranslation();
+            }, 2500);
+          }
+        })
+        .catch(() => {
+          attempt += 1;
+          if (!cancelled && attempt < 4) {
+            setTimeout(() => {
+              if (!cancelled) fetchTranslation();
+            }, 2500);
+          }
+        });
+    };
+    fetchTranslation();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deal?.id, deal?.title, deal?.description, language]);
+
+  const displayTitle = translatedText.title || deal.title;
+  const displayDescription = translatedText.description || deal.description;
+
   useEffect(() => {
     const intervalId = setInterval(() => {
       setNow(Date.now());
@@ -256,9 +322,9 @@ export default function DealDetails({ route, navigation }) {
 
   const handleMarkCompleted = async () => {
     const ok = await confirm({
-      title: "Mark deal completed?",
-      message: "This moves the deal to Completed so you can dispatch it. Continue?",
-      confirmText: "Mark Completed",
+      title: t("sellerDealDetails.completeTitle"),
+      message: t("sellerDealDetails.completeMessage"),
+      confirmText: t("sellerDealDetails.markCompleted"),
     });
     if (!ok) return;
     completeDeal(deal.id, {
@@ -266,18 +332,17 @@ export default function DealDetails({ route, navigation }) {
         const message =
           error?.response?.data?.error ||
           error?.message ||
-          "Could not mark this deal as completed.";
-        alert({ title: "Failed", message, destructive: true });
+          t("sellerDealDetails.completeError");
+        alert({ title: t("sellerDealDetails.failed"), message, destructive: true });
       },
     });
   };
 
   const handleExpireEarly = async () => {
     const ok = await confirm({
-      title: "Expire this deal early?",
-      message:
-        "The minimum number of buyers hasn't joined yet. Ending it now refunds any buyers who already paid and cannot be undone. Continue?",
-      confirmText: "Expire Early",
+      title: t("sellerDealDetails.expireTitle"),
+      message: t("sellerDealDetails.expireMessage"),
+      confirmText: t("sellerDealDetails.expireEarly"),
       destructive: true,
     });
     if (!ok) return;
@@ -286,18 +351,17 @@ export default function DealDetails({ route, navigation }) {
         const message =
           error?.response?.data?.error ||
           error?.message ||
-          "Could not expire this deal.";
-        alert({ title: "Failed", message, destructive: true });
+          t("sellerDealDetails.expireError");
+        alert({ title: t("sellerDealDetails.failed"), message, destructive: true });
       },
     });
   };
 
   const handleDispatch = async () => {
     const ok = await confirm({
-      title: "Mark deal as dispatched?",
-      message:
-        "This notifies every joined buyer with their delivery confirmation code and cannot be undone. Continue?",
-      confirmText: "Dispatch",
+      title: t("sellerDealDetails.dispatchTitle"),
+      message: t("sellerDealDetails.dispatchMessage"),
+      confirmText: t("sellerDealDetails.dispatch"),
     });
     if (!ok) return;
     dispatchDeal(deal.id, {
@@ -305,19 +369,20 @@ export default function DealDetails({ route, navigation }) {
         const message =
           error?.response?.data?.error ||
           error?.message ||
-          "Could not dispatch this deal.";
-        alert({ title: "Dispatch failed", message, destructive: true });
+          t("sellerDealDetails.dispatchError");
+        alert({ title: t("sellerDealDetails.dispatchFailed"), message, destructive: true });
       },
     });
   };
 
   const handleMarkDelivered = async (buyerId, buyerName) => {
     const ok = await confirm({
-      title: isPickup ? "Mark picked up?" : "Mark delivered?",
-      message: isPickup
-        ? `Mark ${buyerName || "this buyer"}'s order as picked up without scanning their QR code? Use this only if they can't show it.`
-        : `Mark ${buyerName || "this buyer"}'s delivery as complete without their OTP? Use this only if the buyer can't confirm themselves.`,
-      confirmText: "Mark Delivered",
+      title: isPickup ? t("sellerDealDetails.markPickedUpTitle") : t("sellerDealDetails.markDeliveredTitle"),
+      message: t(
+        isPickup ? "sellerDealDetails.markPickedUpMessage" : "sellerDealDetails.markDeliveredMessage",
+        { buyer: buyerName || t("sellerDealDetails.thisBuyer") },
+      ),
+      confirmText: t("sellerDealDetails.markDelivered"),
     });
     if (!ok) return;
     markBuyerDelivered(
@@ -327,8 +392,8 @@ export default function DealDetails({ route, navigation }) {
           const message =
             error?.response?.data?.error ||
             error?.message ||
-            "Could not mark this delivery.";
-          alert({ title: "Failed", message, destructive: true });
+            t("sellerDealDetails.markDeliveredError");
+          alert({ title: t("sellerDealDetails.failed"), message, destructive: true });
         },
       },
     );
@@ -336,7 +401,7 @@ export default function DealDetails({ route, navigation }) {
 
   const handleShareDeal = async () => {
     if (!deal) return;
-    const expiryText = expiryDate ? formatExpiryLabel(expiryDate, now) : null;
+    const expiryText = expiryDate ? formatExpiryLabel(expiryDate, now, t, language) : null;
     const originalValue = Number(deal?.originalPrice);
     const discountValue = Number(
       deal?.discountPrice ?? deal?.dealPrice ?? deal?.price,
@@ -348,24 +413,24 @@ export default function DealDetails({ route, navigation }) {
         ? Math.round(((originalValue - discountValue) / originalValue) * 100)
         : null;
     const headline = percentOff
-      ? `Save ${percentOff}% on ${deal.title || "this deal"}`
-      : deal.title || "Deal Details";
+      ? t("share.headline", { percent: percentOff, title: deal.title || t("share.thisDeal") })
+      : deal.title || t("dealDetails.title");
     const priceLine = hasOriginal
-      ? `Deal Price: ${formatINR(discountValue)} | MRP ${formatINR(originalValue)}`
+      ? t("share.priceWithMrp", { price: formatINR(discountValue), mrp: formatINR(originalValue) })
       : hasDiscount
-        ? `Deal Price: ${formatINR(discountValue)}`
+        ? t("share.price", { price: formatINR(discountValue) })
         : null;
     const shareUrl =
       deal.shareUrl || deal.link || `${SHARE_BASE_URL}/${deal.id}`;
-    const storeLinks = `Install DealBuddy: iOS ${APP_STORE_URL} | Android ${PLAY_STORE_URL}`;
+    const storeLinks = t("share.install", { ios: APP_STORE_URL, android: PLAY_STORE_URL });
     const message = [
-      "Check out this DealBuddy offer:",
+      t("share.sellerIntro"),
       headline,
       priceLine,
-      deal.category ? `Category: ${deal.category}` : null,
-      deal.location ? `Location: ${deal.location}` : null,
-      expiryText ? `Expiry: ${expiryText}` : null,
-      shareUrl ? `View: ${shareUrl}` : null,
+      deal.category ? t("share.category", { category: getCategoryLabel(deal.category, t) }) : null,
+      deal.location ? t("share.location", { location: deal.location }) : null,
+      expiryText ? t("share.expiry", { expiry: expiryText }) : null,
+      shareUrl ? t("share.view", { url: shareUrl }) : null,
       storeLinks,
     ]
       .filter(Boolean)
@@ -397,7 +462,8 @@ export default function DealDetails({ route, navigation }) {
     );
   }
 
-  const editLabel = lifecycleStatus === "completed" ? "View" : "Edit";
+  const editLabel =
+    lifecycleStatus === "completed" ? t("sellerDealDetails.view") : t("sellerDealDetails.edit");
   const editIcon =
     lifecycleStatus === "completed" ? "eye-outline" : "create-outline";
 
@@ -416,14 +482,12 @@ export default function DealDetails({ route, navigation }) {
                   style={[styles.dispatchBtn, !allBuyersPaid && styles.disabledBtn]}
                 >
                   <Text style={styles.dispatchBtnText}>
-                    {completing ? "Processing..." : "Mark Completed"}
+                    {completing ? t("payment.processing") : t("sellerDealDetails.markCompleted")}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
               {!allBuyersPaid ? (
-                <Text style={styles.helperNoteText}>
-                  Waiting for all buyers to complete payment before this deal can be marked completed.
-                </Text>
+                <Text style={styles.helperNoteText}>{t("sellerDealDetails.waitingPaymentComplete")}</Text>
               ) : null}
             </>
           ) : null}
@@ -435,7 +499,7 @@ export default function DealDetails({ route, navigation }) {
               disabled={expiringEarly}
             >
               <Text style={styles.endBtnText}>
-                {expiringEarly ? "Processing..." : "Expire Early"}
+                {expiringEarly ? t("payment.processing") : t("sellerDealDetails.expireEarly")}
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -444,8 +508,7 @@ export default function DealDetails({ route, navigation }) {
             <View style={styles.unsuccessfulBanner}>
               <Ionicons name="alert-circle-outline" size={18} color={theme.colors.error} />
               <Text style={styles.unsuccessfulBannerText}>
-                This deal ended without reaching the minimum {target} buyers ({joinsCount} joined)
-                and did not qualify for dispatch. Any blocked buyer payments have been refunded.
+                {t("sellerDealDetails.unsuccessfulBanner", { target, joined: joinsCount })}
               </Text>
             </View>
           ) : null}
@@ -458,14 +521,12 @@ export default function DealDetails({ route, navigation }) {
                   style={styles.dispatchBtn}
                 >
                   <Text style={styles.dispatchBtnText}>
-                    {dispatching ? "Dispatching..." : "Mark as Dispatched"}
+                    {dispatching ? t("sellerDealDetails.dispatching") : t("sellerDealDetails.markDispatched")}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
             ) : (
-              <Text style={styles.helperNoteText}>
-                Waiting for all buyers to complete payment before this deal can be dispatched.
-              </Text>
+              <Text style={styles.helperNoteText}>{t("sellerDealDetails.waitingPaymentDispatch")}</Text>
             )
           ) : null}
 
@@ -473,7 +534,9 @@ export default function DealDetails({ route, navigation }) {
             <View style={styles.dispatchedChip}>
               <Ionicons name="checkmark-circle-outline" size={16} color={theme.colors.primary} />
               <Text style={styles.dispatchedChipText}>
-                Dispatched{deal?.dispatchedAt ? ` on ${formatShortDate(deal.dispatchedAt)}` : ""}
+                {deal?.dispatchedAt
+                  ? t("sellerDealDetails.dispatchedOn", { date: formatShortDate(deal.dispatchedAt, language) })
+                  : t("status.dispatched")}
               </Text>
             </View>
           ) : null}
@@ -482,7 +545,7 @@ export default function DealDetails({ route, navigation }) {
             <View style={styles.deliveredBanner}>
               <Ionicons name="checkmark-done-circle" size={18} color={theme.colors.success} />
               <Text style={styles.deliveredBannerText}>
-                {isPickup ? "All buyers have picked up their orders." : "All buyers received their orders."}
+                {isPickup ? t("sellerDealDetails.allPickedUp") : t("sellerDealDetails.allReceived")}
               </Text>
             </View>
           ) : null}
@@ -494,7 +557,7 @@ export default function DealDetails({ route, navigation }) {
             key: "home",
             onPress: () =>
               navigation.navigate("MainTabs", { screen: "Dashboard" }),
-            label: "Home",
+            label: t("tabs.home"),
             icon: (color) => (
               <Ionicons name="home-outline" size={20} color={color} />
             ),
@@ -502,7 +565,7 @@ export default function DealDetails({ route, navigation }) {
           {
             key: "share",
             onPress: handleShareDeal,
-            label: "Share",
+            label: t("dealDetails.share"),
             icon: (color) => (
               <Ionicons name="share-social-outline" size={20} color={color} />
             ),
@@ -510,7 +573,7 @@ export default function DealDetails({ route, navigation }) {
           {
             key: "chat",
             onPress: () => navigation.navigate("DealChat", { deal }),
-            label: "Chat",
+            label: t("dealDetails.chat"),
             icon: (color) => (
               <Ionicons
                 name="chatbubble-ellipses-outline"
@@ -535,13 +598,13 @@ export default function DealDetails({ route, navigation }) {
   return (
     <View style={styles.container}>
       <DealDetailsLayout
-        headerTitle="Deal Details"
+        headerTitle={t("dealDetails.title")}
         onBack={() => navigation.goBack()}
         actions={null}
         footer={footerContent}
         images={getDealImages(deal)}
-        title={deal.title || "Deal"}
-        description={deal.description}
+        title={displayTitle || t("dealLayout.deal")}
+        description={displayDescription}
         sellerName={sellerDisplayName}
         category={deal.category}
         location={deal.location}
@@ -550,7 +613,12 @@ export default function DealDetails({ route, navigation }) {
         discountPercent={discountPercent}
         priceNote={
           nextTierInfo
-            ? `Buyers unlock ${formatINR(nextTierInfo.nextPrice)} at ${nextTierInfo.buyersNeeded} more buyer${nextTierInfo.buyersNeeded === 1 ? "" : "s"}`
+            ? t(
+                nextTierInfo.buyersNeeded === 1
+                  ? "sellerDealDetails.nextTierOne"
+                  : "sellerDealDetails.nextTier",
+                { count: nextTierInfo.buyersNeeded, price: formatINR(nextTierInfo.nextPrice) },
+              )
             : null
         }
         expiryLabel={expiryLabel}
@@ -560,7 +628,11 @@ export default function DealDetails({ route, navigation }) {
         tierBoundaries={tierBoundaries}
         progressColor={accentColor}
         statusLabel={
-          isUnsuccessful ? "Unsuccessful" : lifecycleStatus === "completed" ? null : statusLabel
+          isUnsuccessful
+            ? t("delivery.unsuccessful")
+            : lifecycleStatus === "completed"
+              ? null
+              : statusLabel
         }
         statusColor={isUnsuccessful ? theme.colors.error : accentColor}
         statusInline
@@ -568,7 +640,7 @@ export default function DealDetails({ route, navigation }) {
         variant="dashboard"
         contentStyle={styles.scrollContent}
       >
-        <InfoCard title="Deal Insights" style={styles.insightsCard}>
+        <InfoCard title={t("insights.title")} style={styles.insightsCard}>
           <LinearGradient
             colors={pulseCards[0].colors}
             start={{ x: 0, y: 0 }}
@@ -622,7 +694,7 @@ export default function DealDetails({ route, navigation }) {
           </View>
         </InfoCard>
 
-        <InfoCard title="Logistics" style={styles.logisticsCard}>
+        <InfoCard title={t("logistics.title")} style={styles.logisticsCard}>
           <View style={styles.logisticsItem}>
             <View style={styles.logisticsIconWrap}>
               <Ionicons
@@ -632,7 +704,7 @@ export default function DealDetails({ route, navigation }) {
               />
             </View>
             <View style={styles.logisticsContent}>
-              <Text style={styles.logisticsLabel}>Deal ID</Text>
+              <Text style={styles.logisticsLabel}>{t("logistics.dealId")}</Text>
               <Text style={styles.logisticsValue}>{deal.dealCode || deal.id}</Text>
             </View>
           </View>
@@ -646,7 +718,7 @@ export default function DealDetails({ route, navigation }) {
               />
             </View>
             <View style={styles.logisticsContent}>
-              <Text style={styles.logisticsLabel}>Delivery mode</Text>
+              <Text style={styles.logisticsLabel}>{t("logistics.deliveryMode")}</Text>
               <Text style={styles.logisticsValue}>
                 {deliveryModeLabel || "-"}
               </Text>
@@ -664,7 +736,7 @@ export default function DealDetails({ route, navigation }) {
                   />
                 </View>
                 <View style={styles.logisticsContent}>
-                  <Text style={styles.logisticsLabel}>Store address</Text>
+                  <Text style={styles.logisticsLabel}>{t("logistics.storeAddress")}</Text>
                   <Text style={styles.logisticsValue}>
                     {storeAddress || "-"}
                   </Text>
@@ -675,7 +747,7 @@ export default function DealDetails({ route, navigation }) {
         </InfoCard>
 
         {Array.isArray(deal?.pricingTiers) && deal.pricingTiers.length > 1 ? (
-          <InfoCard title="Group Pricing Tiers" style={styles.logisticsCard}>
+          <InfoCard title={t("sellerDealDetails.tiersTitle")} style={styles.logisticsCard}>
             {deal.pricingTiers.map((tier, index) => {
               const isActive =
                 joinsCount >= tier.minBuyers &&
@@ -687,14 +759,14 @@ export default function DealDetails({ route, navigation }) {
                     <View style={styles.logisticsContent}>
                       <Text style={styles.logisticsLabel}>
                         {tier.maxBuyers == null
-                          ? `${tier.minBuyers}+ buyers`
-                          : `${tier.minBuyers}–${tier.maxBuyers} buyers`}
+                          ? t("sellerDealDetails.tierOpen", { min: tier.minBuyers })
+                          : t("sellerDealDetails.tierRange", { min: tier.minBuyers, max: tier.maxBuyers })}
                       </Text>
                       <Text style={styles.logisticsValue}>{formatINR(tier.price)}</Text>
                     </View>
                     {isActive ? (
                       <View style={styles.tierActiveBadge}>
-                        <Text style={styles.tierActiveBadgeText}>Active now</Text>
+                        <Text style={styles.tierActiveBadgeText}>{t("sellerDealDetails.activeNow")}</Text>
                       </View>
                     ) : null}
                   </View>
@@ -704,21 +776,27 @@ export default function DealDetails({ route, navigation }) {
           </InfoCard>
         ) : null}
 
-        <InfoCard title="Price Breakup" style={styles.logisticsCard}>
+        <InfoCard title={t("sellerDealDetails.priceBreakup")} style={styles.logisticsCard}>
           <PriceBreakupCard breakup={priceBreakup} />
         </InfoCard>
 
         {deliveryStatusData?.items?.length ? (
           <InfoCard
-            title={isPickup ? "Pickup Progress" : isDispatched ? "Delivery Progress" : "Buyer Payments"}
+            title={
+              isPickup
+                ? t("sellerDealDetails.pickupProgress")
+                : isDispatched
+                  ? t("sellerDealDetails.deliveryProgress")
+                  : t("sellerDealDetails.buyerPayments")
+            }
             style={styles.logisticsCard}
           >
             {deliveryStatusData.items.map((item, index) => {
               const isReady =
                 item.deliveryStatus === "in_transit" || item.deliveryStatus === "ready_for_pickup";
               const isDelivered = item.deliveryStatus === "delivered";
-              const readyLabel = isPickup ? "Ready for Pickup" : "In Transit";
-              const doneLabel = isPickup ? "Picked Up" : "Delivered";
+              const readyLabel = isPickup ? t("delivery.readyForPickup") : t("delivery.inTransit");
+              const doneLabel = isPickup ? t("delivery.pickedUp") : t("delivery.delivered");
 
               return (
                 <React.Fragment key={item.buyerId}>
@@ -732,13 +810,16 @@ export default function DealDetails({ route, navigation }) {
                       {!isReady && !isDelivered && item.paidAmount != null ? (
                         <Text style={styles.buyerAmountText}>
                           {item.settledAmount != null && item.settledAmount !== item.paidAmount
-                            ? `${formatINR(item.paidAmount)} → ${formatINR(item.settledAmount)} settled`
-                            : `Paid ${formatINR(item.paidAmount)}`}
+                            ? t("sellerDealDetails.settled", {
+                                paid: formatINR(item.paidAmount),
+                                settled: formatINR(item.settledAmount),
+                              })
+                            : t("sellerDealDetails.paid", { amount: formatINR(item.paidAmount) })}
                         </Text>
                       ) : null}
                       {isDelivered && item.deliveredAt ? (
                         <Text style={styles.logisticsLabel}>
-                          {doneLabel} {formatShortDate(item.deliveredAt)}
+                          {doneLabel} {formatShortDate(item.deliveredAt, language)}
                         </Text>
                       ) : null}
                     </View>
@@ -755,7 +836,7 @@ export default function DealDetails({ route, navigation }) {
                         onPress={() => handleMarkDelivered(item.buyerId, item.buyerName)}
                       >
                         <Text style={styles.markDeliveredText}>
-                          {isPickup ? "Mark picked up" : "Mark delivered"}
+                          {isPickup ? t("sellerDealDetails.markPickedUpLink") : t("sellerDealDetails.markDeliveredLink")}
                         </Text>
                       </TouchableOpacity>
                     ) : null}
@@ -769,7 +850,7 @@ export default function DealDetails({ route, navigation }) {
         {countdown ? (
           <DetailRow
             icon="time-outline"
-            label="Ends"
+            label={t("sellerDealDetails.ends")}
             value={countdown}
             color={accentColor}
           />
@@ -1101,10 +1182,10 @@ function normalizeDeal(deal) {
   return normalized;
 }
 
-function formatShortDate(value) {
+function formatShortDate(value, language = "en") {
   const date = toDate(value);
   if (!date) return "";
-  return date.toLocaleDateString("en-IN", {
+  return date.toLocaleDateString(`${language}-IN`, {
     day: "2-digit",
     month: "short",
     year: "numeric",

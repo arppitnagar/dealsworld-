@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 
 // Promise-based replacement for Alert.alert, paired with
 // <ConfirmModal {...confirmModalProps} />.
@@ -13,6 +14,7 @@ import { useCallback, useRef, useState } from "react";
 //
 //   return (<>...<ConfirmModal {...confirmModalProps} /></>);
 export default function useConfirmModal() {
+  const { t } = useI18n();
   const [request, setRequest] = useState(null);
   const resolverRef = useRef(null);
 
@@ -27,12 +29,12 @@ export default function useConfirmModal() {
     (options) => {
       const opts = typeof options === "string" ? { message: options } : options;
       return confirm({
-        confirmText: "OK",
+        confirmText: t("common.ok"),
         ...opts,
         singleButton: true,
       });
     },
-    [confirm],
+    [confirm, t],
   );
 
   const respond = useCallback((result) => {

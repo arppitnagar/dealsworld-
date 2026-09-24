@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@dealsworld/shared";
+import { useTheme, useI18n } from "@dealsworld/shared";
 import { STATUS_FILTERS, formatCount } from "../utils/dealCategories";
 
 // Bottom-sheet category picker for the Deals tab. Replaces the old chip row
@@ -25,6 +25,7 @@ export default function DealCategoryModal({
 }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
 
   if (!visible) return null;
 
@@ -38,7 +39,7 @@ export default function DealCategoryModal({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>
           <View style={styles.handle} />
-          <Text style={styles.title}>Browse deals by</Text>
+          <Text style={styles.title}>{t("filters.browseBy")}</Text>
 
           <TouchableOpacity
             style={styles.row}
@@ -50,7 +51,7 @@ export default function DealCategoryModal({
             >
               <Ionicons name="apps-outline" size={16} color={theme.colors.onPrimary} />
             </View>
-            <Text style={styles.rowLabel}>All Deals</Text>
+            <Text style={styles.rowLabel}>{t("filters.allDeals")}</Text>
             <Text style={styles.rowCount}>{formatCount(allCount)}</Text>
             {selectedFilter === null ? (
               <Ionicons
@@ -77,7 +78,7 @@ export default function DealCategoryModal({
                 <View style={[styles.iconCircle, { backgroundColor: accentColor }]}>
                   <Icon size={16} color={theme.colors.onPrimary} />
                 </View>
-                <Text style={styles.rowLabel}>{filter.label}</Text>
+                <Text style={styles.rowLabel}>{t(`filters.${filter.key}`)}</Text>
                 <Text style={styles.rowCount}>{formatCount(counts[filter.key])}</Text>
                 {isSelected ? (
                   <Ionicons

@@ -1,21 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 import { isUnsuccessfulDeal } from "../utils/dealCategories";
-import { POLLING_ENABLED } from "@dealsworld/shared";
+import { POLLING_ENABLED, englishT } from "@dealsworld/shared";
 
 // Shared by list screens (Home/Deals/Search) to turn a useMyDeliveries() map
 // entry into the DealCard `deliveryBadge` prop.
-export function getDeliveryBadge(dealId, deliveries, theme) {
+// `t` is useI18n()'s translator; English when omitted.
+export function getDeliveryBadge(dealId, deliveries, theme, t = englishT) {
   const entry = dealId ? deliveries?.[dealId] : null;
   if (!entry?.deliveryStatus) return null;
   if (entry.deliveryStatus === "delivered") {
-    return { label: "Delivered", color: theme.colors.success };
+    return { label: t("delivery.delivered"), color: theme.colors.success };
   }
   if (entry.deliveryStatus === "in_transit") {
-    return { label: "In Transit", color: theme.colors.primary };
+    return { label: t("delivery.inTransit"), color: theme.colors.primary };
   }
   if (entry.deliveryStatus === "ready_for_pickup") {
-    return { label: "Ready for Pickup", color: theme.colors.primary };
+    return { label: t("delivery.readyForPickup"), color: theme.colors.primary };
   }
   return null;
 }
@@ -27,22 +28,22 @@ export function getDeliveryBadge(dealId, deliveries, theme) {
 // covers a deal that only moved to My Orders because the buyer paid - it
 // won't have a deliveryStatus yet (that only starts once dispatched), so it
 // falls back to a payment badge instead of showing nothing.
-export function getOrderBadge(deal, deliveries, theme) {
+export function getOrderBadge(deal, deliveries, theme, t = englishT) {
   if (isUnsuccessfulDeal(deal)) {
-    return { label: "Unsuccessful", color: theme.colors.error };
+    return { label: t("delivery.unsuccessful"), color: theme.colors.error };
   }
-  const deliveryBadge = getDeliveryBadge(deal?.id, deliveries, theme);
+  const deliveryBadge = getDeliveryBadge(deal?.id, deliveries, theme, t);
   if (deliveryBadge) return deliveryBadge;
 
   const paymentStatus = deal?.id ? deliveries?.[deal.id]?.paymentStatus : null;
   if (paymentStatus === "paid_blocked") {
-    return { label: "Payment Held", color: theme.colors.primary };
+    return { label: t("status.paid_blocked"), color: theme.colors.primary };
   }
   if (paymentStatus === "released_to_seller") {
-    return { label: "Payment Released", color: theme.colors.success };
+    return { label: t("status.released_to_seller"), color: theme.colors.success };
   }
   if (paymentStatus === "refunded_to_buyer") {
-    return { label: "Refunded", color: theme.colors.textMuted };
+    return { label: t("status.refunded_to_buyer"), color: theme.colors.textMuted };
   }
   return null;
 }

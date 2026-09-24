@@ -7,7 +7,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme, TopPageHeader } from "@dealsworld/shared";
+import { useTheme, useI18n, TopPageHeader } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { setStoredThemeMode } from "../utils/themeStorage";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -16,6 +16,7 @@ export default function ThemeSettingsScreen({ navigation }) {
   const { theme, mode, setMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { updateProfile } = useUserProfile();
+  const { t } = useI18n();
 
   const handleSelect = async (nextMode) => {
     setMode(nextMode);
@@ -26,7 +27,7 @@ export default function ThemeSettingsScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <TopPageHeader
-        title="Change Theme"
+        title={t("themeSettings.title")}
         onBack={() => navigation.goBack()}
         rounded
       />
@@ -37,10 +38,8 @@ export default function ThemeSettingsScreen({ navigation }) {
       >
         <View style={styles.heroCard}>
           <View style={styles.heroAccent} />
-          <Text style={styles.heroTitle}>Choose your vibe</Text>
-          <Text style={styles.heroSubtitle}>
-            Switch between light and dark themes anytime.
-          </Text>
+          <Text style={styles.heroTitle}>{t("themeSettings.heroTitle")}</Text>
+          <Text style={styles.heroSubtitle}>{t("themeSettings.heroSubtitle")}</Text>
         </View>
 
         <View style={styles.card}>
@@ -59,8 +58,8 @@ export default function ThemeSettingsScreen({ navigation }) {
               />
             </View>
             <View style={styles.optionText}>
-              <Text style={styles.themeLabel}>Light Mode</Text>
-              <Text style={styles.themeSubLabel}>Bright & clean</Text>
+              <Text style={styles.themeLabel}>{t("themeSettings.light")}</Text>
+              <Text style={styles.themeSubLabel}>{t("themeSettings.lightSub")}</Text>
             </View>
             {mode === "light" ? (
               <Ionicons
@@ -86,8 +85,8 @@ export default function ThemeSettingsScreen({ navigation }) {
               />
             </View>
             <View style={styles.optionText}>
-              <Text style={styles.themeLabel}>Dark Mode</Text>
-              <Text style={styles.themeSubLabel}>Easy on the eyes</Text>
+              <Text style={styles.themeLabel}>{t("themeSettings.dark")}</Text>
+              <Text style={styles.themeSubLabel}>{t("themeSettings.darkSub")}</Text>
             </View>
             {mode === "dark" ? (
               <Ionicons

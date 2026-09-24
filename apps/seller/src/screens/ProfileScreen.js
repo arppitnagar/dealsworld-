@@ -15,6 +15,8 @@ import {
   TopPageHeader,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
+  getLanguageInfo,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -25,17 +27,18 @@ export default function ProfileScreen({ navigation }) {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { user, logout } = useAuth();
   const { profile } = useUserProfile();
+  const { language, t } = useI18n();
   const memberSince = useMemo(() => {
     const date = toDate(profile?.createdAt);
-    return date ? formatDate(date) : null;
-  }, [profile?.createdAt]);
+    return date ? formatDate(date, language) : null;
+  }, [profile?.createdAt, language]);
   const { confirm, confirmModalProps } = useConfirmModal();
 
   const handleLogout = async () => {
     const ok = await confirm({
-      title: "Logout",
-      message: "Are you sure you want to log out?",
-      confirmText: "Logout",
+      title: t("profile.logout"),
+      message: t("profile.logoutConfirm"),
+      confirmText: t("profile.logout"),
       destructive: true,
     });
     if (!ok) return;
@@ -45,7 +48,7 @@ export default function ProfileScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <TopPageHeader
-        title="Profile"
+        title={t("profile.title")}
         onBack={() => navigation.goBack()}
         rounded
       />
@@ -66,47 +69,52 @@ export default function ProfileScreen({ navigation }) {
             </View>
             <View style={styles.heroInfo}>
               <Text style={styles.profileName}>
-                {profile?.displayName || "Seller"}
+                {profile?.displayName || t("common.seller")}
               </Text>
               <Text style={styles.profileEmail}>{user?.email || ""}</Text>
               {memberSince ? (
                 <Text style={styles.memberSince}>
-                  Member since {memberSince}
+                  {t("profile.memberSince", { date: memberSince })}
                 </Text>
               ) : null}
             </View>
           </View>
           <View style={styles.heroChips}>
             <View style={styles.heroChip}>
-              <Text style={styles.heroChipText}>Seller</Text>
+              <Text style={styles.heroChipText}>{t("common.seller")}</Text>
             </View>
             {profile?.theme ? (
               <View style={styles.heroChipOutline}>
                 <Text style={styles.heroChipOutlineText}>
-                  {profile.theme === "dark" ? "Dark Mode" : "Light Mode"}
+                  {profile.theme === "dark" ? t("profile.darkMode") : t("profile.lightMode")}
                 </Text>
               </View>
             ) : null}
+            <View style={styles.heroChipOutline}>
+              <Text style={styles.heroChipOutlineText}>
+                {getLanguageInfo(language).nativeName}
+              </Text>
+            </View>
           </View>
         </View>
 
         <View style={styles.menuCard}>
-          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={styles.sectionTitle}>{t("profile.account")}</Text>
           <MenuItem
             icon="person-circle-outline"
-            label="User Details"
+            label={t("profile.userDetails")}
             onPress={() => navigation.navigate("UserDetails")}
             theme={theme}
           />
           <MenuItem
             icon="lock-closed-outline"
-            label="Change Password"
+            label={t("profile.changePassword")}
             onPress={() => navigation.navigate("ChangePassword")}
             theme={theme}
           />
           <MenuItem
             icon="location-outline"
-            label="Address"
+            label={t("profile.address")}
             onPress={() => navigation.navigate("AddressBook")}
             theme={theme}
             divider={false}
@@ -114,11 +122,17 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.menuCard}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
+          <Text style={styles.sectionTitle}>{t("profile.preferences")}</Text>
           <MenuItem
             icon="color-palette-outline"
-            label="Change Theme"
+            label={t("profile.changeTheme")}
             onPress={() => navigation.navigate("ThemeSettings")}
+            theme={theme}
+          />
+          <MenuItem
+            icon="language-outline"
+            label={t("profile.language")}
+            onPress={() => navigation.navigate("LanguageSettings")}
             theme={theme}
             divider={false}
           />
@@ -127,7 +141,7 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.menuCardDanger}>
           <MenuItem
             icon="log-out-outline"
-            label="Logout"
+            label={t("profile.logout")}
             onPress={handleLogout}
             theme={theme}
             danger

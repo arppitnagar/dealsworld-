@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import apiClient from "../api/client";
-import { POLLING_ENABLED } from "@dealsworld/shared";
+import { POLLING_ENABLED, useI18n } from "@dealsworld/shared";
 
 const DEALS_PAGE_SIZE = 20;
 // Matches the old single-fetch endpoint's effective ceiling (it always
@@ -64,14 +64,19 @@ async function postWithNetworkRetry(url, body, config = {}) {
 // paginating. Both queries always exist (React Query's rules of hooks
 // don't allow conditionally calling one); only one is enabled at a time.
 export const useDeals = ({ fullSet = false, city } = {}) => {
+  // Deal titles come back already translated into this (see
+  // apps/backend/src/translation.js), so it's part of every cache key -
+  // switching language refetches instead of showing the old language.
+  const { language } = useI18n();
   const pagedQuery = useInfiniteQuery({
-    queryKey: ["deals", "paged", city || null],
+    queryKey: ["deals", "paged", city || null, language],
     queryFn: async ({ pageParam }) => {
       const { data } = await apiClient.get("/deals", {
         params: {
           limit: DEALS_PAGE_SIZE,
           cursor: pageParam || undefined,
           city: city || undefined,
+          lang: language,
         },
       });
       return data;
@@ -91,10 +96,10 @@ export const useDeals = ({ fullSet = false, city } = {}) => {
   });
 
   const fullQuery = useQuery({
-    queryKey: ["deals", "full", city || null],
+    queryKey: ["deals", "full", city || null, language],
     queryFn: async () => {
       const { data } = await apiClient.get("/deals", {
-        params: { limit: FULL_SET_LIMIT, city: city || undefined },
+        params: { limit: FULL_SET_LIMIT, city: city || undefined, lang: language },
       });
       return data.deals;
     },
@@ -142,10 +147,13 @@ export const useDeals = ({ fullSet = false, city } = {}) => {
 // (its details screen, and the dispatch/OTP flow on it) after the seller
 // ends the campaign or it expires.
 export const useJoinedDeals = () => {
+  const { language } = useI18n();
   return useQuery({
-    queryKey: ["joined-deals"],
+    queryKey: ["joined-deals", language],
     queryFn: async () => {
-      const { data } = await apiClient.get("/deals/joined");
+      const { data } = await apiClient.get("/deals/joined", {
+        params: { lang: language },
+      });
       return data;
     },
     staleTime: 2_000,
@@ -155,6 +163,26 @@ export const useJoinedDeals = () => {
     refetchInterval: POLLING_ENABLED ? 8_000 : false,
     refetchIntervalInBackground: false,
     placeholderData: (previous) => previous,
+  });
+};
+
+// Title + description of one deal in the buyer's language, for Deal
+// Details. Kept separate from the lists (which only translate titles) so a
+// description is only translated once someone actually opens that deal.
+// Returns the deal's original text until the translation arrives.
+export const useDealTranslation = (dealId) => {
+  const { language } = useI18n();
+  return useQuery({
+    queryKey: ["deal-translation", dealId, language],
+    queryFn: async () => {
+      const { data } = await apiClient.get(`/deals/${dealId}/translation`, {
+        params: { lang: language },
+      });
+      return data;
+    },
+    enabled: Boolean(dealId),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
   });
 };
 

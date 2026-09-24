@@ -15,7 +15,9 @@ import {
   TopPageHeader,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
 } from "@dealsworld/shared";
+import { getAddressLabel } from "../utils/addressLabels";
 import { useAddresses } from "../hooks/useAddresses";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -27,12 +29,13 @@ export default function AddressBookScreen({ navigation }) {
   const { addresses, loading, removeAddress, setDefaultAddress } =
     useAddresses();
   const { confirm, confirmModalProps } = useConfirmModal();
+  const { t } = useI18n();
 
   const handleDelete = async (item) => {
     const ok = await confirm({
-      title: "Delete address",
-      message: "Remove this address?",
-      confirmText: "Delete",
+      title: t("addresses.deleteTitle"),
+      message: t("addresses.deleteMessage"),
+      confirmText: t("common.delete"),
       destructive: true,
     });
     if (!ok) return;
@@ -47,12 +50,12 @@ export default function AddressBookScreen({ navigation }) {
       <View style={styles.cardHeader}>
         <View style={styles.tagRow}>
           <View style={styles.tag}>
-            <Text style={styles.tagText}>{item.label || "Address"}</Text>
+            <Text style={styles.tagText}>{getAddressLabel(item.label, t)}</Text>
           </View>
           {item.isDefault ? (
             <View style={styles.defaultTag}>
               <Ionicons name="star" size={12} color={theme.colors.warningBright} />
-              <Text style={styles.defaultTagText}>Default</Text>
+              <Text style={styles.defaultTagText}>{t("addresses.default")}</Text>
             </View>
           ) : null}
         </View>
@@ -100,16 +103,14 @@ export default function AddressBookScreen({ navigation }) {
   const headerContent = (
     <View>
       <TopPageHeader
-        title="Addresses"
+        title={t("addresses.title")}
         onBack={() => navigation.goBack()}
         rounded
       />
       <View style={styles.heroCard}>
         <View style={styles.heroAccent} />
-        <Text style={styles.heroTitle}>Manage your addresses</Text>
-        <Text style={styles.heroSubtitle}>
-          Add delivery locations for faster checkout.
-        </Text>
+        <Text style={styles.heroTitle}>{t("addresses.heroTitle")}</Text>
+        <Text style={styles.heroSubtitle}>{t("addresses.heroSubtitle")}</Text>
       </View>
     </View>
   );
@@ -127,8 +128,8 @@ export default function AddressBookScreen({ navigation }) {
         <View style={styles.emptyWrap}>
           <EmptyState
             icon="location-outline"
-            title="No saved addresses"
-            subtitle="Add one to speed up delivery."
+            title={t("addresses.emptyTitle")}
+            subtitle={t("addresses.emptySubtitle")}
           />
         </View>
       ) : (
@@ -145,7 +146,7 @@ export default function AddressBookScreen({ navigation }) {
       )}
 
       <AppButton
-        title="Add New Address"
+        title={t("addresses.addNew")}
         onPress={() => navigation.navigate("AddressForm")}
         style={[
           styles.addButton,

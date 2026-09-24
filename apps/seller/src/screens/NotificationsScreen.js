@@ -17,6 +17,7 @@ import {
   IconActionBar,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
 } from "@dealsworld/shared";
 import { useNotifications } from "../hooks/useNotifications";
 
@@ -38,6 +39,7 @@ export default function NotificationsScreen({ navigation }) {
   const [deletingId, setDeletingId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const { confirm, confirmModalProps } = useConfirmModal();
+  const { language, t } = useI18n();
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -71,8 +73,8 @@ export default function NotificationsScreen({ navigation }) {
   const handleDelete = async (id) => {
     if (!id || deletingId) return;
     const ok = await confirm({
-      title: "Delete this notification?",
-      confirmText: "Delete",
+      title: t("notifications.deleteOne"),
+      confirmText: t("common.delete"),
       destructive: true,
     });
     if (!ok) return;
@@ -87,9 +89,9 @@ export default function NotificationsScreen({ navigation }) {
   const handleDeleteAll = async () => {
     if (deletingAll || notifications.length === 0) return;
     const ok = await confirm({
-      title: "Delete all notifications",
-      message: "This can't be undone. Delete all notifications?",
-      confirmText: "Delete All",
+      title: t("notifications.deleteAllTitle"),
+      message: t("notifications.deleteAllMessage"),
+      confirmText: t("notifications.deleteAllConfirm"),
       destructive: true,
     });
     if (!ok) return;
@@ -103,14 +105,14 @@ export default function NotificationsScreen({ navigation }) {
 
   const renderItem = ({ item }) => {
     const isUnread = !item.readAt && !item.isRead;
-    const timeLabel = formatNotificationTime(item.createdAt);
+    const timeLabel = formatNotificationTime(item.createdAt, language);
     const title =
       item.title ||
       (item.type === "chat"
-        ? "Buyer replied"
+        ? t("notifications.buyerReplied")
         : item.type === "deal"
-          ? "Deal update"
-          : "Notification");
+          ? t("notifications.dealUpdate")
+          : t("notifications.fallbackTitle"));
     const body = item.body || item.message || item.preview || "";
     const iconName = item.type === "chat" ? "chatbubble-outline" : "pricetag";
 
@@ -160,7 +162,7 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <TopPageHeader title="Notifications" onBack={() => navigation.goBack()} rounded />
+      <TopPageHeader title={t("notifications.title")} onBack={() => navigation.goBack()} rounded />
 
       <FlatList
         data={notifications}
@@ -185,8 +187,8 @@ export default function NotificationsScreen({ navigation }) {
             <View style={styles.emptyWrap}>
               <EmptyState
                 icon="notifications-outline"
-                title="No notifications yet"
-                subtitle="Chat replies and deal updates will appear here."
+                title={t("notifications.emptyTitle")}
+                subtitle={t("notifications.emptySubtitleSeller")}
               />
             </View>
           )
@@ -199,7 +201,7 @@ export default function NotificationsScreen({ navigation }) {
             key: "home",
             onPress: () =>
               navigation.navigate("MainTabs", { screen: "Dashboard" }),
-            label: "Home",
+            label: t("tabs.home"),
             icon: (color) => (
               <Ionicons name="home-outline" size={20} color={color} />
             ),
@@ -208,7 +210,7 @@ export default function NotificationsScreen({ navigation }) {
             key: "mark-all-read",
             onPress: handleClearAll,
             disabled: clearing,
-            label: "Mark all read",
+            label: t("notifications.markAllRead"),
             icon: (color) => (
               <Ionicons name="checkmark-done-outline" size={20} color={color} />
             ),
@@ -217,7 +219,7 @@ export default function NotificationsScreen({ navigation }) {
             key: "delete-all",
             onPress: handleDeleteAll,
             disabled: deletingAll,
-            label: "Delete all",
+            label: t("notifications.deleteAll"),
             icon: (color) => (
               <Ionicons name="trash-outline" size={20} color={color} />
             ),
@@ -230,10 +232,10 @@ export default function NotificationsScreen({ navigation }) {
   );
 }
 
-function formatNotificationTime(value) {
+function formatNotificationTime(value, language = "en") {
   const date = toDate(value);
   if (!date || Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-IN", {
+  return date.toLocaleString(`${language}-IN`, {
     day: "2-digit",
     month: "short",
     hour: "2-digit",

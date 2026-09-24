@@ -14,6 +14,7 @@ import {
   TopPageHeader,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
 } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -28,6 +29,7 @@ export default function UserDetailsScreen({ navigation }) {
   const [phone, setPhone] = useState(profile?.phone || "");
   const [saving, setSaving] = useState(false);
   const { confirm, alert, confirmModalProps } = useConfirmModal();
+  const { t } = useI18n();
 
   useEffect(() => {
     setName(profile?.displayName || "");
@@ -36,9 +38,9 @@ export default function UserDetailsScreen({ navigation }) {
 
   const handleSave = async () => {
     const ok = await confirm({
-      title: "Save changes?",
-      message: "Update your name and phone number.",
-      confirmText: "Save Changes",
+      title: t("userDetails.confirmTitle"),
+      message: t("userDetails.confirmMessage"),
+      confirmText: t("common.saveChanges"),
     });
     if (!ok) return;
     setSaving(true);
@@ -47,9 +49,9 @@ export default function UserDetailsScreen({ navigation }) {
         displayName: name.trim(),
         phone: phone.trim(),
       });
-      await alert({ title: "Saved", message: "Your details were updated.", tone: "success" });
+      await alert({ title: t("common.saved"), message: t("userDetails.saved"), tone: "success" });
     } catch (error) {
-      await alert({ title: "Error", message: error?.message || "Unable to save details.", destructive: true });
+      await alert({ title: t("common.error"), message: error?.message || t("userDetails.saveFailed"), destructive: true });
     } finally {
       setSaving(false);
     }
@@ -58,7 +60,7 @@ export default function UserDetailsScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <TopPageHeader
-        title="User Details"
+        title={t("profile.userDetails")}
         onBack={() => navigation.goBack()}
         rounded
       />
@@ -75,35 +77,33 @@ export default function UserDetailsScreen({ navigation }) {
       >
         <View style={styles.heroCard}>
           <View style={styles.heroAccent} />
-          <Text style={styles.heroTitle}>Your profile details</Text>
-          <Text style={styles.heroSubtitle}>
-            Keep your name and contact details up to date.
-          </Text>
+          <Text style={styles.heroTitle}>{t("userDetails.heroTitle")}</Text>
+          <Text style={styles.heroSubtitle}>{t("userDetails.heroSubtitle")}</Text>
         </View>
 
         <View style={styles.card}>
           <AppInput
-            label="Full Name"
-            placeholder="Your name"
+            label={t("common.fullName")}
+            placeholder={t("userDetails.namePlaceholder")}
             value={name}
             onChangeText={setName}
             containerStyle={styles.inputSpacing}
           />
           <AppInput
-            label="Phone"
-            placeholder="Phone number"
+            label={t("common.phone")}
+            placeholder={t("common.phoneNumber")}
             keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
           />
           <AppInput
-            label="Email"
-            placeholder="Email"
+            label={t("common.email")}
+            placeholder={t("common.email")}
             value={user?.email || ""}
             editable={false}
           />
           <AppButton
-            title={saving ? "Saving..." : "Save Changes"}
+            title={saving ? t("common.saving") : t("common.saveChanges")}
             onPress={handleSave}
             loading={saving}
             style={styles.submit}

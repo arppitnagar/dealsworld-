@@ -4,6 +4,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { getCardStyles } from "../styles/cards";
 import { useTheme } from "../theme/ThemeProvider";
+import { useI18n } from "../i18n/I18nProvider";
+import { getCategoryLabel } from "../utils/dealCategories";
 
 function formatCount(value) {
   const numeric = Number(value);
@@ -45,6 +47,7 @@ export default function DealCard({
   compact = false,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const cardStyles = useMemo(() => getCardStyles(theme), [theme]);
 
   const gallery = useMemo(() => {
@@ -73,13 +76,22 @@ export default function DealCard({
     : 0;
   const progressLabel = max
     ? compact
-      ? `${formatCount(Math.min(joinedCount, max))}/${formatCount(max)} joined`
-      : `${Math.min(joinedCount, max)} of ${formatCount(max)} joined`
+      ? t("dealCard.joinedOfMaxShort", {
+          count: formatCount(Math.min(joinedCount, max)),
+          max: formatCount(max),
+        })
+      : t("dealCard.joinedOfMax", { count: Math.min(joinedCount, max), max: formatCount(max) })
     : isUncappedPastMin
-      ? `${formatCount(joinedCount)} joined`
+      ? t("dealCard.joinedCount", { count: formatCount(joinedCount) })
       : compact
-        ? `${formatCount(joinedCount)}/${formatCount(target)} joined`
-        : `Joined ${formatCount(joinedCount)} of ${formatCount(target)}`;
+        ? t("dealCard.joinedOfMaxShort", {
+            count: formatCount(joinedCount),
+            max: formatCount(target),
+          })
+        : t("dealCard.joinedOfTarget", {
+            count: formatCount(joinedCount),
+            target: formatCount(target),
+          });
   const rightSubtitle = expiryLabel || countdown || null;
   const resolvedBadgeLabel = badgeLabel || statusLabel || null;
   const avgRating = Number.isFinite(Number(ratingAvg)) ? Number(ratingAvg) : null;
@@ -515,7 +527,7 @@ export default function DealCard({
         ) : category || rightSubtitle ? (
           <View style={styles.subtitleRow}>
             <Text style={styles.subtitle} numberOfLines={1}>
-              {category}
+              {category ? getCategoryLabel(category, t) : null}
             </Text>
             {rightSubtitle ? (
               <Text style={styles.expiry} numberOfLines={1}>
@@ -566,7 +578,7 @@ export default function DealCard({
                   thresholdReached && { color: theme.colors.success },
                 ]}
               >
-                {isUncappedPastMin ? "Guaranteed" : `${Math.round(progressRatio * 100)}%`}
+                {isUncappedPastMin ? t("dealCard.guaranteed") : `${Math.round(progressRatio * 100)}%`}
               </Text>
             </View>
             <View style={[styles.progressTrack, compact && styles.progressTrackCompact]}>

@@ -10,11 +10,19 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "../theme/ThemeProvider";
+import { useI18n } from "../i18n/I18nProvider";
 import AppInput from "./ui/AppInput";
 import AppButton from "./ui/AppButton";
 
-const getLabelFromFields = (fields, key) =>
-  fields.find((field) => field.key === key)?.label || key;
+// Field/preset labels come in as English (dealSortFilter.js, the presets
+// below); translated by key, falling back to that English when a locale
+// has no entry (e.g. plain numeric ranges).
+const getFieldLabel = (field, t) =>
+  t(`sortFilter.fields.${field.key}`, { defaultValue: field.label });
+const getLabelFromFields = (fields, key, t) => {
+  const field = fields.find((item) => item.key === key);
+  return field ? getFieldLabel(field, t) : key;
+};
 const normalizeText = (value) => String(value || "").toLowerCase().trim();
 
 const FIELD_PANEL_META = {
@@ -77,24 +85,19 @@ const FIELD_VALUE_PRESETS = {
   ],
 };
 
-const getFieldPlaceholder = (fieldKey) => {
-  switch (fieldKey) {
-    case "price":
-      return "Example: <=300, 300-500, 1100+";
-    case "expiration":
-      return "Enter date/timestamp";
-    case "joinedUsers":
-      return "Example: 0-5 or >=10";
-    case "requiredUsers":
-      return "Example: 5-10 or 20+";
-    case "status":
-      return "Choose or type status";
-    case "deliveryMode":
-      return "Choose or type delivery mode";
-    default:
-      return "Enter filter value";
-  }
-};
+const PLACEHOLDER_FIELDS = new Set([
+  "price",
+  "expiration",
+  "joinedUsers",
+  "requiredUsers",
+  "status",
+  "deliveryMode",
+]);
+
+const getFieldPlaceholder = (fieldKey, t) =>
+  PLACEHOLDER_FIELDS.has(fieldKey)
+    ? t(`sortFilter.placeholders.${fieldKey}`)
+    : t("sortFilter.placeholders.default");
 
 export function DealSortModal({
   visible,
@@ -105,9 +108,10 @@ export function DealSortModal({
   sortOrder = "asc",
   onSortOrderChange,
   onClear,
-  title = "Sort Deals",
+  title,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const canClearSort = Boolean(selectedField);
 
@@ -130,7 +134,7 @@ export function DealSortModal({
             style={styles.sortHeaderGradient}
           >
             <View style={styles.sortHeaderRow}>
-              <Text style={styles.sortHeaderTitle}>{title}</Text>
+              <Text style={styles.sortHeaderTitle}>{title || t("sortFilter.sortDeals")}</Text>
               <TouchableOpacity
                 style={styles.sortCloseIconButton}
                 onPress={onClose}
@@ -152,7 +156,7 @@ export function DealSortModal({
                 ]}
                 onPress={() => onSortOrderChange?.("asc")}
                 accessibilityRole="button"
-                accessibilityLabel="Ascending sort"
+                accessibilityLabel={t("sortFilter.ascending")}
               >
                 <Ionicons
                   name="arrow-up"
@@ -171,7 +175,7 @@ export function DealSortModal({
                 ]}
                 onPress={() => onSortOrderChange?.("desc")}
                 accessibilityRole="button"
-                accessibilityLabel="Descending sort"
+                accessibilityLabel={t("sortFilter.descending")}
               >
                 <Ionicons
                   name="arrow-down"
@@ -186,7 +190,7 @@ export function DealSortModal({
             </View>
           </View>
           <View style={styles.sortContent}>
-            <Text style={styles.sortSectionTitle}>Sort by</Text>
+            <Text style={styles.sortSectionTitle}>{t("sortFilter.sortBy")}</Text>
           </View>
           <View style={styles.fieldList}>
             {fields.map((field) => (
@@ -204,7 +208,7 @@ export function DealSortModal({
                     selectedField === field.key && styles.fieldTextActive,
                   ]}
                 >
-                  {field.label}
+                  {getFieldLabel(field, t)}
                 </Text>
                 {selectedField === field.key ? (
                   <Ionicons
@@ -218,7 +222,7 @@ export function DealSortModal({
           </View>
           <View style={[styles.sortContent, styles.footerRow]}>
             <AppButton
-              title="Clear sort"
+              title={t("sortFilter.clearSort")}
               onPress={onClear}
               variant="secondary"
               disabled={!canClearSort}
@@ -229,7 +233,7 @@ export function DealSortModal({
               ]}
             />
             <AppButton
-              title="Done"
+              title={t("sortFilter.done")}
               onPress={onClose}
               style={styles.applyButton}
               textStyle={styles.applyText}
@@ -256,18 +260,23 @@ export function DealFilterModal({
   onClearAll,
   onApply,
   resultCount,
-  title = "Filter Deals",
+  title,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const selectedFieldLabel = selectedField
-    ? getLabelFromFields(fields, selectedField)
-    : "Select a field";
+    ? getLabelFromFields(fields, selectedField, t)
+    : t("sortFilter.selectField");
   const panelMeta = selectedField
     ? FIELD_PANEL_META[selectedField] || null
     : null;
-  const panelTitle = panelMeta?.panelTitle || selectedFieldLabel;
-  const quickTitle = panelMeta?.quickTitle || "Quick options";
+  const panelTitle = panelMeta
+    ? t(`sortFilter.panels.${selectedField}.title`, { defaultValue: panelMeta.panelTitle })
+    : selectedFieldLabel;
+  const quickTitle = panelMeta
+    ? t(`sortFilter.panels.${selectedField}.quick`, { defaultValue: panelMeta.quickTitle })
+    : t("sortFilter.quickOptions");
   const presetValues = selectedField
     ? FIELD_VALUE_PRESETS[selectedField] || []
     : [];
@@ -292,7 +301,7 @@ export function DealFilterModal({
           >
             <View style={styles.sortHeaderRow}>
               <Text style={styles.sortHeaderTitle}>
-                {title === "Filter Deals" ? "Filters" : title}
+                {title || t("sortFilter.filters")}
               </Text>
               <TouchableOpacity
                 style={styles.sortCloseIconButton}
@@ -335,7 +344,7 @@ export function DealFilterModal({
                         selectedField === field.key && styles.leftFieldTextActive,
                       ]}
                     >
-                      {field.label}
+                      {getFieldLabel(field, t)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -350,12 +359,10 @@ export function DealFilterModal({
                 <View style={styles.rightTopRow}>
                   <Text style={styles.rightPanelTitle}>{panelTitle}</Text>
                   <TouchableOpacity onPress={onClearAll}>
-                    <Text style={styles.filterClearAllText}>Clear all</Text>
+                    <Text style={styles.filterClearAllText}>{t("sortFilter.clearAll")}</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.rightPanelSubtitle}>
-                  Select filter criteria
-                </Text>
+                <Text style={styles.rightPanelSubtitle}>{t("sortFilter.selectCriteria")}</Text>
 
                 {presetValues.length ? (
                   <View style={styles.criteriaBlock}>
@@ -363,7 +370,10 @@ export function DealFilterModal({
                     <View style={styles.presetWrap}>
                     {presetValues.map((option) => {
                       const value = option?.value ?? "";
-                      const label = option?.label ?? String(value);
+                      const label = t(
+                        `sortFilter.presets.${selectedField}.${value || "any"}`,
+                        { defaultValue: option?.label ?? String(value) },
+                      );
                       const selected =
                         normalizeText(filterQuery) === normalizeText(value);
                       return (
@@ -390,14 +400,14 @@ export function DealFilterModal({
                   </View>
                 ) : null}
 
-                <Text style={styles.criteriaTitle}>Custom value</Text>
+                <Text style={styles.criteriaTitle}>{t("sortFilter.customValue")}</Text>
                 <AppInput
                   value={filterQuery}
                   onChangeText={onFilterQueryChange}
                   placeholder={
                     selectedField
-                      ? getFieldPlaceholder(selectedField)
-                      : "Choose a field first"
+                      ? getFieldPlaceholder(selectedField, t)
+                      : t("sortFilter.chooseFieldFirst")
                   }
                   editable={Boolean(selectedField)}
                   containerStyle={styles.filterInputContainer}
@@ -406,21 +416,21 @@ export function DealFilterModal({
                 />
 
                 <AppButton
-                  title="Add Filter"
+                  title={t("sortFilter.addFilter")}
                   onPress={onAddRule}
                   disabled={!canAddRule}
                   style={styles.amazonAddButton}
                 />
 
-                <Text style={styles.sectionTitle}>Active filters</Text>
+                <Text style={styles.sectionTitle}>{t("sortFilter.activeFilters")}</Text>
                 <View style={styles.activeRuleList}>
                   {rules.length === 0 ? (
-                    <Text style={styles.emptyRulesText}>No filters added yet.</Text>
+                    <Text style={styles.emptyRulesText}>{t("sortFilter.noFilters")}</Text>
                   ) : (
                     rules.map((rule) => (
                       <View key={rule.id} style={styles.activeRulePill}>
                         <Text style={styles.activeRulePillText}>
-                          {getLabelFromFields(fields, rule.field)}: {rule.query}
+                          {getLabelFromFields(fields, rule.field, t)}: {rule.query}
                         </Text>
                         <TouchableOpacity onPress={() => onRemoveRule?.(rule.id)}>
                           <Ionicons
@@ -441,8 +451,8 @@ export function DealFilterModal({
             <AppButton
               title={
                 typeof resultCount === "number"
-                  ? `Show ${resultCount} results`
-                  : "Show results"
+                  ? t("sortFilter.showCount", { count: resultCount })
+                  : t("sortFilter.showResults")
               }
               onPress={onApply}
               style={styles.amazonResultButton}

@@ -18,6 +18,8 @@ const {
   VERSION_GATE_APPS,
   DEFAULT_MIN_APP_VERSIONS,
 } = require("./constants");
+const { translateDealText, normalizeLanguage } = require("./translation");
+const { renderNotification } = require("./notificationText");
 
 function nowIso() {
   return new Date().toISOString();
@@ -660,8 +662,21 @@ async function sendExpoPushNotifications(messages) {
 // Writes the in-app notification doc (apps/*/src/hooks/useNotifications.js
 // reads users/{uid}/notifications) and, if the user has a registered Expo
 // push token, also sends a real OS push notification for it.
-async function pushNotification({ userId, type, title, body, meta = {} }) {
+//
+// `message: { key, vars }` (see notificationText.js) is rendered in the
+// recipient's preferredLanguage - the same user doc this already had to
+// read for the push token, so localizing costs no extra Firestore read.
+// Pass `userData` when the caller already has that doc (bulk fan-out) to
+// skip the read entirely.
+async function pushNotification({ userId, type, message, meta = {}, userData }) {
   if (!userId) return;
+  let user = userData;
+  if (!user) {
+    const userSnap = await db.collection(USERS_COLLECTION).doc(userId).get();
+    user = userSnap.exists ? userSnap.data() || {} : {};
+  }
+  const { title, body } = await renderNotification(message, user.preferredLanguage, meta.dealId);
+
   await db
     .collection(USERS_COLLECTION)
     .doc(userId)
@@ -670,13 +685,14 @@ async function pushNotification({ userId, type, title, body, meta = {} }) {
       type,
       title,
       body,
+      // Kept so a client could re-render the text in another language later.
+      messageKey: message.key,
       ...meta,
       isRead: false,
       createdAt: FieldValue.serverTimestamp(),
     });
 
-  const userSnap = await db.collection(USERS_COLLECTION).doc(userId).get();
-  const expoPushToken = userSnap.exists ? userSnap.data()?.expoPushToken : null;
+  const expoPushToken = user.expoPushToken || null;
   if (!expoPushToken) return;
 
   await sendExpoPushNotifications([
@@ -725,21 +741,32 @@ async function notifyBuyersOfNewDeal(deal, dealId) {
     .where("role", "==", "buyer")
     .get();
 
-  const title = "New deal published";
-  const body = deal.title || "Check out a new deal";
+  const recipients = buyersSnap.docs.filter((buyerDoc) =>
+    dealMatchesPrefs(deal, buyerDoc.data()?.notificationPrefs),
+  );
+
+  // Translate the title once per language up front - otherwise every
+  // buyer's pushNotification would race to translate the same text, and
+  // all but the first would fall back to the original.
+  const languages = new Set(
+    recipients.map((buyerDoc) => normalizeLanguage(buyerDoc.data()?.preferredLanguage) || "en"),
+  );
+  await Promise.all(
+    [...languages].map((lang) =>
+      translateDealText(dealId, "title", deal.title, lang, { waitMs: 8000 }),
+    ),
+  );
 
   await Promise.all(
-    buyersSnap.docs.map((buyerDoc) => {
-      const prefs = buyerDoc.data()?.notificationPrefs;
-      if (!dealMatchesPrefs(deal, prefs)) return null;
-      return pushNotification({
+    recipients.map((buyerDoc) =>
+      pushNotification({
         userId: buyerDoc.id,
         type: "deal",
-        title,
-        body,
+        message: { key: "newDeal", vars: { title: deal.title } },
         meta: { dealId },
-      });
-    }),
+        userData: buyerDoc.data() || {},
+      }),
+    ),
   );
 }
 

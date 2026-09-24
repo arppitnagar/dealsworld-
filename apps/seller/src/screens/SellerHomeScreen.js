@@ -20,6 +20,7 @@ import {
   getStatusLabel,
   getDealThumbnails,
   toDate,
+  useI18n,
 } from "@dealsworld/shared";
 import { useSellerLiveDeals } from "../hooks/useSellerLiveDeals";
 import { useNotifications } from "../hooks/useNotifications";
@@ -35,6 +36,7 @@ import {
 // same split as the buyer app's Home vs Deals tabs.
 export default function SellerHomeScreen({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { deals, loading, sellerDisplayName } = useSellerLiveDeals();
   const { unreadCount } = useNotifications();
@@ -71,7 +73,7 @@ export default function SellerHomeScreen({ navigation }) {
   const hasDeals = liveDeals.length > 0;
 
   if (loading) {
-    return <DealBuddyLoadingScreen label="Loading deals..." />;
+    return <DealBuddyLoadingScreen label={t("common.loadingDeals")} />;
   }
 
   const renderDeal = ({ item: deal }) => {
@@ -79,7 +81,7 @@ export default function SellerHomeScreen({ navigation }) {
     const expiryDate = toDate(deal.expiresAt);
     const endsInLabel =
       expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
-        ? formatEndsIn(expiryDate.getTime(), now)
+        ? formatEndsIn(expiryDate.getTime(), now, t)
         : null;
 
     return (
@@ -93,8 +95,8 @@ export default function SellerHomeScreen({ navigation }) {
           targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
           maxCount={deal.maxGroupSize ?? null}
           accentColor={getStatusColor(displayStatus, theme)}
-          badgeLabel={getStatusLabel(displayStatus)}
-          statusLabel={getStatusLabel(displayStatus)}
+          badgeLabel={getStatusLabel(displayStatus, t)}
+          statusLabel={getStatusLabel(displayStatus, t)}
           viewsCount={deal.viewsCount ?? deal.views ?? 0}
           favoritesCount={deal.favoritesCount ?? deal.favouritesCount ?? 0}
           ratingAvg={deal.ratingAvg ?? deal.rating ?? null}
@@ -102,7 +104,7 @@ export default function SellerHomeScreen({ navigation }) {
           originalPrice={deal.originalPrice}
           discountPrice={deal.discountPrice}
           expiryLabel={endsInLabel}
-          actionLabel="View Deal"
+          actionLabel={t("common.viewDeal")}
           onActionPress={() => navigation.navigate("DealDetails", { deal })}
         />
       </View>
@@ -132,12 +134,12 @@ export default function SellerHomeScreen({ navigation }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
           <CardHeader
-            title={`Live Deals (${liveDeals?.length || 0})`}
+            title={`${t("sellerHome.liveDeals")} (${liveDeals?.length || 0})`}
             right={
               <View style={styles.headerRight}>
                 <ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />
                 <TouchableOpacity onPress={() => navigation.navigate("Deals")}>
-                  <Text style={styles.seeAllText}>See All</Text>
+                  <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
                 </TouchableOpacity>
               </View>
             }
@@ -147,8 +149,8 @@ export default function SellerHomeScreen({ navigation }) {
           <View style={styles.emptyWrap}>
             <EmptyState
               icon="pricetag-outline"
-              title="No live deals right now."
-              subtitle="Create a deal to get it in front of buyers."
+              title={t("sellerHome.emptyTitle")}
+              subtitle={t("sellerHome.emptySubtitle")}
             />
           </View>
         }

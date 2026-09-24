@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Dimensions, StyleSheet } from "react-native";
-import { useTheme, TopPageHeader, CitySearchList } from "@dealsworld/shared";
+import { useTheme, useI18n, TopPageHeader, CitySearchList } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import apiClient from "../api/client";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -14,6 +14,7 @@ export default function DefaultLocationScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { profile, updateProfile } = useUserProfile();
+  const { t } = useI18n();
   const [cities, setCities] = useState([]);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export default function DefaultLocationScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <TopPageHeader
-        title="Default Location"
+        title={t("profile.defaultLocation")}
         onBack={() => navigation.goBack()}
         rounded
       />
@@ -46,7 +47,7 @@ export default function DefaultLocationScreen({ navigation }) {
           cities={cities}
           selectedCity={profile?.defaultLocation || null}
           showAllOption
-          allOptionLabel="All Cities"
+          allOptionLabel={t("common.allCities")}
           maxHeight={LIST_MAX_HEIGHT}
           onSelect={handleSelect}
         />

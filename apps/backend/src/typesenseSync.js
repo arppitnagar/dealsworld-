@@ -16,6 +16,7 @@ const {
   sanitizeDealForListResponse,
 } = require("./lib");
 const { client, DEALS_INDEX_NAME, ensureDealsCollection } = require("./typesenseClient");
+const { prewarmTitleTranslations } = require("./translation");
 
 const SYNC_STATE_DOC_ID = "typesenseSync";
 const SYNC_BATCH_LIMIT = 500;
@@ -78,10 +79,21 @@ async function syncBatch(watermarkMs) {
   }
 
   const documents = snap.docs.map((doc) => toTypesenseDocument(doc));
+  // "emplace", not "upsert": upsert replaces the whole document and would
+  // wipe the title_<lang> fields translation.js fills in separately.
   await client
     .collections(DEALS_INDEX_NAME)
     .documents()
-    .import(documents, { action: "upsert" });
+    .import(documents, { action: "emplace" });
+
+  // Buyer-visible deals get their titles translated now, into whichever
+  // languages buyers have been asking for, instead of on first view - so
+  // they're searchable in those scripts straight away.
+  prewarmTitleTranslations(
+    documents
+      .filter((doc) => doc.status === "active" && doc.approvalStatus === "approved")
+      .map((doc) => ({ id: doc.id, title: doc.title })),
+  );
 
   const lastDoc = snap.docs[snap.docs.length - 1];
   const nextWatermarkMs = toMillis(lastDoc.data()?.updatedAt) || watermarkMs;

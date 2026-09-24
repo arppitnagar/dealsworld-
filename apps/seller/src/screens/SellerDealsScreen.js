@@ -12,6 +12,7 @@ import {
   getStatusLabel,
   getDealThumbnails,
   toDate,
+  useI18n,
 } from "@dealsworld/shared";
 import { useSellerLiveDeals } from "../hooks/useSellerLiveDeals";
 import { useNotifications } from "../hooks/useNotifications";
@@ -28,14 +29,6 @@ import {
   formatEndsIn,
 } from "../utils/dealStatus";
 
-const TITLE_BY_KEY = {
-  active: "Active Deals",
-  pending: "Pending Deals",
-  completed: "Completed Deals",
-  rejected: "Rejected Deals",
-  expired: "Expired Deals",
-};
-
 // Deals tab: the same dashboard header as Dashboard (brand, greeting) plus
 // the search/sort/filter row. Tapping the tab opens a bottom-sheet status
 // picker with All/Active/Pending/Completed/Rejected/Expired; picking one
@@ -44,6 +37,7 @@ const TITLE_BY_KEY = {
 // attached.
 export default function SellerDealsScreen({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { deals, loading, sellerDisplayName } = useSellerLiveDeals();
   const { unreadCount } = useNotifications();
@@ -97,13 +91,13 @@ export default function SellerDealsScreen({ navigation }) {
   const sortedDeals = controls.applyFieldFilterAndSort(filteredDeals);
 
   const sectionTitle = controls.isSearching
-    ? "Search Results"
+    ? t("home.searchResults")
     : selectedStatus
-      ? TITLE_BY_KEY[selectedStatus] || "Deals"
-      : "All Deals";
+      ? t(`sellerDeals.titles.${selectedStatus}`, { defaultValue: t("tabs.deals") })
+      : t("deals.allDeals");
 
   if (loading) {
-    return <DealBuddyLoadingScreen label="Loading deals..." />;
+    return <DealBuddyLoadingScreen label={t("common.loadingDeals")} />;
   }
 
   const renderDeal = ({ item: deal }) => {
@@ -111,7 +105,7 @@ export default function SellerDealsScreen({ navigation }) {
     const expiryDate = toDate(deal.expiresAt);
     const endsInLabel =
       expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
-        ? formatEndsIn(expiryDate.getTime(), now)
+        ? formatEndsIn(expiryDate.getTime(), now, t)
         : null;
 
     return (
@@ -125,8 +119,8 @@ export default function SellerDealsScreen({ navigation }) {
           targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
           maxCount={deal.maxGroupSize ?? null}
           accentColor={getStatusColor(displayStatus, theme)}
-          badgeLabel={getStatusLabel(displayStatus)}
-          statusLabel={getStatusLabel(displayStatus)}
+          badgeLabel={getStatusLabel(displayStatus, t)}
+          statusLabel={getStatusLabel(displayStatus, t)}
           viewsCount={deal.viewsCount ?? deal.views ?? 0}
           favoritesCount={deal.favoritesCount ?? deal.favouritesCount ?? 0}
           ratingAvg={deal.ratingAvg ?? deal.rating ?? null}
@@ -134,7 +128,7 @@ export default function SellerDealsScreen({ navigation }) {
           originalPrice={deal.originalPrice}
           discountPrice={deal.discountPrice}
           expiryLabel={endsInLabel}
-          actionLabel="View Deal"
+          actionLabel={t("common.viewDeal")}
           onActionPress={() => navigation.navigate("DealDetails", { deal })}
         />
       </View>
@@ -182,15 +176,15 @@ export default function SellerDealsScreen({ navigation }) {
               icon="pricetag-outline"
               title={
                 controls.isSearching
-                  ? "No deals match your search."
+                  ? t("home.emptySearchTitle")
                   : selectedStatus
-                    ? "No deals with this status."
-                    : "No deals yet."
+                    ? t("sellerDeals.emptyStatus")
+                    : t("sellerDeals.empty")
               }
               subtitle={
                 controls.isSearching
-                  ? "Try a different search term."
-                  : "Pull to refresh or pick another status."
+                  ? t("home.emptySearchSubtitle")
+                  : t("sellerDeals.emptyStatusSubtitle")
               }
             />
           </View>

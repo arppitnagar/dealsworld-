@@ -1,3 +1,5 @@
+import { englishT } from "../i18n/translator";
+
 export const statusLabels = {
   active: "Active",
   completed: "Completed",
@@ -15,7 +17,9 @@ export const statusLabels = {
   refunded_to_buyer: "Refunded",
 };
 
-export const getStatusLabel = (status) => {
-  if (!status) return "Unknown";
-  return statusLabels[String(status).toLowerCase()] || "Unknown";
+// `t` is useI18n()'s translator; English when omitted.
+export const getStatusLabel = (status, t = englishT) => {
+  const key = String(status || "").toLowerCase();
+  if (!key || !statusLabels[key]) return t("status.unknown");
+  return t(`status.${key}`, { defaultValue: statusLabels[key] });
 };

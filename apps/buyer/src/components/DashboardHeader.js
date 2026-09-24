@@ -9,7 +9,7 @@ import {
 import { Search, X, Bell, ShoppingBag, MapPin, RefreshCw } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useTheme, AppInput } from "@dealsworld/shared";
+import { useTheme, useI18n, AppInput } from "@dealsworld/shared";
 
 // The one persistent "dashboard" header - brand lockup, bell, avatar, and
 // greeting. Home and the Deals tab render this exact same component so
@@ -37,7 +37,8 @@ export default function DashboardHeader({
 }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const greetingLabel = getGreetingLabel(now);
+  const { t } = useI18n();
+  const greetingLabel = getGreetingLabel(now, t);
   const avatarInitial = (displayName || "Buyer").trim()[0]?.toUpperCase() || "B";
 
   return (
@@ -100,7 +101,7 @@ export default function DashboardHeader({
 
       <View style={styles.greetingBlock}>
         <Text style={styles.greetingLabel}>{greetingLabel}</Text>
-        <Text style={styles.greetingName}>{displayName || "Buyer"}</Text>
+        <Text style={styles.greetingName}>{displayName || t("common.buyer")}</Text>
       </View>
 
       <TouchableOpacity
@@ -110,7 +111,7 @@ export default function DashboardHeader({
       >
         <MapPin size={13} color={theme.colors.primary} />
         <Text style={styles.locationPillText} numberOfLines={1}>
-          {defaultLocation || "All Cities"}
+          {defaultLocation || t("common.allCities")}
         </Text>
       </TouchableOpacity>
 
@@ -119,7 +120,7 @@ export default function DashboardHeader({
           <AppInput
             value={searchText}
             onChangeText={onChangeSearchText}
-            placeholder="Search deals, stores, categories"
+            placeholder={t("header.searchPlaceholder")}
             containerStyle={styles.searchInputContainer}
             inputStyle={styles.searchInput}
             leftElement={<Search size={17} color={theme.colors.textMuted} />}
@@ -160,11 +161,11 @@ export default function DashboardHeader({
   );
 }
 
-function getGreetingLabel(nowMs) {
+function getGreetingLabel(nowMs, t) {
   const hour = new Date(nowMs).getHours();
-  if (hour < 12) return "Good morning,";
-  if (hour < 18) return "Good afternoon,";
-  return "Good evening,";
+  if (hour < 12) return t("header.goodMorning");
+  if (hour < 18) return t("header.goodAfternoon");
+  return t("header.goodEvening");
 }
 
 const createStyles = (theme) =>

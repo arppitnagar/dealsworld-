@@ -38,6 +38,7 @@ const {
   toMillis,
 } = require("../lib");
 const { maybeExpireDeal } = require("../expirySweep");
+const { localizeDeals } = require("../translation");
 const { client: typesenseClient, DEALS_INDEX_NAME } = require("../typesenseClient");
 
 const router = express.Router();
@@ -104,7 +105,8 @@ router.get("/api/deals", async (req, res) => {
 
     const codedDeals = await ensureDealCodes(deals);
     const hydratedDeals = await attachSellerNamesToDeals(codedDeals);
-    res.json({ deals: hydratedDeals, nextCursor });
+    const localizedDeals = await localizeDeals(hydratedDeals, req.query.lang);
+    res.json({ deals: localizedDeals, nextCursor });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -156,7 +158,52 @@ router.get("/api/deals/seller/:sellerId", requireAuth, requireRole("seller", "ad
       .sort((x, y) => getCreatedMs(y) - getCreatedMs(x));
     const codedList = await ensureDealCodes(list);
     const hydratedList = await attachSellerNamesToDeals(codedList);
-    return res.json(hydratedList);
+    return res.json(await localizeDeals(hydratedList, req.query.lang));
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Batch title/description translation for deal data the client already has
+// in hand - e.g. the seller app's useSellerLiveDeals/DealDetails, which read
+// their own deals straight from a Firestore listener (real-time, and scoped
+// to one seller's small deal set) rather than through GET /api/deals, so
+// they can't get translations from that endpoint's normal localizeDeals()
+// pass. Takes the raw title/description text instead of re-reading the
+// deal from Firestore, since the caller already has it.
+router.post("/api/deals/translate-batch", requireAuth, async (req, res) => {
+  try {
+    const { items, lang, fields } = req.body || {};
+    if (!Array.isArray(items) || !items.length) {
+      return res.json({ translations: {} });
+    }
+    const allowedFields = ["title", "description"];
+    const useFields =
+      Array.isArray(fields) && fields.length
+        ? fields.filter((field) => allowedFields.includes(field))
+        : ["title"];
+    if (!useFields.length) return res.json({ translations: {} });
+
+    const deals = items
+      .filter((item) => item && item.id)
+      .slice(0, 200)
+      .map((item) => ({
+        id: String(item.id),
+        title: String(item.title || ""),
+        description: String(item.description || ""),
+      }));
+
+    const localized = await localizeDeals(deals, lang, { fields: useFields });
+    const translations = {};
+    localized.forEach((deal) => {
+      const entry = {};
+      useFields.forEach((field) => {
+        entry[field] = deal[field];
+      });
+      if (deal.sourceLanguage) entry.sourceLanguage = deal.sourceLanguage;
+      translations[deal.id] = entry;
+    });
+    return res.json({ translations });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -207,7 +254,7 @@ router.get("/api/deals/joined", requireAuth, async (req, res) => {
     const codedDeals = await ensureDealCodes(deals);
     const hydratedDeals = await attachSellerNamesToDeals(codedDeals);
     hydratedDeals.sort((a, b) => getCreatedMs(b) - getCreatedMs(a));
-    return res.json(hydratedDeals);
+    return res.json(await localizeDeals(hydratedDeals, req.query.lang));
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -228,7 +275,36 @@ router.get("/api/deals/:dealId", async (req, res) => {
     const dealCode = await maybeAssignDealCode(dealId, deal);
     if (dealCode) deal.dealCode = dealCode;
     const [hydratedDeal] = await attachSellerNamesToDeals([deal]);
-    return res.json(hydratedDeal || deal);
+    const [localizedDeal] = await localizeDeals([hydratedDeal || deal], req.query.lang, {
+      fields: ["title", "description"],
+    });
+    return res.json(localizedDeal);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Title + description of one deal in ?lang=, for the buyer's Deal Details
+// screen. Lists only ever translate titles (short, on every card);
+// descriptions are long and most deals are never opened, so they're only
+// translated - and paid for - once someone actually opens the deal.
+router.get("/api/deals/:dealId/translation", async (req, res) => {
+  try {
+    const { dealId } = req.params;
+    const snap = await db.collection(DEALS_COLLECTION).doc(dealId).get();
+    if (!snap.exists) {
+      return res.status(404).json({ error: "Deal not found" });
+    }
+    const data = snap.data() || {};
+    const deal = {
+      id: dealId,
+      title: String(data.title || ""),
+      description: String(data.description || ""),
+    };
+    const [localized] = await localizeDeals([deal], req.query.lang, {
+      fields: ["title", "description"],
+    });
+    return res.json(localized);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -591,16 +667,15 @@ router.post("/api/deals/:dealId/pay", requireAuth, requireRole("buyer", "admin")
 
       tx.set(joinRef, joinUpdates, { merge: true });
 
-      return { ok: true, sellerId: getSellerId(deal), title: deal.title || "your deal" };
+      return { ok: true, sellerId: getSellerId(deal), title: deal.title || "" };
     });
 
     if (!result.alreadyPaid && result.sellerId) {
-      const buyerName = getUserDisplayName(req.userProfile || {}, req.user.email) || "A buyer";
+      const buyerName = getUserDisplayName(req.userProfile || {}, req.user.email);
       await pushNotification({
         userId: result.sellerId,
         type: "payment_blocked",
-        title: "Payment received",
-        body: `${buyerName} paid for "${result.title}". Payment is held until delivery is confirmed.`,
+        message: { key: "paymentReceived", vars: { buyer: buyerName, title: result.title } },
         meta: { dealId },
       });
     }
@@ -699,7 +774,7 @@ router.post(
 
         return {
           buyerIds: joinsSnap.docs.map((doc) => doc.data().buyerId).filter(Boolean),
-          title: deal.title || "your deal",
+          title: deal.title || "",
           settlementAdjustments,
         };
       });
@@ -709,8 +784,7 @@ router.post(
           pushNotification({
             userId: buyerId,
             type: "deal_completed",
-            title: "Deal completed",
-            body: `The seller marked "${result.title}" as completed. It will be dispatched shortly.`,
+            message: { key: "dealCompleted", vars: { title: result.title } },
             meta: { dealId },
           }),
         ),
@@ -718,8 +792,7 @@ router.post(
           pushNotification({
             userId: buyerId,
             type: "price_adjusted",
-            title: "Price dropped!",
-            body: `More buyers joined "${result.title}" - ₹${adjustment} has been refunded to you as the group price dropped.`,
+            message: { key: "priceDropped", vars: { title: result.title, amount: adjustment } },
             meta: { dealId },
           }),
         ),
@@ -813,7 +886,7 @@ router.post(
         return {
           refundedBuyerIds,
           allBuyerIds: joinsSnap.docs.map((doc) => doc.data().buyerId).filter(Boolean),
-          title: deal.title || "your deal",
+          title: deal.title || "",
         };
       });
 
@@ -822,8 +895,7 @@ router.post(
           pushNotification({
             userId: buyerId,
             type: "deal_expired",
-            title: "Deal ended",
-            body: `"${result.title}" was ended by the seller before reaching enough buyers.`,
+            message: { key: "dealEndedBySeller", vars: { title: result.title } },
             meta: { dealId },
           }),
         ),
@@ -831,8 +903,7 @@ router.post(
           pushNotification({
             userId: buyerId,
             type: "payment_refunded",
-            title: "Payment refunded",
-            body: `Your held payment for "${result.title}" has been released back to you.`,
+            message: { key: "refunded", vars: { title: result.title } },
             meta: { dealId },
           }),
         ),

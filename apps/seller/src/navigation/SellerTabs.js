@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { BottomTabBar } from "@dealsworld/shared";
+import { BottomTabBar, useI18n } from "@dealsworld/shared";
 import SellerHomeScreen from "../screens/SellerHomeScreen";
 import SellerDealsScreen from "../screens/SellerDealsScreen";
 import SellerSearchScreen from "../screens/SellerSearchScreen";
@@ -21,30 +21,32 @@ const CreatePlaceholder = () => null;
 // shows, BottomTabBar pushes the real ScanQR stack screen instead.
 const ScanPlaceholder = () => null;
 
-const TAB_CONFIG = [
-  { key: "Dashboard", label: "Home", icon: icon("home", "home-outline") },
-  { key: "Deals", label: "Deals", icon: icon("pricetag", "pricetag-outline") },
+const getTabConfig = (t) => [
+  { key: "Dashboard", label: t("tabs.home"), icon: icon("home", "home-outline") },
+  { key: "Deals", label: t("tabs.deals"), icon: icon("pricetag", "pricetag-outline") },
   {
     key: "Create",
-    label: "Create",
+    label: t("tabs.create"),
     isFab: true,
     icon: (focused, color) => <Ionicons name="add" size={22} color={color} />,
     onPress: (navigation) => navigation.getParent()?.navigate("CreateDeal"),
   },
   {
     key: "ScanQR",
-    label: "Scan",
+    label: t("tabs.scan"),
     icon: icon("qr-code", "qr-code-outline"),
     onPress: (navigation) => navigation.getParent()?.navigate("ScanQR"),
   },
-  { key: "Search", label: "Search", icon: icon("search", "search-outline"), toggle: true },
+  { key: "Search", label: t("tabs.search"), icon: icon("search", "search-outline"), toggle: true },
 ];
 
 export default function SellerTabs() {
+  const { t } = useI18n();
+  const tabConfig = useMemo(() => getTabConfig(t), [t]);
   return (
     <Tab.Navigator
       screenOptions={{ headerShown: false }}
-      tabBar={(props) => <BottomTabBar {...props} tabs={TAB_CONFIG} />}
+      tabBar={(props) => <BottomTabBar {...props} tabs={tabConfig} />}
     >
       <Tab.Screen name="Dashboard" component={SellerHomeScreen} />
       <Tab.Screen name="Deals" component={SellerDealsScreen} />

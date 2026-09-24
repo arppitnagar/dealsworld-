@@ -14,8 +14,10 @@ import {
   AppInput,
   AppButton,
   DEAL_CATEGORIES,
+  getCategoryLabel,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
 } from "@dealsworld/shared";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { getProfileBaseStyles } from "../styles/profileStyles";
@@ -24,6 +26,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { profile, loading, updateProfile } = useUserProfile();
+  const { t } = useI18n();
 
   const [enabled, setEnabled] = useState(true);
   const [categories, setCategories] = useState([]);
@@ -97,21 +100,21 @@ export default function NotificationPreferencesScreen({ navigation }) {
     const min = minPrice.trim() === "" ? null : Number(minPrice);
     const max = maxPrice.trim() === "" ? null : Number(maxPrice);
     if (min != null && Number.isNaN(min)) {
-      await alert({ title: "Invalid price", message: "Minimum price must be a number." });
+      await alert({ title: t("notificationPrefs.invalidPrice"), message: t("notificationPrefs.minNotNumber") });
       return;
     }
     if (max != null && Number.isNaN(max)) {
-      await alert({ title: "Invalid price", message: "Maximum price must be a number." });
+      await alert({ title: t("notificationPrefs.invalidPrice"), message: t("notificationPrefs.maxNotNumber") });
       return;
     }
     if (min != null && max != null && min > max) {
-      await alert({ title: "Invalid price range", message: "Minimum price can't be greater than maximum price." });
+      await alert({ title: t("notificationPrefs.invalidRange"), message: t("notificationPrefs.minAboveMax") });
       return;
     }
 
     const ok = await confirm({
-      title: "Save notification preferences?",
-      confirmText: "Save Preferences",
+      title: t("notificationPrefs.confirmTitle"),
+      confirmText: t("notificationPrefs.save"),
     });
     if (!ok) return;
 
@@ -128,7 +131,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
       });
       navigation.goBack();
     } catch (error) {
-      await alert({ title: "Couldn't save", message: error.message || "Please try again.", destructive: true });
+      await alert({ title: t("notificationPrefs.saveFailed"), message: error.message || t("common.tryAgain"), destructive: true });
     } finally {
       setSaving(false);
     }
@@ -137,7 +140,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <TopPageHeader
-        title="Notification Preference"
+        title={t("profile.notificationPreference")}
         onBack={() => navigation.goBack()}
         rounded
       />
@@ -148,21 +151,15 @@ export default function NotificationPreferencesScreen({ navigation }) {
       >
         <View style={styles.heroCard}>
           <View style={styles.heroAccent} />
-          <Text style={styles.heroTitle}>Only hear about deals you want</Text>
-          <Text style={styles.heroSubtitle}>
-            Choose a city, category, or price range and we'll only notify you
-            about new deals that match. Payment and delivery updates always
-            reach you.
-          </Text>
+          <Text style={styles.heroTitle}>{t("notificationPrefs.heroTitle")}</Text>
+          <Text style={styles.heroSubtitle}>{t("notificationPrefs.heroSubtitle")}</Text>
         </View>
 
         <View style={styles.card}>
           <View style={styles.switchRow}>
             <View style={styles.switchTextWrap}>
-              <Text style={styles.rowTitle}>New deal notifications</Text>
-              <Text style={styles.rowSubtitle}>
-                Turn off to stop new-deal alerts entirely.
-              </Text>
+              <Text style={styles.rowTitle}>{t("notificationPrefs.newDeals")}</Text>
+              <Text style={styles.rowSubtitle}>{t("notificationPrefs.newDealsHint")}</Text>
             </View>
             <Switch
               value={enabled}
@@ -180,10 +177,8 @@ export default function NotificationPreferencesScreen({ navigation }) {
           style={[styles.card, !enabled && styles.cardDisabled]}
           pointerEvents={enabled ? "auto" : "none"}
         >
-          <Text style={styles.sectionTitle}>Categories</Text>
-          <Text style={styles.sectionHint}>
-            Leave all unselected to get every category.
-          </Text>
+          <Text style={styles.sectionTitle}>{t("notificationPrefs.categories")}</Text>
+          <Text style={styles.sectionHint}>{t("notificationPrefs.categoriesHint")}</Text>
           <View style={styles.chipWrap}>
             {DEAL_CATEGORIES.map((category) => {
               const isSelected = categories.includes(category.label);
@@ -201,7 +196,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
                       isSelected && styles.chipLabelActive,
                     ]}
                   >
-                    {category.label}
+                    {getCategoryLabel(category.label, t)}
                   </Text>
                   {isSelected ? (
                     <Ionicons
@@ -220,14 +215,12 @@ export default function NotificationPreferencesScreen({ navigation }) {
           style={[styles.card, !enabled && styles.cardDisabled]}
           pointerEvents={enabled ? "auto" : "none"}
         >
-          <Text style={styles.sectionTitle}>Cities</Text>
-          <Text style={styles.sectionHint}>
-            Leave empty to get deals from every city.
-          </Text>
+          <Text style={styles.sectionTitle}>{t("notificationPrefs.cities")}</Text>
+          <Text style={styles.sectionHint}>{t("notificationPrefs.citiesHint")}</Text>
           <View style={styles.cityInputRow}>
             <AppInput
               containerStyle={styles.cityInput}
-              placeholder="e.g. Pune"
+              placeholder={t("notificationPrefs.cityPlaceholder")}
               value={cityInput}
               onChangeText={setCityInput}
               onSubmitEditing={addCity}
@@ -261,14 +254,12 @@ export default function NotificationPreferencesScreen({ navigation }) {
           style={[styles.card, !enabled && styles.cardDisabled]}
           pointerEvents={enabled ? "auto" : "none"}
         >
-          <Text style={styles.sectionTitle}>Price range</Text>
-          <Text style={styles.sectionHint}>
-            Leave blank for no lower or upper limit.
-          </Text>
+          <Text style={styles.sectionTitle}>{t("notificationPrefs.priceRange")}</Text>
+          <Text style={styles.sectionHint}>{t("notificationPrefs.priceRangeHint")}</Text>
           <View style={styles.priceRow}>
             <AppInput
               containerStyle={styles.priceInput}
-              label="Min (₹)"
+              label={t("notificationPrefs.min")}
               placeholder="0"
               keyboardType="numeric"
               value={minPrice}
@@ -276,8 +267,8 @@ export default function NotificationPreferencesScreen({ navigation }) {
             />
             <AppInput
               containerStyle={styles.priceInput}
-              label="Max (₹)"
-              placeholder="No limit"
+              label={t("notificationPrefs.max")}
+              placeholder={t("notificationPrefs.noLimit")}
               keyboardType="numeric"
               value={maxPrice}
               onChangeText={setMaxPrice}
@@ -286,7 +277,7 @@ export default function NotificationPreferencesScreen({ navigation }) {
         </View>
 
         <AppButton
-          title="Save Preferences"
+          title={t("notificationPrefs.save")}
           onPress={handleSave}
           loading={saving}
         />

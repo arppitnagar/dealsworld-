@@ -51,11 +51,12 @@ async function approveUserInternal(uid, actorUid) {
   await pushNotification({
     userId: uid,
     type: "account_approved",
-    title: "Account approved",
-    body:
-      String(user.role || "").toLowerCase() === "seller"
-        ? "Your seller account is approved."
-        : "Your account is approved.",
+    message: {
+      key:
+        String(user.role || "").toLowerCase() === "seller"
+          ? "accountApprovedSeller"
+          : "accountApproved",
+    },
     meta: { approvedBy: actorUid },
   });
 }
@@ -88,8 +89,10 @@ async function rejectUserInternal(uid, actorUid, reasonRaw) {
   await pushNotification({
     userId: uid,
     type: "account_rejected",
-    title: "Account rejected",
-    body: reason || "Your account request was rejected by admin.",
+    // The admin's typed reason is sent as written, not translated.
+    message: reason
+      ? { key: "accountRejectedReason", vars: { reason } }
+      : { key: "accountRejected" },
     meta: { rejectedBy: actorUid },
   });
 }
@@ -266,8 +269,7 @@ router.post("/api/admin/deals/:dealId/approve", requireAuth, requireRole("admin"
     await pushNotification({
       userId: sellerId,
       type: "deal_approved",
-      title: "Deal approved",
-      body: deal.title || "Your deal is approved",
+      message: { key: "dealApproved", vars: { title: deal.title || "" } },
       meta: { dealId },
     });
 
@@ -321,8 +323,9 @@ router.post("/api/admin/deals/:dealId/reject", requireAuth, requireRole("admin")
     await pushNotification({
       userId: sellerId,
       type: "deal_rejected",
-      title: "Deal rejected",
-      body: reason || "Your deal was rejected by admin",
+      message: reason
+        ? { key: "dealRejectedReason", vars: { reason } }
+        : { key: "dealRejected" },
       meta: { dealId },
     });
 

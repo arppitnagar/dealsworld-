@@ -12,6 +12,7 @@ import {
   getStatusLabel,
   getDealThumbnails,
   toDate,
+  useI18n,
 } from "@dealsworld/shared";
 import { useSellerLiveDeals } from "../hooks/useSellerLiveDeals";
 import { useNotifications } from "../hooks/useNotifications";
@@ -29,6 +30,7 @@ import { getDealDisplayStatus, formatEndsIn } from "../utils/dealStatus";
 // for.
 export default function SellerSearchScreen({ navigation }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { deals, loading, sellerDisplayName } = useSellerLiveDeals();
   const { unreadCount } = useNotifications();
@@ -63,7 +65,7 @@ export default function SellerSearchScreen({ navigation }) {
   const hasDeals = sortedDeals?.length > 0;
 
   if (loading) {
-    return <DealBuddyLoadingScreen label="Loading deals..." />;
+    return <DealBuddyLoadingScreen label={t("common.loadingDeals")} />;
   }
 
   const renderDeal = ({ item: deal }) => {
@@ -71,7 +73,7 @@ export default function SellerSearchScreen({ navigation }) {
     const expiryDate = toDate(deal.expiresAt);
     const endsInLabel =
       expiryDate instanceof Date && !Number.isNaN(expiryDate.getTime())
-        ? formatEndsIn(expiryDate.getTime(), now)
+        ? formatEndsIn(expiryDate.getTime(), now, t)
         : null;
 
     return (
@@ -85,8 +87,8 @@ export default function SellerSearchScreen({ navigation }) {
           targetCount={deal.minGroupSize ?? deal.minThreshold ?? 0}
           maxCount={deal.maxGroupSize ?? null}
           accentColor={getStatusColor(displayStatus, theme)}
-          badgeLabel={getStatusLabel(displayStatus)}
-          statusLabel={getStatusLabel(displayStatus)}
+          badgeLabel={getStatusLabel(displayStatus, t)}
+          statusLabel={getStatusLabel(displayStatus, t)}
           viewsCount={deal.viewsCount ?? deal.views ?? 0}
           favoritesCount={deal.favoritesCount ?? deal.favouritesCount ?? 0}
           ratingAvg={deal.ratingAvg ?? deal.rating ?? null}
@@ -94,7 +96,7 @@ export default function SellerSearchScreen({ navigation }) {
           originalPrice={deal.originalPrice}
           discountPrice={deal.discountPrice}
           expiryLabel={endsInLabel}
-          actionLabel="View Deal"
+          actionLabel={t("common.viewDeal")}
           onActionPress={() => navigation.navigate("DealDetails", { deal })}
         />
       </View>
@@ -129,7 +131,7 @@ export default function SellerSearchScreen({ navigation }) {
         refreshControl={<RefreshControl refreshing={false} onRefresh={() => {}} />}
         ListHeaderComponent={
           <CardHeader
-            title={`${controls.isSearching ? "Search Results" : "All Deals"} (${sortedDeals?.length || 0})`}
+            title={`${controls.isSearching ? t("home.searchResults") : t("deals.allDeals")} (${sortedDeals?.length || 0})`}
             right={<ViewModeToggle mode={viewMode} onChange={handleChangeViewMode} />}
           />
         }
@@ -137,11 +139,11 @@ export default function SellerSearchScreen({ navigation }) {
           <View style={styles.emptyWrap}>
             <EmptyState
               icon="search-outline"
-              title={controls.isSearching ? "No deals match your search." : "No deals yet."}
+              title={controls.isSearching ? t("home.emptySearchTitle") : t("sellerDeals.empty")}
               subtitle={
                 controls.isSearching
-                  ? "Try a different search term."
-                  : "Pull to refresh or check back later."
+                  ? t("home.emptySearchSubtitle")
+                  : t("search.emptySubtitle")
               }
             />
           </View>

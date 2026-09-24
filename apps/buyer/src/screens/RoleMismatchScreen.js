@@ -1,20 +1,19 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { AppButton, useTheme } from "@dealsworld/shared";
+import { AppButton, useTheme, useI18n } from "@dealsworld/shared";
 import { useAuth } from "../context/AuthContext";
 
 export default function RoleMismatchScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { logout } = useAuth();
+  const { t } = useI18n();
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Seller account detected</Text>
-      <Text style={styles.subtitle}>
-        Please use the Seller app to access the seller dashboard.
-      </Text>
-      <AppButton title="Logout" onPress={logout} style={styles.button} />
+      <Text style={styles.title}>{t("roleMismatch.title")}</Text>
+      <Text style={styles.subtitle}>{t("roleMismatch.subtitle")}</Text>
+      <AppButton title={t("profile.logout")} onPress={logout} style={styles.button} />
     </View>
   );
 }

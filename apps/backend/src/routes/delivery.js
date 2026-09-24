@@ -142,7 +142,7 @@ router.post(
           createdAt: FieldValue.serverTimestamp(),
         });
 
-        return { buyerIds, title: deal.title || "your deal" };
+        return { buyerIds, title: deal.title || "" };
       });
 
       await Promise.all(
@@ -150,8 +150,7 @@ router.post(
           pushNotification({
             userId: buyerId,
             type: "deal_dispatched",
-            title: "Your order is on the way!",
-            body: `${result.title} has been dispatched. Open the app to view your delivery confirmation code.`,
+            message: { key: "dispatched", vars: { title: result.title } },
             meta: { dealId },
           }),
         ),
@@ -275,7 +274,7 @@ router.post(
           delivered: true,
           rollupComplete,
           sellerId: getSellerId(deal),
-          title: deal.title || "your deal",
+          title: deal.title || "",
         };
       });
 
@@ -287,16 +286,14 @@ router.post(
       await pushNotification({
         userId: result.sellerId,
         type: "delivery_confirmed",
-        title: "Delivery confirmed",
-        body: `${buyerName || "A buyer"} confirmed delivery for ${result.title}.`,
+        message: { key: "deliveryConfirmed", vars: { buyer: buyerName, title: result.title } },
         meta: { dealId },
       });
       if (result.rollupComplete) {
         await pushNotification({
           userId: result.sellerId,
           type: "deal_all_delivered",
-          title: "All orders delivered",
-          body: `Every joined buyer has confirmed delivery for ${result.title}.`,
+          message: { key: "allDelivered", vars: { title: result.title } },
           meta: { dealId },
         });
       }
@@ -471,7 +468,7 @@ router.post(
           createdAt: FieldValue.serverTimestamp(),
         });
 
-        return { delivered: true, rollupComplete, buyerId, title: deal.title || "your deal" };
+        return { delivered: true, rollupComplete, buyerId, title: deal.title || "" };
       });
 
       if (result.alreadyDelivered) {
@@ -489,8 +486,7 @@ router.post(
       await pushNotification({
         userId: buyerId,
         type: "pickup_confirmed",
-        title: "Pickup confirmed",
-        body: `Your pickup for "${result.title}" has been confirmed by the seller.`,
+        message: { key: "pickupConfirmed", vars: { title: result.title } },
         meta: { dealId },
       });
 
@@ -544,7 +540,7 @@ router.post(
           createdAt: FieldValue.serverTimestamp(),
         });
 
-        return { delivered: true, rollupComplete, title: deal.title || "your deal" };
+        return { delivered: true, rollupComplete, title: deal.title || "" };
       });
 
       if (result.alreadyDelivered) {
@@ -554,8 +550,7 @@ router.post(
       await pushNotification({
         userId: buyerId,
         type: "delivery_marked_by_seller",
-        title: "Delivery marked complete",
-        body: `The seller marked your order for "${result.title}" as delivered.`,
+        message: { key: "deliveryMarkedBySeller", vars: { title: result.title } },
         meta: { dealId },
       });
 

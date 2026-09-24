@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
-import { AppButton, TopPageHeader, useTheme } from "@dealsworld/shared";
+import { AppButton, TopPageHeader, useTheme, useI18n } from "@dealsworld/shared";
 import { useConfirmPickup } from "../hooks/useDeliveryStatus";
 
 // Matches the payload PickupQrDisplay.js encodes on the buyer side:
@@ -22,6 +22,7 @@ function parsePickupPayload(raw) {
 export default function ScanQrScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const [permission, requestPermission] = useCameraPermissions();
   const { mutate: confirmPickup } = useConfirmPickup();
   const [result, setResult] = useState(null); // { status: "success"|"error", message, buyerName }
@@ -38,7 +39,7 @@ export default function ScanQrScreen({ navigation }) {
       const payload = parsePickupPayload(data);
       if (!payload) {
         scanLockRef.current = true;
-        setResult({ status: "error", message: "Not a DealsWorld pickup QR code." });
+        setResult({ status: "error", message: t("scanQr.notPickupCode") });
         return;
       }
 
@@ -48,28 +49,35 @@ export default function ScanQrScreen({ navigation }) {
           if (data?.alreadyDelivered) {
             setResult({
               status: "error",
-              message: `${data.buyerName || "This buyer"} was already confirmed for pickup.`,
+              message: t("scanQr.alreadyConfirmed", {
+                buyer: data.buyerName || t("scanQr.thisBuyer"),
+              }),
             });
             return;
           }
           setResult({
             status: "success",
-            message: `Pickup confirmed for ${data?.buyerName || "buyer"}${data?.title ? ` — ${data.title}` : ""}.`,
+            message: data?.title
+              ? t("scanQr.confirmedWithTitle", {
+                  buyer: data?.buyerName || t("scanQr.buyer"),
+                  title: data.title,
+                })
+              : t("scanQr.confirmed", { buyer: data?.buyerName || t("scanQr.buyer") }),
           });
         },
         onError: (error) => {
           const message =
-            error?.response?.data?.error || error?.message || "Could not confirm this pickup.";
+            error?.response?.data?.error || error?.message || t("scanQr.failed");
           setResult({ status: "error", message });
         },
       });
     },
-    [confirmPickup],
+    [confirmPickup, t],
   );
 
   return (
     <View style={styles.screen}>
-      <TopPageHeader title="Scan Pickup QR" onBack={() => navigation.goBack()} rounded />
+      <TopPageHeader title={t("scanQr.title")} onBack={() => navigation.goBack()} rounded />
 
       <View style={styles.cameraWrap}>
         {!permission ? (
@@ -77,10 +85,8 @@ export default function ScanQrScreen({ navigation }) {
         ) : !permission.granted ? (
           <View style={styles.permissionWrap}>
             <Ionicons name="camera-outline" size={40} color={theme.colors.textMuted} />
-            <Text style={styles.permissionText}>
-              Camera access is needed to scan buyers' pickup QR codes.
-            </Text>
-            <AppButton title="Grant Camera Access" onPress={requestPermission} />
+            <Text style={styles.permissionText}>{t("scanQr.permission")}</Text>
+            <AppButton title={t("scanQr.grant")} onPress={requestPermission} />
           </View>
         ) : (
           <>
@@ -110,10 +116,10 @@ export default function ScanQrScreen({ navigation }) {
             }
           />
           <Text style={styles.resultText}>{result.message}</Text>
-          <AppButton title="Scan Next" onPress={rearm} style={styles.resultButton} />
+          <AppButton title={t("scanQr.next")} onPress={rearm} style={styles.resultButton} />
         </View>
       ) : (
-        <Text style={styles.hintText}>Point the camera at the buyer's pickup QR code.</Text>
+        <Text style={styles.hintText}>{t("scanQr.hint")}</Text>
       )}
     </View>
   );

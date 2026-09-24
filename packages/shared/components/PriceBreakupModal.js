@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { X } from "lucide-react-native";
 import { useTheme } from "../theme/ThemeProvider";
+import { useI18n } from "../i18n/I18nProvider";
 import PriceBreakupCard from "./PriceBreakupCard";
 
 /**
@@ -16,6 +17,7 @@ export default function PriceBreakupModal({
   title = "Price Breakup",
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   return (
@@ -36,7 +38,7 @@ export default function PriceBreakupModal({
             <TouchableOpacity
               style={styles.closeButton}
               onPress={onClose}
-              accessibilityLabel="Close price breakup"
+              accessibilityLabel={t("priceBreakup.close")}
             >
               <X size={16} color={theme.colors.text} />
             </TouchableOpacity>

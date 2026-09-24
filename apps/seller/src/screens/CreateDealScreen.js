@@ -38,7 +38,11 @@ import {
   DEAL_CATEGORY_LABELS,
   ConfirmModal,
   useConfirmModal,
+  useI18n,
+  getCategoryLabel,
+  getDeliveryModeLabel,
 } from "@dealsworld/shared";
+import { getAddressLabel } from "../utils/addressLabels";
 import { useAddresses } from "../hooks/useAddresses";
 import { useAuth } from "../context/AuthContext";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -60,24 +64,25 @@ charge. */
 const trimString = (value) =>
   typeof value === "string" ? value.trim() : value;
 
-const dealSchema = Yup.object().shape({
+// Built per language (messages come from t); memoized in the screen.
+const createDealSchema = (t) => Yup.object().shape({
   title: Yup.string()
     .transform(trimString)
-    .required("Deal title is required")
-    .min(5, "Title must be at least 5 characters"),
+    .required(t("dealErrors.titleRequired"))
+    .min(5, t("dealErrors.titleMin")),
   description: Yup.string()
     .transform(trimString)
-    .required("Description is required")
-    .min(10, "Description must be at least 10 characters"),
-  category: Yup.string().required("Please select a category"),
+    .required(t("dealErrors.descriptionRequired"))
+    .min(10, t("dealErrors.descriptionMin")),
+  category: Yup.string().required(t("dealErrors.categoryRequired")),
   categoryOther: Yup.string()
     .transform(trimString)
     .when("category", {
       is: "Other",
       then: (schema) =>
         schema
-          .required("Please specify the category")
-          .min(2, "Category must be at least 2 characters"),
+          .required(t("dealErrors.categoryOtherRequired"))
+          .min(2, t("dealErrors.categoryOtherMin")),
       otherwise: (schema) => schema.nullable(),
     }),
   originalPrice: Yup.number()
@@ -88,9 +93,9 @@ const dealSchema = Yup.object().shape({
         ? undefined
         : value,
     )
-    .typeError("Original price must be a number")
-    .required("Original price is required")
-    .moreThan(0, "Original price must be greater than zero"),
+    .typeError(t("dealErrors.originalNumber"))
+    .required(t("dealErrors.originalRequired"))
+    .moreThan(0, t("dealErrors.originalPositive")),
   discountPrice: Yup.number()
     .transform((value, originalValue) =>
       originalValue === "" ||
@@ -99,12 +104,12 @@ const dealSchema = Yup.object().shape({
         ? undefined
         : value,
     )
-    .typeError("Deal price must be a number")
-    .required("Deal price is required")
-    .moreThan(0, "Deal price must be greater than zero")
+    .typeError(t("dealErrors.dealNumber"))
+    .required(t("dealErrors.dealRequired"))
+    .moreThan(0, t("dealErrors.dealPositive"))
     .test(
       "is-lower",
-      "Deal price must be lower than original price",
+      t("dealErrors.dealLower"),
       function (value) {
         const { originalPrice } = this.parent;
         if (!Number.isFinite(Number(value))) return true;
@@ -113,19 +118,19 @@ const dealSchema = Yup.object().shape({
       },
     ),
   minGroupSize: Yup.number()
-    .required("Minimum buyers count is required")
-    .min(2, "Minimum buyers must be at least 2"),
+    .required(t("dealErrors.minRequired"))
+    .min(2, t("dealErrors.minAtLeast2")),
   maxGroupSize: Yup.number()
     .transform((value, originalValue) =>
       originalValue === "" || originalValue === null || originalValue === undefined
         ? undefined
         : value,
     )
-    .typeError("Max buyers must be a number")
+    .typeError(t("dealErrors.maxNumber"))
     .nullable()
     .test(
       "gte-min",
-      "Max buyers must be greater than or equal to minimum buyers",
+      t("dealErrors.maxGteMin"),
       function (value) {
         if (value === undefined || value === null) return true;
         const { minGroupSize } = this.parent;
@@ -134,17 +139,17 @@ const dealSchema = Yup.object().shape({
       },
     ),
   expiresAt: Yup.date()
-    .required("Expiry date is required")
-    .min(new Date(), "Expiry date cannot be in the past"),
-  city: Yup.string().transform(trimString).required("City is required"),
+    .required(t("dealErrors.expiryRequired"))
+    .min(new Date(), t("dealErrors.expiryPast")),
+  city: Yup.string().transform(trimString).required(t("dealErrors.cityRequired")),
   location: Yup.string().transform(trimString),
-  deliveryMode: Yup.string().required("Delivery mode is required"),
+  deliveryMode: Yup.string().required(t("dealErrors.deliveryModeRequired")),
   deliveryCharge: Yup.number().when("deliveryMode", {
     is: "Paid Home Delivery",
     then: (schema) =>
       schema
-        .required("Delivery charge is required")
-        .min(1, "Charge must be at least ₹1"),
+        .required(t("dealErrors.chargeRequired"))
+        .min(1, t("dealErrors.chargeMin")),
     otherwise: (schema) => schema.nullable(),
   }),
   gstPercent: Yup.number()
@@ -153,10 +158,10 @@ const dealSchema = Yup.object().shape({
         ? undefined
         : value,
     )
-    .typeError("GST must be a number")
-    .required("GST is required (enter 0 if not applicable)")
-    .min(0, "GST cannot be negative")
-    .max(100, "GST cannot be more than 100%"),
+    .typeError(t("dealErrors.gstNumber"))
+    .required(t("dealErrors.gstRequired"))
+    .min(0, t("dealErrors.gstNegative"))
+    .max(100, t("dealErrors.gstMax")),
 });
 
 /**
@@ -189,6 +194,7 @@ export default function CreateDealScreen({ route, navigation }) {
   const isEditMode = !!deal && !isDuplicateMode;
   const isReadOnly = (isCompleted || isLockedForEdit) && !isDuplicateMode;
   const { confirm, alert, confirmModalProps } = useConfirmModal();
+  const { t } = useI18n();
   const isExpiryLocked = isReadOnly;
   const sellerDisplayName = useMemo(() => {
     const explicitName =
@@ -653,15 +659,17 @@ export default function CreateDealScreen({ route, navigation }) {
 
     const newErrors = {};
     if (!Array.isArray(images) || images.length === 0) {
-      newErrors.images = "Please add at least one deal image";
+      newErrors.images = t("dealErrors.imageRequired");
     }
     if (form.pricingTiersEnabled) {
-      const tierError = validatePricingTiers(buildPricingTiersPayload(form));
+      const tierError = validatePricingTiers(buildPricingTiersPayload(form), t);
       if (tierError) newErrors.pricingTiers = tierError;
     }
 
     try {
-      await dealSchema.validate(cleanData, { abortEarly: false });
+      // Rebuilt per call (cheap) so Yup's .min(new Date()) is "now" at
+      // submit time, and messages follow the current language.
+      await createDealSchema(t).validate(cleanData, { abortEarly: false });
     } catch (err) {
       if (Array.isArray(err?.inner) && err.inner.length > 0) {
         err.inner.forEach((error) => {
@@ -683,34 +691,32 @@ export default function CreateDealScreen({ route, navigation }) {
       if (cleanData.deliveryMode === "Pick from Store") {
         if (addressesLoading) {
           await alert({
-            title: "Please wait",
-            message: "Loading seller addresses. Try again in a moment.",
+            title: t("dealDetails.pleaseWait"),
+            message: t("createDeal.loadingAddresses"),
           });
           return false;
         }
         const hasAnyAddress = Array.isArray(addresses) && addresses.length > 0;
         if (!hasAnyAddress) {
           setErrors({
-            deliveryMode:
-              "Add at least one seller address before selecting Pick from Store.",
+            deliveryMode: t("createDeal.needAddressForPickup"),
           });
           const addAddress = await confirm({
-            title: "Store address required",
-            message: "To publish a pickup deal, add at least one seller address first.",
-            confirmText: "Add Address",
+            title: t("createDeal.storeAddressRequired"),
+            message: t("createDeal.storeAddressRequiredMessage"),
+            confirmText: t("addresses.add"),
           });
           if (addAddress) navigation.navigate("AddressForm");
           return false;
         }
         if (!effectiveStoreAddress) {
           setErrors({
-            deliveryMode:
-              "Select a store address before publishing this pickup deal.",
+            deliveryMode: t("createDeal.selectStoreBeforePublish"),
           });
           const selectAddress = await confirm({
-            title: "Select store address",
-            message: "No default address is selected. Please choose one from your saved addresses.",
-            confirmText: "Select Address",
+            title: t("createDeal.selectStoreAddress"),
+            message: t("createDeal.noDefaultAddressMessage"),
+            confirmText: t("createDeal.selectAddress"),
           });
           if (selectAddress) setStoreAddressModalVisible(true);
           return false;
@@ -720,8 +726,8 @@ export default function CreateDealScreen({ route, navigation }) {
       return true;
     } catch (err) {
       await alert({
-        title: "Validation failed",
-        message: err?.message || "Something went wrong while validating this deal.",
+        title: t("createDeal.validationFailed"),
+        message: err?.message || t("createDeal.validationError"),
         destructive: true,
       });
       return false;
@@ -740,11 +746,11 @@ export default function CreateDealScreen({ route, navigation }) {
     if (!isValid) return;
 
     const ok = await confirm({
-      title: isEditMode ? "Save changes to this deal?" : "Publish this deal?",
+      title: isEditMode ? t("createDeal.confirmSaveTitle") : t("createDeal.confirmPublishTitle"),
       message: isEditMode
-        ? "Buyers who already joined will see the updated details."
-        : "It will be sent for admin approval before it's visible to buyers.",
-      confirmText: isEditMode ? "Save Changes" : "Publish",
+        ? t("createDeal.confirmSaveMessage")
+        : t("createDeal.confirmPublishMessage"),
+      confirmText: isEditMode ? t("common.saveChanges") : t("createDeal.publish"),
     });
     if (!ok) return;
 
@@ -840,7 +846,7 @@ export default function CreateDealScreen({ route, navigation }) {
       setShowSuccess(true);
     } catch (error) {
       console.error("Detailed Error:", error);
-      await alert({ title: "Publish Failed", message: error.message, destructive: true });
+      await alert({ title: t("createDeal.publishFailed"), message: error.message, destructive: true });
     } finally {
       setLoading(false);
     }
@@ -853,12 +859,12 @@ export default function CreateDealScreen({ route, navigation }) {
       <TopPageHeader
         title={
           isReadOnly
-            ? "View Deal"
+            ? t("common.viewDeal")
             : isEditMode
-              ? "Edit Deal"
-              : "Create New Deal"
+              ? t("createDeal.editTitle")
+              : t("createDeal.createTitle")
         }
-        subtitle="Manage your deal details quickly"
+        subtitle={t("createDeal.subtitle")}
         onBack={() => navigation.goBack()}
         style={styles.header}
         titleStyle={styles.headerTitle}
@@ -879,9 +885,7 @@ export default function CreateDealScreen({ route, navigation }) {
                   color={theme.colors.amberText}
                 />
                 <Text style={styles.readOnlyBannerText}>
-                  {isCompleted
-                    ? "This deal has been completed. Editing is disabled; you may create a duplicate deal."
-                    : "This deal already has buyers who joined or paid, so it can no longer be edited. You may create a duplicate deal."}
+                  {isCompleted ? t("createDeal.completedBanner") : t("createDeal.lockedBanner")}
                 </Text>
               </View>
             )}
@@ -919,12 +923,10 @@ export default function CreateDealScreen({ route, navigation }) {
                         isDuplicateMode && styles.bannerActionTitleCompact,
                       ]}
                     >
-                      Duplicate
+                      {t("createDeal.duplicate")}
                     </Text>
                     {!isDuplicateMode && (
-                      <Text style={styles.bannerActionSub}>
-                        Create an editable copy
-                      </Text>
+                      <Text style={styles.bannerActionSub}>{t("createDeal.duplicateSub")}</Text>
                     )}
                   </View>
                 </View>
@@ -964,12 +966,10 @@ export default function CreateDealScreen({ route, navigation }) {
                         isDuplicateMode && styles.bannerActionTitleCompact,
                       ]}
                     >
-                      Dashboard
+                      {t("createDeal.dashboard")}
                     </Text>
                     {!isDuplicateMode && (
-                      <Text style={styles.bannerActionSub}>
-                        Back to overview
-                      </Text>
+                      <Text style={styles.bannerActionSub}>{t("createDeal.dashboardSub")}</Text>
                     )}
                   </View>
                 </View>
@@ -1043,17 +1043,14 @@ export default function CreateDealScreen({ route, navigation }) {
                   size={16}
                   color={theme.colors.primary}
                 />
-                <Text style={styles.storeAddressPanelTitle}>Store Address</Text>
+                <Text style={styles.storeAddressPanelTitle}>{t("createDeal.storeAddress")}</Text>
               </View>
               {effectiveStoreAddress ? (
                 <Text style={styles.storeAddressText}>
                   {formatStoreAddress(effectiveStoreAddress)}
                 </Text>
               ) : (
-                <Text style={styles.storeAddressHint}>
-                  No default store address selected. Choose one from your saved
-                  addresses.
-                </Text>
+                <Text style={styles.storeAddressHint}>{t("createDeal.noDefaultStoreAddress")}</Text>
               )}
               <View style={styles.storeAddressPanelActions}>
                 <TouchableOpacity
@@ -1061,7 +1058,7 @@ export default function CreateDealScreen({ route, navigation }) {
                   onPress={() => navigation.navigate("AddressBook")}
                 >
                   <Text style={styles.storeAddressActionGhostText}>
-                    Manage Addresses
+                    {t("createDeal.manageAddresses")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1070,8 +1067,8 @@ export default function CreateDealScreen({ route, navigation }) {
                 >
                   <Text style={styles.storeAddressActionPrimaryText}>
                     {effectiveStoreAddress
-                      ? "Change Address"
-                      : "Select Address"}
+                      ? t("dealDetails.changeAddress")
+                      : t("createDeal.selectAddress")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1114,7 +1111,7 @@ export default function CreateDealScreen({ route, navigation }) {
           {/* Only show the button if NOT in Read Only mode */}
           {!isReadOnly && (
             <AppButton
-              title="Submit for Approval"
+              title={t("createDeal.submit")}
               onPress={handleSubmit}
               loading={loading}
               disabled={loading}
@@ -1148,7 +1145,7 @@ export default function CreateDealScreen({ route, navigation }) {
                 }}
               >
                 <Text style={{ fontSize: 22 }}>{c.icon}</Text>
-                <Text style={{ marginLeft: 12 }}>{c.label}</Text>
+                <Text style={{ marginLeft: 12 }}>{getCategoryLabel(c.label, t)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1177,7 +1174,7 @@ export default function CreateDealScreen({ route, navigation }) {
                   setDeliveryModalVisible(false);
                 }}
               >
-                <Text>{mode}</Text>
+                <Text>{getDeliveryModeLabel(mode, t)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1189,7 +1186,7 @@ export default function CreateDealScreen({ route, navigation }) {
         <View style={styles.overlay}>
           <View style={[styles.card, styles.storeAddressModalCard]}>
             <View style={styles.storeAddressModalHeader}>
-              <Text style={styles.storeAddressModalTitle}>Select City</Text>
+              <Text style={styles.storeAddressModalTitle}>{t("createDeal.selectCity")}</Text>
               <TouchableOpacity
                 onPress={() => setCityModalVisible(false)}
                 style={styles.storeAddressModalClose}
@@ -1222,7 +1219,7 @@ export default function CreateDealScreen({ route, navigation }) {
           <View style={[styles.card, styles.storeAddressModalCard]}>
             <View style={styles.storeAddressModalHeader}>
               <Text style={styles.storeAddressModalTitle}>
-                Select Store Address
+                {t("createDeal.selectStoreAddressTitle")}
               </Text>
               <TouchableOpacity
                 onPress={() => setStoreAddressModalVisible(false)}
@@ -1234,7 +1231,7 @@ export default function CreateDealScreen({ route, navigation }) {
 
             {addressesLoading ? (
               <Text style={styles.storeAddressLoading}>
-                Loading addresses...
+                {t("dealDetails.loadingAddresses")}
               </Text>
             ) : addresses?.length ? (
               <ScrollView
@@ -1255,7 +1252,7 @@ export default function CreateDealScreen({ route, navigation }) {
                     >
                       <View style={styles.storeAddressOptionHeader}>
                         <Text style={styles.storeAddressOptionLabel}>
-                          {item.label || "Address"}
+                          {getAddressLabel(item.label, t)}
                         </Text>
                         {item.isDefault ? (
                           <View style={styles.storeAddressDefaultTag}>
@@ -1265,7 +1262,7 @@ export default function CreateDealScreen({ route, navigation }) {
                               color={theme.colors.warningBright}
                             />
                             <Text style={styles.storeAddressDefaultText}>
-                              Default
+                              {t("addresses.default")}
                             </Text>
                           </View>
                         ) : null}
@@ -1291,7 +1288,7 @@ export default function CreateDealScreen({ route, navigation }) {
                       </Text>
                       {item.phone ? (
                         <Text style={styles.storeAddressOptionLine}>
-                          Phone: {item.phone}
+                          {t("createDeal.phoneLine", { phone: item.phone })}
                         </Text>
                       ) : null}
                     </TouchableOpacity>
@@ -1300,9 +1297,7 @@ export default function CreateDealScreen({ route, navigation }) {
               </ScrollView>
             ) : (
               <View style={styles.storeAddressEmpty}>
-                <Text style={styles.storeAddressHint}>
-                  No saved addresses found.
-                </Text>
+                <Text style={styles.storeAddressHint}>{t("createDeal.noSavedAddresses")}</Text>
               </View>
             )}
 
@@ -1315,7 +1310,7 @@ export default function CreateDealScreen({ route, navigation }) {
                 }}
               >
                 <Text style={styles.storeAddressActionGhostText}>
-                  Add Address
+                  {t("addresses.add")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1327,7 +1322,7 @@ export default function CreateDealScreen({ route, navigation }) {
                 onPress={() => setStoreAddressModalVisible(false)}
               >
                 <Text style={styles.storeAddressActionPrimaryText}>
-                  Use Selected
+                  {t("createDeal.useSelected")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1351,9 +1346,7 @@ export default function CreateDealScreen({ route, navigation }) {
                   navigation.goBack();
                 }}
               />
-              <Text style={styles.successText}>
-                Deal submitted for approval!
-              </Text>
+              <Text style={styles.successText}>{t("createDeal.submitted")}</Text>
             </View>
           </View>
         </Modal>

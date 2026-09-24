@@ -26,6 +26,7 @@ import {
   DealCard,
   ViewModeToggle,
   getDealThumbnails,
+  useI18n,
 } from "@dealsworld/shared";
 import DashboardHeader from "../components/DashboardHeader";
 import DealSearchModals from "../components/DealSearchModals";
@@ -47,6 +48,7 @@ import {
 export default function HomeScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const [now, setNow] = useState(Date.now());
   const controls = useDealSearchControls();
   // Sort/filter/search only give correct results over the full active-deals
@@ -122,12 +124,12 @@ export default function HomeScreen({ navigation }) {
   const sortedDeals = controls.applyFieldFilterAndSort(filteredDeals);
 
   const dealsHeaderTitle = `${
-    controls.isSearching ? "Search Results" : "New Deals"
+    controls.isSearching ? t("home.searchResults") : t("home.newDeals")
   } (${sortedDeals?.length || 0})`;
   const hasDeals = sortedDeals?.length > 0;
 
   if (isLoading || dealStateLoading) {
-    return <DealBuddyLoadingScreen label="Loading deals..." />;
+    return <DealBuddyLoadingScreen label={t("common.loadingDeals")} />;
   }
 
   const renderDeal = ({ item: deal }) => {
@@ -165,20 +167,20 @@ export default function HomeScreen({ navigation }) {
           originalPrice={deal?.originalPrice}
           discountPrice={deal?.discountPrice}
           badgeLabel={deal?.location ? String(deal.location) : null}
-          deliveryBadge={getDeliveryBadge(deal.id, myDeliveries, theme)}
-          expiryLabel={formatEndsIn(expiryMs)}
+          deliveryBadge={getDeliveryBadge(deal.id, myDeliveries, theme, t)}
+          expiryLabel={formatEndsIn(expiryMs, t)}
           isFavorite={favoriteIds.has(deal.id)}
           onFavoritePress={() => handleToggleFavorite(deal.id)}
           isJoined={joinedIds.has(deal.id)}
-          joinLabel={joinedIds.has(deal.id) ? "Joined" : "Join"}
+          joinLabel={joinedIds.has(deal.id) ? t("common.joined") : t("common.join")}
           onJoinPress={() => navigation.navigate("DealDetails", { dealId: deal.id })}
-          payLabel={needsPay ? "Pay" : undefined}
+          payLabel={needsPay ? t("common.pay") : undefined}
           onPayPress={
             needsPay
               ? () => navigation.navigate("DealDetails", { dealId: deal.id })
               : undefined
           }
-          actionLabel="View Deal"
+          actionLabel={t("common.viewDeal")}
           onActionPress={() => navigation.navigate("DealDetails", { dealId: deal.id })}
         />
       </View>
@@ -237,7 +239,7 @@ export default function HomeScreen({ navigation }) {
                     navigation.navigate("Deals");
                   }}
                 >
-                  <Text style={styles.seeAllText}>See All</Text>
+                  <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
                 </TouchableOpacity>
               </View>
             }
@@ -254,13 +256,13 @@ export default function HomeScreen({ navigation }) {
               icon="search-outline"
               title={
                 controls.isSearching
-                  ? "No deals match your search."
-                  : "No new deals right now."
+                  ? t("home.emptySearchTitle")
+                  : t("home.emptyTitle")
               }
               subtitle={
                 controls.isSearching
-                  ? "Try a different search term."
-                  : "Check the Deals tab to browse everything."
+                  ? t("home.emptySearchSubtitle")
+                  : t("home.emptySubtitle")
               }
             />
           </View>

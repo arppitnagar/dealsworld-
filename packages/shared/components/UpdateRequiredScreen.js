@@ -2,17 +2,16 @@ import React from "react";
 import { View, Text, StyleSheet, Linking } from "react-native";
 import { theme } from "../theme/theme";
 import AppButton from "./ui/AppButton";
-
-const DEFAULT_MESSAGE =
-  "This version of the app is no longer supported. Please update to the latest version to keep using DealsWorld.";
+import { useI18n } from "../i18n/I18nProvider";
 
 // Full-screen, non-dismissible gate rendered in place of the whole app when
 // the installed build is older than the backend's configured minVersion.
 export default function UpdateRequiredScreen({
-  title = "Update required",
-  message = DEFAULT_MESSAGE,
+  title,
+  message,
   updateUrl,
 }) {
+  const { t } = useI18n();
   const handleUpdate = () => {
     if (!updateUrl) return;
     Linking.openURL(updateUrl).catch(() => {});
@@ -23,11 +22,11 @@ export default function UpdateRequiredScreen({
       <View style={styles.badge}>
         <Text style={styles.badgeText}>!</Text>
       </View>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
+      <Text style={styles.title}>{title || t("updateRequired.title")}</Text>
+      <Text style={styles.message}>{message || t("updateRequired.message")}</Text>
       {!!updateUrl && (
         <AppButton
-          title="Update now"
+          title={t("updateRequired.button")}
           onPress={handleUpdate}
           style={styles.button}
         />

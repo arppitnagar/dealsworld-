@@ -1,9 +1,25 @@
 const express = require("express");
-const { client, DEALS_INDEX_NAME } = require("../typesenseClient");
+const {
+  client,
+  DEALS_INDEX_NAME,
+  TRANSLATED_TITLE_FIELDS,
+  ensureDealsCollectionOnce,
+} = require("../typesenseClient");
+const { localizeDeals } = require("../translation");
 
 const router = express.Router();
 
-const SEARCH_QUERY_BY = "title,description,category,location,sellerName,dealCode";
+// title_<lang> fields let a buyer search in their own script (see
+// translation.js indexTranslatedTitles).
+const SEARCH_QUERY_BY = [
+  "title",
+  ...TRANSLATED_TITLE_FIELDS,
+  "description",
+  "category",
+  "location",
+  "sellerName",
+  "dealCode",
+].join(",");
 
 function escapeFilterValue(value) {
   // Typesense string filter values are backtick-quoted; strip any backticks
@@ -38,6 +54,7 @@ router.get("/api/deals/search", async (req, res) => {
     if (Number.isFinite(minPrice)) filters.push(`discountPrice:>=${minPrice}`);
     if (Number.isFinite(maxPrice)) filters.push(`discountPrice:<=${maxPrice}`);
 
+    await ensureDealsCollectionOnce();
     const searchResult = await client
       .collections(DEALS_INDEX_NAME)
       .documents()
@@ -60,7 +77,7 @@ router.get("/api/deals/search", async (req, res) => {
       .filter(Boolean);
 
     return res.json({
-      deals,
+      deals: await localizeDeals(deals, req.query.lang),
       found: searchResult.found || 0,
       page,
     });

@@ -16,51 +16,38 @@ import AppInput from "./ui/AppInput";
 import ConfirmModal from "./ui/ConfirmModal";
 import useConfirmModal from "../hooks/useConfirmModal";
 import { useTheme } from "../theme/ThemeProvider";
+import { useI18n } from "../i18n/I18nProvider";
 import { validatePassword } from "../utils/passwordPolicy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const DEFAULT_BG_IMAGE = null;
 
-const getAuthErrorMessage = (error, mode) => {
-  const code = error?.code || "";
-  const isSignup = mode === "signup";
+const AUTH_ERROR_KEYS = {
+  "auth/invalid-email": "invalidEmail",
+  "auth/missing-email": "missingEmail",
+  "auth/user-not-found": "userNotFound",
+  "auth/wrong-password": "wrongPassword",
+  "auth/invalid-credential": "invalidCredential",
+  "auth/user-disabled": "userDisabled",
+  "auth/too-many-requests": "tooManyRequests",
+  "auth/network-request-failed": "network",
+  "auth/email-already-in-use": "emailInUse",
+  "auth/weak-password": "weakPassword",
+  "auth/operation-not-allowed": "notAllowed",
+};
 
-  switch (code) {
-    case "auth/invalid-email":
-      return "Please enter a valid email address.";
-    case "auth/missing-email":
-      return "Email is required to continue.";
-    case "auth/user-not-found":
-      return "No account found for this email.";
-    case "auth/wrong-password":
-      return "Incorrect password. Please try again.";
-    case "auth/invalid-credential":
-      return "Invalid email or password.";
-    case "auth/user-disabled":
-      return "This account has been disabled.";
-    case "auth/too-many-requests":
-      return "Too many attempts. Please try again later.";
-    case "auth/network-request-failed":
-      return "Network error. Please check your connection.";
-    case "auth/email-already-in-use":
-      return "This email is already registered. Try signing in.";
-    case "auth/weak-password":
-      return "Password is too weak. Please choose a stronger password.";
-    case "auth/operation-not-allowed":
-      return "Email/password sign-in is not enabled.";
-    default:
-      return isSignup
-        ? "Unable to sign up right now. Please try again."
-        : "Unable to sign in right now. Please try again.";
-  }
+const getAuthErrorMessage = (error, mode, t) => {
+  const key = AUTH_ERROR_KEYS[error?.code || ""];
+  if (key) return t(`auth.errors.${key}`);
+  return mode === "signup" ? t("auth.errors.signupFailed") : t("auth.errors.loginFailed");
 };
 
 export default function AuthScreen({
   backgroundImage = DEFAULT_BG_IMAGE,
-  title = "Welcome To Deal Buddy",
+  title,
   signupTitle,
-  subtitle = "Sign in to continue",
-  signupSubtitle = "Create your account",
+  subtitle,
+  signupSubtitle,
   brandTitle = "Deal Buddy",
   brandTagline = "Together, We Can Save More",
   onLogin,
@@ -72,12 +59,13 @@ export default function AuthScreen({
   showGoogleButton = true,
   showAppleButton = true,
   allowSignup = true,
-  signInLabel = "Sign In",
-  signUpLabel = "Create Account",
-  toggleToSignupLabel = "Create a new account",
-  toggleToSigninLabel = "Back to Sign In",
+  signInLabel,
+  signUpLabel,
+  toggleToSignupLabel,
+  toggleToSigninLabel,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const [isSignup, setIsSignup] = useState(false);
@@ -90,18 +78,18 @@ export default function AuthScreen({
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      await alert({ title: "Missing details", message: "Please enter email and password." });
+      await alert({ title: t("common.missingDetails"), message: t("auth.enterEmailPassword") });
       return;
     }
     if (typeof onLogin !== "function") {
-      await alert({ title: "Unavailable", message: "Login is not configured." });
+      await alert({ title: t("auth.unavailable"), message: t("auth.loginNotConfigured") });
       return;
     }
     setLoading(true);
     try {
       await onLogin(email.trim(), password);
     } catch (error) {
-      await alert({ title: "Login failed", message: getAuthErrorMessage(error, "login"), destructive: true });
+      await alert({ title: t("auth.loginFailedTitle"), message: getAuthErrorMessage(error, "login", t), destructive: true });
     } finally {
       setLoading(false);
     }
@@ -109,42 +97,45 @@ export default function AuthScreen({
 
   const handleSignup = async () => {
     if (!email.trim() || !password || !confirmPassword) {
-      await alert({ title: "Missing details", message: "Please fill all fields." });
+      await alert({ title: t("common.missingDetails"), message: t("common.fillAllFields") });
       return;
     }
     if (password !== confirmPassword) {
-      await alert({ title: "Mismatch", message: "Passwords do not match." });
+      await alert({ title: t("changePassword.mismatchTitle"), message: t("auth.passwordsMismatch") });
       return;
     }
-    const validationError = validatePassword(password);
+    const validationError = validatePassword(password, t);
     if (validationError) {
-      await alert({ title: "Weak password", message: validationError });
+      await alert({ title: t("password.weakTitle"), message: validationError });
       return;
     }
     if (typeof onRegister !== "function") {
-      await alert({ title: "Unavailable", message: "Sign up is not configured." });
+      await alert({ title: t("auth.unavailable"), message: t("auth.signupNotConfigured") });
       return;
     }
     setLoading(true);
     try {
       await onRegister(email.trim(), password);
     } catch (error) {
-      await alert({ title: "Sign up failed", message: getAuthErrorMessage(error, "signup"), destructive: true });
+      await alert({ title: t("auth.signupFailedTitle"), message: getAuthErrorMessage(error, "signup", t), destructive: true });
     } finally {
       setLoading(false);
     }
   };
 
   const showSignup = allowSignup && typeof onRegister === "function";
-  const displayTitle = isSignup ? signupTitle || title : title;
-  const displaySubtitle = isSignup ? signupSubtitle : subtitle;
+  const resolvedTitle = title || t("auth.title");
+  const displayTitle = isSignup ? signupTitle || resolvedTitle : resolvedTitle;
+  const displaySubtitle = isSignup
+    ? signupSubtitle || t("auth.signupSubtitle")
+    : subtitle || t("auth.subtitle");
 
   const handleForgotPassword = async () => {
     if (typeof onForgotPassword === "function") {
       onForgotPassword(email.trim());
       return;
     }
-    await alert({ title: "Forgot password", message: "Password reset is not configured yet." });
+    await alert({ title: t("auth.forgotTitle"), message: t("auth.forgotNotConfigured") });
   };
 
   const handleSocialLogin = async (provider) => {
@@ -155,7 +146,7 @@ export default function AuthScreen({
           ? onAppleLogin
           : null;
     if (typeof handler !== "function") {
-      await alert({ title: "Coming soon", message: "Social login is not available yet." });
+      await alert({ title: t("comingSoon.title"), message: t("auth.socialUnavailable") });
       return;
     }
     setLoading(true);
@@ -163,7 +154,7 @@ export default function AuthScreen({
       await handler();
     } catch (error) {
       if (error?.code !== "SIGN_IN_CANCELLED" && error?.code !== "-5") {
-        await alert({ title: "Sign-in failed", message: getAuthErrorMessage(error, "login"), destructive: true });
+        await alert({ title: t("auth.socialFailedTitle"), message: getAuthErrorMessage(error, "login", t), destructive: true });
       }
     } finally {
       setLoading(false);
@@ -217,7 +208,7 @@ export default function AuthScreen({
             </View>
 
             <AppInput
-              label="Email Address"
+              label={t("auth.emailLabel")}
               placeholder="hello@dealbuddy.com"
               value={email}
               onChangeText={setEmail}
@@ -236,7 +227,7 @@ export default function AuthScreen({
             />
 
             <AppInput
-              label="Password"
+              label={t("auth.passwordLabel")}
               placeholder="••••••••"
               value={password}
               onChangeText={setPassword}
@@ -263,7 +254,7 @@ export default function AuthScreen({
 
             {showSignup && isSignup ? (
               <AppInput
-                label="Confirm Password"
+                label={t("changePassword.confirmLabel")}
                 placeholder="••••••••"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -290,10 +281,7 @@ export default function AuthScreen({
             ) : null}
 
             {showSignup && isSignup ? (
-              <Text style={styles.hint}>
-                Minimum 8 chars with upper case, lower case, number, and special
-                character.
-              </Text>
+              <Text style={styles.hint}>{t("password.rules")}</Text>
             ) : null}
 
             {!isSignup ? (
@@ -301,7 +289,7 @@ export default function AuthScreen({
                 onPress={handleForgotPassword}
                 style={styles.forgotWrap}
               >
-                <Text style={styles.forgotText}>Forgot Password?</Text>
+                <Text style={styles.forgotText}>{t("auth.forgotLink")}</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -309,11 +297,11 @@ export default function AuthScreen({
               title={
                 loading
                   ? isSignup
-                    ? "Creating..."
-                    : "Signing in..."
+                    ? t("auth.creating")
+                    : t("auth.signingIn")
                   : isSignup
-                    ? signUpLabel
-                    : signInLabel
+                    ? signUpLabel || t("auth.signUp")
+                    : signInLabel || t("auth.signIn")
               }
               onPress={isSignup ? handleSignup : handleLogin}
               loading={loading}
@@ -326,7 +314,7 @@ export default function AuthScreen({
               <>
                 <View style={styles.dividerRow}>
                   <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>Or connect with</Text>
+                  <Text style={styles.dividerText}>{t("auth.orConnectWith")}</Text>
                   <View style={styles.dividerLine} />
                 </View>
                 <View style={styles.socialRow}>
@@ -367,8 +355,8 @@ export default function AuthScreen({
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>
                 {isSignup
-                  ? "Already have an account?"
-                  : `New to ${brandTitle}?`}
+                  ? t("auth.haveAccount")
+                  : t("auth.newTo", { brand: brandTitle })}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -377,7 +365,9 @@ export default function AuthScreen({
                 }}
               >
                 <Text style={styles.footerLink}>
-                  {isSignup ? toggleToSigninLabel : toggleToSignupLabel}
+                  {isSignup
+                    ? toggleToSigninLabel || t("auth.backToSignIn")
+                    : toggleToSignupLabel || t("auth.createNewAccount")}
                 </Text>
               </TouchableOpacity>
             </View>

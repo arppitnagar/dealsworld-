@@ -102,7 +102,7 @@ function buildDeal(index, seller, nowMs) {
     pricingTiers: null,
     joinedUsers: 0,
     currentJoins: 0,
-    location: pick(LOCATIONS),
+    location: city,
     city,
     cityLower: city.toLowerCase(),
     images: [],

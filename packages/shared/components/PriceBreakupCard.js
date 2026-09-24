@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
+import { useI18n } from "../i18n/I18nProvider";
 import { formatINR } from "../utils/formatters";
 
 /**
@@ -11,27 +12,30 @@ import { formatINR } from "../utils/formatters";
 export default function PriceBreakupCard({ breakup, style }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
 
   if (!breakup) return null;
 
   const rows = [
-    { key: "base", label: "Base Price", value: breakup.basePrice },
+    { key: "base", label: t("priceBreakup.base"), value: breakup.basePrice },
     {
       key: "gst",
-      label: `GST${breakup.gstPercent ? ` (${breakup.gstPercent}%)` : ""}`,
+      label: breakup.gstPercent
+        ? t("priceBreakup.gstPercent", { percent: breakup.gstPercent })
+        : t("priceBreakup.gst"),
       value: breakup.gstAmount,
     },
   ];
   if (breakup.isPaidDelivery) {
     rows.push({
       key: "delivery",
-      label: "Delivery Charges",
+      label: t("priceBreakup.delivery"),
       value: breakup.deliveryCharge,
     });
   }
   rows.push({
     key: "platformFee",
-    label: `Platform Fee (${breakup.platformFeePercent}%)`,
+    label: t("priceBreakup.platformFee", { percent: breakup.platformFeePercent }),
     value: breakup.platformFee,
   });
 
@@ -45,7 +49,7 @@ export default function PriceBreakupCard({ breakup, style }) {
       ))}
       <View style={styles.divider} />
       <View style={styles.row}>
-        <Text style={styles.totalLabel}>Total</Text>
+        <Text style={styles.totalLabel}>{t("priceBreakup.total")}</Text>
         <Text style={styles.totalValue}>{formatINR(breakup.total)}</Text>
       </View>
     </View>

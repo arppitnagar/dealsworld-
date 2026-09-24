@@ -15,6 +15,7 @@ import ProfileScreen from "./src/screens/ProfileScreen";
 import UserDetailsScreen from "./src/screens/UserDetailsScreen";
 import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
 import ThemeSettingsScreen from "./src/screens/ThemeSettingsScreen";
+import LanguageSettingsScreen from "./src/screens/LanguageSettingsScreen";
 import AddressBookScreen from "./src/screens/AddressBookScreen";
 import AddressFormScreen from "./src/screens/AddressFormScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
@@ -29,6 +30,9 @@ import {
   theme,
   ThemeProvider,
   useTheme,
+  I18nProvider,
+  useI18n,
+  useLanguageProfileSync,
 } from "@dealsworld/shared";
 import {
   getStoredThemeMode,
@@ -39,13 +43,15 @@ const Stack = createStackNavigator();
 const queryClient = new QueryClient();
 
 function LoadingScreen() {
-  return <DealBuddyLoadingScreen label="Checking your account..." />;
+  const { t } = useI18n();
+  return <DealBuddyLoadingScreen label={t("app.checkingAccount")} />;
 }
 
 function AppNavigator() {
   const { user, loading } = useAuth();
   const { profile, loading: profileLoading } = useUserProfile();
   const { logout } = useAuth();
+  const { t } = useI18n();
   const versionGate = useVersionGate();
   usePushToken();
   const role = String(profile?.role || "").toLowerCase();
@@ -80,8 +86,8 @@ function AppNavigator() {
         <Stack.Screen name="AccountBlocked">
           {() => (
             <AccountGateScreen
-              title="Seller account blocked"
-              subtitle="Please contact admin support for account reactivation."
+              title={t("app.sellerBlockedTitle")}
+              subtitle={t("app.blockedSubtitle")}
               onLogout={logout}
             />
           )}
@@ -98,6 +104,10 @@ function AppNavigator() {
             component={ChangePasswordScreen}
           />
           <Stack.Screen name="ThemeSettings" component={ThemeSettingsScreen} />
+          <Stack.Screen
+            name="LanguageSettings"
+            component={LanguageSettingsScreen}
+          />
           <Stack.Screen name="AddressBook" component={AddressBookScreen} />
           <Stack.Screen
             name="Notifications"
@@ -126,11 +136,12 @@ function AppNavigator() {
 }
 
 function AccountGateScreen({ title, subtitle, onLogout }) {
+  const { t } = useI18n();
   return (
     <View style={gateStyles.screen}>
       <Text style={gateStyles.title}>{title}</Text>
       <Text style={gateStyles.subtitle}>{subtitle}</Text>
-      <AppButton title="Logout" onPress={onLogout} style={gateStyles.button} />
+      <AppButton title={t("profile.logout")} onPress={onLogout} style={gateStyles.button} />
     </View>
   );
 }
@@ -185,18 +196,30 @@ function ThemeBootstrap({ children }) {
   return children;
 }
 
+// Keeps the app language and the profile's preferredLanguage in step (see
+// useLanguageProfileSync).
+function LanguageBootstrap({ children }) {
+  const { profile, updateProfile } = useUserProfile();
+  useLanguageProfileSync(profile, updateProfile);
+  return children;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <UserProfileProvider>
-          <ThemeProvider initialMode="light" app="seller">
-            <ThemeBootstrap>
-              <NavigationContainer>
-                <AppNavigator />
-              </NavigationContainer>
-            </ThemeBootstrap>
-          </ThemeProvider>
+          <I18nProvider>
+            <LanguageBootstrap>
+              <ThemeProvider initialMode="light" app="seller">
+                <ThemeBootstrap>
+                  <NavigationContainer>
+                    <AppNavigator />
+                  </NavigationContainer>
+                </ThemeBootstrap>
+              </ThemeProvider>
+            </LanguageBootstrap>
+          </I18nProvider>
         </UserProfileProvider>
       </AuthProvider>
     </QueryClientProvider>

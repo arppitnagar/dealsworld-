@@ -15,6 +15,8 @@ import {
   ChatSkeleton,
   useTheme,
   TopPageHeader,
+  useI18n,
+  getCategoryLabel,
 } from "@dealsworld/shared";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthContext";
@@ -36,6 +38,7 @@ export default function DealChatScreen({ route, navigation }) {
   const { dealId, deal } = route.params || {};
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
@@ -271,15 +274,15 @@ export default function DealChatScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.screen} edges={[]}>
       <TopPageHeader
-        title={deal?.title || "Deal Chat"}
-        subtitle={deal?.category || "Deal"}
+        title={deal?.title || t("chat.title")}
+        subtitle={deal?.category ? getCategoryLabel(deal.category, t) : t("dealLayout.deal")}
         onBack={() => navigation.goBack()}
         style={styles.header}
         titleStyle={styles.headerTitle}
         subtitleStyle={styles.headerSubtitle}
       >
         {isSellerTyping ? (
-          <Text style={styles.headerTypingText}>Seller is typing…</Text>
+          <Text style={styles.headerTypingText}>{t("chat.sellerTyping")}</Text>
         ) : null}
       </TopPageHeader>
 
@@ -309,9 +312,7 @@ export default function DealChatScreen({ route, navigation }) {
                   size={32}
                   color={theme.colors.chatEmptyIcon}
                 />
-                <Text style={styles.emptyText}>
-                  No messages yet. Start the conversation.
-                </Text>
+                <Text style={styles.emptyText}>{t("chat.empty")}</Text>
               </View>
             }
           />
@@ -321,7 +322,7 @@ export default function DealChatScreen({ route, navigation }) {
           <AppInput
             value={text}
             onChangeText={setText}
-            placeholder="Type a message"
+            placeholder={t("chat.placeholder")}
             containerStyle={styles.inputContainer}
             inputStyle={styles.input}
             multiline

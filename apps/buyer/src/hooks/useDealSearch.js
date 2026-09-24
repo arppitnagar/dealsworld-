@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useI18n } from "@dealsworld/shared";
 import apiClient from "../api/client";
 
 const SEARCH_RESULT_LIMIT = 50;
@@ -17,6 +18,7 @@ const SEARCH_DEBOUNCE_MS = 350;
 export function useDealSearch(query, { enabled = true } = {}) {
   const trimmed = String(query || "").trim();
   const [debounced, setDebounced] = useState(trimmed);
+  const { language } = useI18n();
 
   useEffect(() => {
     const timeoutId = setTimeout(() => setDebounced(trimmed), SEARCH_DEBOUNCE_MS);
@@ -24,10 +26,10 @@ export function useDealSearch(query, { enabled = true } = {}) {
   }, [trimmed]);
 
   return useQuery({
-    queryKey: ["deals-search", debounced],
+    queryKey: ["deals-search", debounced, language],
     queryFn: async () => {
       const { data } = await apiClient.get("/deals/search", {
-        params: { q: debounced, limit: SEARCH_RESULT_LIMIT },
+        params: { q: debounced, limit: SEARCH_RESULT_LIMIT, lang: language },
       });
       return data;
     },

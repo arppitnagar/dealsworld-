@@ -1,3 +1,5 @@
+import { englishT } from "../i18n/translator";
+
 // Platform fee is a flat 0.25% of the base price, applied the same way to
 // every deal - not seller-editable, unlike GST and delivery charges.
 export const PLATFORM_FEE_PERCENT = 0.25;
@@ -104,15 +106,16 @@ export function getNextTierInfo(deal, joinCount) {
  * feedback). Returns null when valid, otherwise a user-facing message
  * naming the first problem found.
  */
-export function validatePricingTiers(tiers) {
+// `t` is useI18n()'s translator; English when omitted.
+export function validatePricingTiers(tiers, t = englishT) {
   if (!Array.isArray(tiers) || tiers.length === 0) {
-    return "At least one pricing tier is required";
+    return t("tierErrors.required");
   }
   if (tiers.length > MAX_PRICING_TIERS) {
-    return `No more than ${MAX_PRICING_TIERS} pricing tiers are allowed`;
+    return t("tierErrors.tooMany", { max: MAX_PRICING_TIERS });
   }
   if (Number(tiers[0]?.minBuyers) !== 1) {
-    return "The first tier must start at 1 buyer";
+    return t("tierErrors.firstStart");
   }
   for (let i = 0; i < tiers.length; i += 1) {
     const tier = tiers[i];
@@ -123,24 +126,24 @@ export function validatePricingTiers(tiers) {
         : Number(tier.maxBuyers);
     const price = Number(tier?.price);
     if (!Number.isFinite(min) || min < 1) {
-      return `Tier ${i + 1}: minimum buyers must be a positive number`;
+      return t("tierErrors.minPositive", { tier: i + 1 });
     }
     if (max !== null && (!Number.isFinite(max) || max < min)) {
-      return `Tier ${i + 1}: max buyers must be greater than or equal to min buyers`;
+      return t("tierErrors.maxGteMin", { tier: i + 1 });
     }
     if (!Number.isFinite(price) || price <= 0) {
-      return `Tier ${i + 1}: price must be greater than zero`;
+      return t("tierErrors.pricePositive", { tier: i + 1 });
     }
     if (i < tiers.length - 1) {
       if (max === null) {
-        return `Tier ${i + 1}: only the last tier may be left open-ended`;
+        return t("tierErrors.onlyLastOpen", { tier: i + 1 });
       }
       const next = tiers[i + 1];
       if (Number(next?.minBuyers) !== max + 1) {
-        return `Tier ${i + 2} must start right after tier ${i + 1} ends (at ${max + 1} buyers)`;
+        return t("tierErrors.contiguous", { next: i + 2, tier: i + 1, start: max + 1 });
       }
       if (Number(next?.price) > price) {
-        return `Tier ${i + 2}'s price can't be higher than tier ${i + 1}'s`;
+        return t("tierErrors.nonIncreasing", { next: i + 2, tier: i + 1 });
       }
     }
   }

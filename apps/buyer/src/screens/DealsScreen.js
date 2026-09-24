@@ -9,6 +9,7 @@ import {
   DealBuddyLoadingScreen,
   ViewModeToggle,
   getDealThumbnails,
+  useI18n,
 } from "@dealsworld/shared";
 import { useDeals, useJoinedDeals } from "../hooks/useDeals";
 import { useMyDeliveries, getDeliveryBadge, getOrderBadge } from "../hooks/useDeliveryStatus";
@@ -46,15 +47,6 @@ const ACCENT_BY_KEY = (theme) => ({
   orders: theme.colors.primary,
 });
 
-const TITLE_BY_KEY = {
-  new: "New Deals",
-  hot: "Hot Deals",
-  viewed: "Viewed Deals",
-  favourite: "Loved Deals",
-  my: "Joined Deals",
-  orders: "My Orders",
-};
-
 // Deals tab: the exact same dashboard header as Home (brand, greeting,
 // search, sort/filter) so the app's chrome never changes between tabs.
 // Tapping the tab opens a bottom-sheet picker with New/Hot/Viewed/
@@ -63,6 +55,7 @@ const TITLE_BY_KEY = {
 export default function DealsScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   // Category counts below (DealCategoryModal) need the complete active-deals
   // set to be accurate, not just one page of it, so this screen always
   // fetches everything in one shot - unlike Home, it doesn't paginate. It
@@ -167,13 +160,13 @@ export default function DealsScreen({ navigation }) {
   const sortedDeals = controls.applyFieldFilterAndSort(filteredDeals);
 
   const sectionTitle = controls.isSearching
-    ? "Search Results"
+    ? t("home.searchResults")
     : selectedFilter
-      ? TITLE_BY_KEY[selectedFilter] || "Deals"
-      : "All Deals";
+      ? t(`deals.titles.${selectedFilter}`)
+      : t("deals.allDeals");
 
   if (isLoading || dealStateLoading) {
-    return <DealBuddyLoadingScreen label="Loading deals..." />;
+    return <DealBuddyLoadingScreen label={t("common.loadingDeals")} />;
   }
 
   const renderDeal = ({ item: deal }) => {
@@ -214,26 +207,28 @@ export default function DealsScreen({ navigation }) {
           badgeLabel={deal?.location ? String(deal.location) : null}
           deliveryBadge={
             isOrdersView
-              ? getOrderBadge(deal, myDeliveries, theme)
-              : getDeliveryBadge(deal.id, myDeliveries, theme)
+              ? getOrderBadge(deal, myDeliveries, theme, t)
+              : getDeliveryBadge(deal.id, myDeliveries, theme, t)
           }
-          expiryLabel={isOrdersView ? null : formatEndsIn(expiryMs)}
+          expiryLabel={isOrdersView ? null : formatEndsIn(expiryMs, t)}
           isFavorite={favoriteIds.has(deal.id)}
           onFavoritePress={() => toggleFavoriteDeal(deal.id)}
           isJoined={joinedIds.has(deal.id)}
-          joinLabel={isOrdersView ? undefined : joinedIds.has(deal.id) ? "Joined" : "Join"}
+          joinLabel={
+            isOrdersView ? undefined : joinedIds.has(deal.id) ? t("common.joined") : t("common.join")
+          }
           onJoinPress={
             isOrdersView
               ? undefined
               : () => navigation.navigate("DealDetails", { dealId: deal.id })
           }
-          payLabel={needsPay ? "Pay" : undefined}
+          payLabel={needsPay ? t("common.pay") : undefined}
           onPayPress={
             needsPay
               ? () => navigation.navigate("DealDetails", { dealId: deal.id })
               : undefined
           }
-          actionLabel="View Deal"
+          actionLabel={t("common.viewDeal")}
           onActionPress={() => navigation.navigate("DealDetails", { dealId: deal.id })}
         />
       </View>
@@ -287,19 +282,19 @@ export default function DealsScreen({ navigation }) {
               icon="pricetag-outline"
               title={
                 controls.isSearching
-                  ? "No deals match your search."
+                  ? t("home.emptySearchTitle")
                   : isOrdersView
-                    ? "No orders yet."
+                    ? t("deals.emptyOrdersTitle")
                     : selectedFilter
-                      ? "No deals in this category."
-                      : "No active deals right now."
+                      ? t("deals.emptyCategoryTitle")
+                      : t("deals.emptyTitle")
               }
               subtitle={
                 controls.isSearching
-                  ? "Try a different search term."
+                  ? t("home.emptySearchSubtitle")
                   : isOrdersView
-                    ? "Deals you've paid for, or that have ended, will show up here."
-                    : "Pull to refresh or pick another category."
+                    ? t("deals.emptyOrdersSubtitle")
+                    : t("deals.emptySubtitle")
               }
             />
           </View>

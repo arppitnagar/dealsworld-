@@ -7,9 +7,7 @@ export default function LoginScreen() {
 
   return (
     <AuthScreen
-      title="Welcome To DealBuddy"
-      subtitle="Sign in to continue"
-      signupSubtitle="Create your account"
+      brandTitle="DealBuddy"
       onLogin={login}
       onRegister={register}
       onGoogleLogin={loginWithGoogle}

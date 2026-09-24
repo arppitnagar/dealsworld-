@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme, getStatusColor } from "@dealsworld/shared";
+import { useTheme, useI18n, getStatusColor, getStatusLabel } from "@dealsworld/shared";
 import { STATUS_FILTERS, formatCount } from "../utils/dealStatus";
 
 // Bottom-sheet status picker for the Deals tab. Replaces the old horizontal
@@ -22,6 +22,7 @@ export default function SellerStatusModal({
   allCount,
 }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   if (!visible) return null;
@@ -36,7 +37,7 @@ export default function SellerStatusModal({
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.handle} />
-        <Text style={styles.title}>Browse deals by status</Text>
+        <Text style={styles.title}>{t("sellerDeals.browseByStatus")}</Text>
 
         <TouchableOpacity
           style={styles.row}
@@ -48,7 +49,7 @@ export default function SellerStatusModal({
           >
             <Ionicons name="apps-outline" size={16} color={theme.colors.onPrimary} />
           </View>
-          <Text style={styles.rowLabel}>All Deals</Text>
+          <Text style={styles.rowLabel}>{t("deals.allDeals")}</Text>
           <Text style={styles.rowCount}>{formatCount(allCount)}</Text>
           {selectedStatus === null ? (
             <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
@@ -71,7 +72,11 @@ export default function SellerStatusModal({
               <View style={[styles.iconCircle, { backgroundColor: accentColor }]}>
                 <Icon size={16} color={theme.colors.onPrimary} />
               </View>
-              <Text style={styles.rowLabel}>{filter.label}</Text>
+              <Text style={styles.rowLabel}>
+                {filter.key === "pending"
+                  ? t("sellerDealDetails.pending")
+                  : getStatusLabel(filter.key, t)}
+              </Text>
               <Text style={styles.rowCount}>{formatCount(counts[filter.key])}</Text>
               {isSelected ? (
                 <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
