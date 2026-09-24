@@ -6,6 +6,15 @@ const {
   ensureDealsCollectionOnce,
 } = require("../typesenseClient");
 const { localizeDeals } = require("../translation");
+const {
+  db,
+  DEALS_COLLECTION,
+  MAX_DEAL_LIMIT,
+  isExpiredDeal,
+  normalizeApprovalStatus,
+  sanitizeDealForResponse,
+  attachSellerNamesToDeals,
+} = require("../lib");
 
 const router = express.Router();
 
@@ -28,6 +37,42 @@ function escapeFilterValue(value) {
   return "`" + String(value).replace(/`/g, "") + "`";
 }
 
+// Typesense-free fallback for environments where it isn't hosted (e.g. the
+// demo deploy). Scans active deals in Node instead of using a search index -
+// fine at demo scale, not something to rely on at real marketplace scale.
+async function searchDealsViaFirestore({ q, category, city, minPrice, maxPrice, page, perPage }) {
+  const nowMs = Date.now();
+  const snapshot = await db
+    .collection(DEALS_COLLECTION)
+    .where("status", "==", "active")
+    .orderBy("createdAt", "desc")
+    .limit(MAX_DEAL_LIMIT)
+    .get();
+
+  const needle = q && q !== "*" ? q.toLowerCase() : "";
+  const cityNeedle = city.toLowerCase();
+
+  const matches = snapshot.docs.map((doc) => sanitizeDealForResponse(doc)).filter((deal) => {
+    if (isExpiredDeal(deal, nowMs)) return false;
+    if (normalizeApprovalStatus(deal) !== "approved") return false;
+    if (category && deal.category !== category) return false;
+    if (cityNeedle && String(deal.cityLower || "") !== cityNeedle) return false;
+    if (Number.isFinite(minPrice) && !(Number(deal.discountPrice) >= minPrice)) return false;
+    if (Number.isFinite(maxPrice) && !(Number(deal.discountPrice) <= maxPrice)) return false;
+    if (needle) {
+      const haystack = [deal.title, deal.description, deal.category, deal.location, deal.sellerName, deal.dealCode]
+        .map((value) => String(value || "").toLowerCase())
+        .join(" ");
+      if (!haystack.includes(needle)) return false;
+    }
+    return true;
+  });
+
+  const start = (page - 1) * perPage;
+  const pageDeals = await attachSellerNamesToDeals(matches.slice(start, start + perPage));
+  return { deals: pageDeals, found: matches.length };
+}
+
 // Buyer marketplace-wide search (apps/buyer/src/screens/SearchScreen.js).
 // Seller's own-deals search stays on its existing client-side filtering
 // over useSellerLiveDeals() - that list is already scoped to one seller's
@@ -35,17 +80,17 @@ function escapeFilterValue(value) {
 // marketplace-wide scale problem this endpoint exists to solve, and moving
 // it here would trade away real-time freshness for no real benefit.
 router.get("/api/deals/search", async (req, res) => {
-  try {
-    const q = String(req.query.q || "").trim() || "*";
-    const category = String(req.query.category || "").trim();
-    const city = String(req.query.city || "").trim();
-    const minPrice = Number(req.query.minPrice);
-    const maxPrice = Number(req.query.maxPrice);
-    const limitRaw = Number(req.query.limit);
-    const perPage = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : 20;
-    const pageRaw = Number(req.query.page);
-    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+  const q = String(req.query.q || "").trim() || "*";
+  const category = String(req.query.category || "").trim();
+  const city = String(req.query.city || "").trim();
+  const minPrice = Number(req.query.minPrice);
+  const maxPrice = Number(req.query.maxPrice);
+  const limitRaw = Number(req.query.limit);
+  const perPage = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : 20;
+  const pageRaw = Number(req.query.page);
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
 
+  try {
     // Forced server-side regardless of client input - search must never
     // surface unapproved/inactive deals no matter what the client sends.
     const filters = ["status:=active", "approvalStatus:=approved"];
@@ -82,11 +127,14 @@ router.get("/api/deals/search", async (req, res) => {
       page,
     });
   } catch (error) {
-    // Search now depends on a second service with no built-in HA - fail
-    // clearly rather than crashing the request or silently returning
-    // nothing indistinguishable from "no matches."
-    console.warn("Deal search failed:", error.message || error);
-    return res.status(503).json({ error: "Search is temporarily unavailable" });
+    console.warn("Typesense search failed, falling back to Firestore:", error.message || error);
+    try {
+      const { deals, found } = await searchDealsViaFirestore({ q, category, city, minPrice, maxPrice, page, perPage });
+      return res.json({ deals: await localizeDeals(deals, req.query.lang), found, page });
+    } catch (fallbackError) {
+      console.warn("Firestore search fallback also failed:", fallbackError.message || fallbackError);
+      return res.status(503).json({ error: "Search is temporarily unavailable" });
+    }
   }
 });
 

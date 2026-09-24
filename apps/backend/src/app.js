@@ -16,6 +16,10 @@ const chatRoutes = require("./routes/chat");
 const notificationsRoutes = require("./routes/notifications");
 
 const app = express();
+// Render (and most hosts) put the app behind a reverse proxy - without this,
+// express-rate-limit rejects the proxy's X-Forwarded-For header outright,
+// and req.protocol in routes/uploads.js reports http instead of https.
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
 

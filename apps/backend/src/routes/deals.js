@@ -138,9 +138,29 @@ router.get("/api/deals/cities", async (req, res) => {
     res.json({ cities });
   } catch (error) {
     // Typesense being unreachable shouldn't block the seller/buyer city
-    // pickers - they degrade to "type your own" / "no cities yet" instead.
-    console.warn("Fetching city list failed:", error.message || error);
-    res.json({ cities: [] });
+    // pickers - fall back to scanning Firestore directly before giving up.
+    console.warn("Fetching city list from Typesense failed, falling back to Firestore:", error.message || error);
+    try {
+      const nowMs = Date.now();
+      const snapshot = await db
+        .collection(DEALS_COLLECTION)
+        .where("status", "==", "active")
+        .limit(MAX_DEAL_LIMIT)
+        .get();
+      const citySet = new Set();
+      snapshot.docs.forEach((doc) => {
+        const deal = sanitizeDealForResponse(doc);
+        if (isExpiredDeal(deal, nowMs)) return;
+        if (normalizeApprovalStatus(deal) !== "approved") return;
+        const city = String(deal.city || "").trim();
+        if (city) citySet.add(city);
+      });
+      const cities = Array.from(citySet).sort((a, b) => a.localeCompare(b));
+      res.json({ cities });
+    } catch (fallbackError) {
+      console.warn("Firestore city fallback also failed:", fallbackError.message || fallbackError);
+      res.json({ cities: [] });
+    }
   }
 });
 
